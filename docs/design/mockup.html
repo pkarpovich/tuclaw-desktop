@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin: 0; background: #d7dbdc; }
+  a { color: #b8452c; text-decoration: none; }
+  a:hover { color: #94331f; }
+  ::-webkit-scrollbar { width: 12px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.16); border-radius: 999px; border: 4px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .sb:hover { background: rgba(0,0,0,0.05); }
+  .msg:hover { background: rgba(0,0,0,0.022); }
+  .ic:hover { background: rgba(0,0,0,0.06); }
+  .chip:hover { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.14); }
+  .prim:hover { filter: brightness(1.06); }
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:safe center;padding:30px;background:linear-gradient(150deg,#e7e2d6 0%,#dfe4e2 38%,#ccd7dd 70%,#dcd6e0 100%);font-family:-apple-system,'SF Pro Text',system-ui,'Segoe UI',sans-serif;color:#1c1b19;-webkit-font-smoothing:antialiased">
+<div style="width:1440px;height:920px;flex:none;display:flex;flex-direction:column;border-radius:14px;overflow:hidden;background:rgba(252,251,249,0.82);backdrop-filter:blur(40px) saturate(180%);box-shadow:0 1px 0 rgba(255,255,255,0.7) inset, 0 0 0 0.5px rgba(0,0,0,0.18), 0 30px 70px -12px rgba(30,28,26,0.42)">
+
+  <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 14px;flex:none;background:linear-gradient(180deg,rgba(255,255,255,0.5),rgba(255,255,255,0.16));border-bottom:0.5px solid rgba(0,0,0,0.09)">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;box-shadow:0 0 0 0.5px rgba(0,0,0,0.12) inset"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;box-shadow:0 0 0 0.5px rgba(0,0,0,0.12) inset"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28c840;box-shadow:0 0 0 0.5px rgba(0,0,0,0.12) inset"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:2px;margin-left:8px;color:#6f6a64">
+      <span class="ic" style="display:inline-flex;padding:5px;border-radius:7px;cursor:pointer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="3" y="3" width="18" height="18" rx="4"></rect><path d="M9 3v18"></path></svg></span>
+      <span class="ic" style="display:inline-flex;padding:5px;border-radius:7px;cursor:pointer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="m15 18-6-6 6-6"></path></svg></span>
+      <span class="ic" style="display:inline-flex;padding:5px;border-radius:7px;cursor:pointer;opacity:0.4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="m9 18 6-6-6-6"></path></svg></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:3px;padding:3px;border-radius:9px;background:rgba(0,0,0,0.05);margin-left:6px">
+      <span onClick="{{ goChannel }}" style="padding:4px 12px;border-radius:7px;font-size:12.5px;font-weight:590;cursor:pointer;background:{{ tabChannelBg }};color:{{ tabChannelFg }};box-shadow:{{ tabChannelShadow }}">Channel</span>
+      <span onClick="{{ goDm }}" style="padding:4px 12px;border-radius:7px;font-size:12.5px;font-weight:590;cursor:pointer;background:{{ tabDmBg }};color:{{ tabDmFg }};box-shadow:{{ tabDmShadow }}">Direct</span>
+      <span onClick="{{ goAgents }}" style="padding:4px 12px;border-radius:7px;font-size:12.5px;font-weight:590;cursor:pointer;background:{{ tabAgentsBg }};color:{{ tabAgentsFg }};box-shadow:{{ tabAgentsShadow }}">Agents</span>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;color:#6f6a64">
+      <span style="font-size:11.5px;color:#8d887f">tuclaw · local</span>
+      <span class="ic" style="display:inline-flex;padding:6px;border-radius:8px;cursor:pointer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg></span>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;padding:0 10px 10px;gap:10px">
+
+    <div style="width:250px;flex:none;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:10px 6px 8px;flex:none">
+        <div class="ic" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:9px;background:rgba(255,255,255,0.6);box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.04);cursor:pointer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:14px;height:14px;color:#8d887f"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+          <span style="font-size:13px;color:#8d887f">Search everything</span>
+          <span style="margin-left:auto;font-size:11px;color:#a5a09a">⌘K</span>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:2px 6px 14px;min-height:0">
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:#57534e;flex:none"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+          <span>Inbox</span>
+          <span style="margin-left:auto;min-width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px;border-radius:999px;background:#26241f;color:#fff;font-size:11px;font-weight:640">4</span>
+        </div>
+        <div onClick="{{ goAgents }}" class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;background:{{ navAgentsBg }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:#57534e;flex:none"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="3"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+          <span style="font-weight:{{ navAgentsWeight }}">Agents</span>
+          <span style="margin-left:auto;font-size:11.5px;color:#a5a09a">4</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:18px 10px 6px;font-size:12px;color:#8d887f">
+          <span style="font-size:13px">🎬</span><span>Movie nights</span>
+        </div>
+        <div onClick="{{ goChannel }}" class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;background:{{ navChannelBg }}">
+          <span style="width:16px;text-align:center;color:#8d887f;font-size:14px;flex:none">#</span>
+          <span style="font-weight:{{ navChannelWeight }}">movie-night</span>
+          <span style="margin-left:auto;font-size:11px;color:#8d887f;padding:1px 7px;border-radius:999px;background:rgba(0,0,0,0.05)">2 running</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e">
+          <span style="width:16px;text-align:center;color:#8d887f;font-size:14px;flex:none">#</span><span>media-archive</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e">
+          <span style="width:16px;text-align:center;color:#8d887f;font-size:14px;flex:none">#</span><span>apartment-reno</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:18px 10px 6px;font-size:12px;color:#8d887f">
+          <span style="font-size:13px">🏠</span><span>Home</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:640">
+          <span style="width:16px;text-align:center;color:#57534e;font-size:14px;flex:none">#</span><span>smart-home</span>
+          <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#26241f"></span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:640">
+          <span style="width:16px;text-align:center;color:#57534e;font-size:14px;flex:none">#</span><span>downloads</span>
+          <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#26241f"></span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:#8d887f;flex:none;margin:0 1px"><rect x="3" y="11" width="18" height="10" rx="2.5"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>personal</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:18px 10px 6px;font-size:12px;color:#8d887f">
+          <span style="font-size:13px">🛠</span><span>Agent crews</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:#8d887f;flex:none;margin:0 1px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+          <span>night-shift</span><span style="margin-left:auto;font-size:11.5px;color:#a5a09a">3</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:#8d887f;flex:none;margin:0 1px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+          <span>media-desk</span><span style="margin-left:auto;font-size:11.5px;color:#a5a09a">2</span>
+        </div>
+
+        <div style="padding:18px 10px 6px;font-size:12px;color:#8d887f">Direct messages</div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:640">
+          <span style="position:relative;flex:none;width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#4d5a68,#2f3841);color:#fff;font-size:9.5px;font-weight:640">tg<span style="position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;background:#4ba36a;border:2px solid #f6f4f1"></span></span>
+          <span>tuclaw general</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:640">
+          <span style="position:relative;flex:none;width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#7d8a72,#59634f);color:#fff;font-size:9.5px;font-weight:640">mf<span style="position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;background:#e0a33a;border:2px solid #f6f4f1"></span></span>
+          <span>magnet feed sync</span>
+          <span style="margin-left:auto;min-width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px;border-radius:999px;background:#26241f;color:#fff;font-size:11px;font-weight:640">2</span>
+        </div>
+        <div class="sb" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:640">
+          <span style="position:relative;flex:none;width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8a6f6a,#63504c);color:#fff;font-size:9.5px;font-weight:640">as<span style="position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;background:#e0a33a;border:2px solid #f6f4f1"></span></span>
+          <span>allspeak</span>
+        </div>
+        <div onClick="{{ goDm }}" class="sb" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#57534e;background:{{ navDmBg }}">
+          <span style="position:relative;flex:none;width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:9.5px;font-weight:640">mr<span style="position:absolute;right:-3px;bottom:-3px;width:9px;height:9px;border-radius:50%;background:#b9b4ad;border:2px solid #f6f4f1"></span></span>
+          <span style="font-weight:{{ navDmWeight }}">media review</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px;flex:none">
+        <span style="position:relative;width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:11px;font-weight:640">YO<span style="position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:#4ba36a;border:2px solid #f6f4f1"></span></span>
+        <div style="line-height:1.3">
+          <div style="font-size:13px;font-weight:640">You</div>
+          <div style="font-size:11.5px;color:#8d887f">the only human here</div>
+        </div>
+        <span class="ic" style="margin-left:auto;display:inline-flex;padding:6px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10.6 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
+      </div>
+    </div>
+
+    <sc-if value="{{ isChannel }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;display:flex;min-width:0;min-height:0;gap:10px">
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:#fffefd;border-radius:12px;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 8px 24px -10px rgba(30,28,26,0.22);overflow:hidden">
+
+        <div style="display:flex;align-items:center;gap:8px;height:52px;padding:0 16px;flex:none;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+          <span style="font-size:16px;color:#a5a09a">#</span>
+          <span style="font-size:16px;font-weight:680;letter-spacing:-0.01em">movie-night</span>
+          <span style="font-size:12px;color:#8d887f;margin-left:4px">3 agents · 2 tasks running</span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <span class="chip" style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:9px;border:0.5px solid rgba(0,0,0,0.1);background:rgba(255,255,255,0.7);font-size:12.5px;cursor:pointer;color:#3f3b37">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>4
+            </span>
+            <span onClick="{{ toggleThread }}" class="chip" style="display:inline-flex;align-items:center;padding:6px;border-radius:9px;border:0.5px solid rgba(0,0,0,0.1);background:rgba(255,255,255,0.7);cursor:pointer;color:#3f3b37"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="chip" style="display:inline-flex;align-items:center;padding:6px;border-radius:9px;border:0.5px solid rgba(0,0,0,0.1);background:rgba(255,255,255,0.7);cursor:pointer;color:#3f3b37"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:15px;height:15px"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></span>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow:auto;min-height:0;padding:6px 0 10px">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 20px 8px">
+            <span style="flex:1;height:1px;background:rgba(0,0,0,0.07)"></span>
+            <span style="font-size:11.5px;color:#8d887f;font-weight:590">Today</span>
+            <span style="flex:1;height:1px;background:rgba(0,0,0,0.07)"></span>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:11px;font-weight:640">YO</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+                <span style="font-size:14px;font-weight:680">You</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:04 PM</span>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5;text-wrap:pretty">Put something noir together for tonight. I want to sit down at 22:00 with everything already on the NAS.</div>
+            </div>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#4d5a68,#2f3841);color:#fff;font-size:11px;font-weight:640">tg</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+                <span style="font-size:14px;font-weight:680">tuclaw general</span>
+                <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:04 PM</span>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5;text-wrap:pretty">On it. Picks and the session go to <span style="background:rgba(184,69,44,0.1);color:#94331f;padding:1px 5px;border-radius:5px;font-weight:590">allspeak</span>, the download goes to <span style="background:rgba(184,69,44,0.1);color:#94331f;padding:1px 5px;border-radius:5px;font-weight:590">magnet feed sync</span>. Lights and projector are mine.</div>
+              <div style="margin-top:10px;max-width:560px;border-radius:12px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.08);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:9px;padding:11px 13px 9px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:#b8452c"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg>
+                  <span style="font-size:13.5px;font-weight:640">Evening coordination</span>
+                  <span style="margin-left:auto;font-size:11.5px;color:#8d887f">Step 2 of 3 · 9 min</span>
+                </div>
+                <div style="padding:0 13px 11px">
+                  <div style="height:6px;border-radius:999px;background:rgba(0,0,0,0.07);overflow:hidden"><div style="width:66%;height:6px;border-radius:999px;background:#b8452c"></div></div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:9px">
+                    <span style="font-size:12.5px;color:#6f6a64">Waiting for the download to finish</span>
+                    <span class="chip" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:8px;border:0.5px solid rgba(0,0,0,0.1);background:#fff;font-size:12px;font-weight:590;cursor:pointer">Stop</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8a6f6a,#63504c);color:#fff;font-size:11px;font-weight:640">as</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+                <span style="font-size:14px;font-weight:680">allspeak</span>
+                <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:05 PM</span>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5">Three options. All 4K, original and RU audio.</div>
+              <div style="margin-top:9px;max-width:540px;border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 2px 8px -4px rgba(0,0,0,0.14);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.07);font-size:13.5px">
+                  <span style="flex:1">The Third Man <span style="color:#a5a09a">1949</span></span>
+                  <span style="color:#8d887f;font-size:12.5px">104 min</span>
+                  <span class="chip" style="padding:3px 10px;border-radius:7px;border:0.5px solid rgba(0,0,0,0.12);font-size:12px;font-weight:590;cursor:pointer">Pick</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.07);font-size:13.5px">
+                  <span style="flex:1">The Maltese Falcon <span style="color:#a5a09a">1941</span></span>
+                  <span style="color:#8d887f;font-size:12.5px">100 min</span>
+                  <span class="chip" style="padding:3px 10px;border-radius:7px;border:0.5px solid rgba(0,0,0,0.12);font-size:12px;font-weight:590;cursor:pointer">Pick</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;font-size:13.5px;background:rgba(184,69,44,0.06)">
+                  <span style="flex:1;font-weight:640">Touch of Evil <span style="color:#8d887f;font-weight:400">1958</span></span>
+                  <span style="color:#8d887f;font-size:12.5px">95 min</span>
+                  <span style="padding:3px 10px;border-radius:7px;background:#b8452c;color:#fff;font-size:12px;font-weight:590">Picked</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:9px">
+                <span onClick="{{ openThread }}" class="chip" style="display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.1);background:#fff;font-size:12.5px;font-weight:590;color:#3f3b37;cursor:pointer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:#8d887f"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  4 replies
+                </span>
+                <span style="font-size:11.5px;color:#a5a09a">last reply 9:11 PM</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#7d8a72,#59634f);color:#fff;font-size:11px;font-weight:640">mf</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+                <span style="font-size:14px;font-weight:680">magnet feed sync</span>
+                <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:12 PM</span>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5">Taking Touch of Evil. 14.2 GB, 38 seeders, landing in <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:rgba(0,0,0,0.05);padding:1.5px 6px;border-radius:6px">/media/films/noir</span></div>
+              <div style="margin-top:9px;max-width:560px;border-radius:12px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.08);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;color:#8d887f"><path d="m9 18 6-6-6-6"></path></svg>
+                  <span style="font-size:12.5px;font-weight:640;color:#3f3b37">Run log</span>
+                  <span style="margin-left:auto;font-size:11.5px;color:#8d887f">61% · ~6 min left</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:8px 13px;font-size:13px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:#4ba36a;flex:none"><path d="M20 6 9 17l-5-5"></path></svg>
+                  <span style="width:130px;font-weight:590">Source search</span><span style="color:#6f6a64">4 candidates, best seed ratio picked</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:8px 13px;font-size:13px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:#4ba36a;flex:none"><path d="M20 6 9 17l-5-5"></path></svg>
+                  <span style="width:130px;font-weight:590">Hash check</span><span style="color:#6f6a64">matched</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:8px 13px 11px;font-size:13px">
+                  <span style="width:13px;height:13px;flex:none;border-radius:50%;border:2.5px solid rgba(184,69,44,0.35);border-top-color:#b8452c"></span>
+                  <span style="width:130px;font-weight:590">Download</span><span style="color:#94331f">8.7 of 14.2 GB · 24 MB/s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px 6px">
+            <span style="flex:1;height:1px;background:rgba(184,69,44,0.35)"></span>
+            <span style="font-size:11px;font-weight:680;letter-spacing:0.08em;color:#b8452c">NEW</span>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:11px;font-weight:640">YO</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+                <span style="font-size:14px;font-weight:680">You</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:13 PM</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#a5a09a">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+                  voice · ⌥Space
+                </span>
+              </div>
+              <div style="max-width:540px;border-radius:14px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.07);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 13px">
+                  <span style="width:30px;height:30px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#b8452c;color:#fff;cursor:pointer;box-shadow:0 2px 6px -2px rgba(184,69,44,0.7)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="width:11px;height:11px;margin-left:2px"><path d="M6 3l14 9-14 9z"></path></svg></span>
+                  <span style="flex:1;display:flex;align-items:center;gap:2.5px;height:26px">
+                    <span style="width:3px;border-radius:2px;height:8px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:16px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:22px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:12px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:26px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:18px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:9px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:20px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:24px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:14px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:7px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:19px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:11px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:23px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:15px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:9px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:17px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:21px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:10px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:6px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:13px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:18px;background:#c4bfb8"></span>
+                  </span>
+                  <span style="font-size:12px;color:#8d887f">0:12</span>
+                </div>
+                <div style="padding:9px 13px 11px;border-top:0.5px solid rgba(0,0,0,0.06);font-size:13px;color:#57534e;line-height:1.45">
+                  <span style="font-size:11px;color:#a5a09a;margin-right:7px">Transcript</span>Start it at 22:00, dim the lights a minute before, and tell media review what I'm watching tonight.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg" style="display:flex;gap:12px;padding:8px 20px 18px">
+            <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#4d5a68,#2f3841);color:#fff;font-size:11px;font-weight:640">tg</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+                <span style="font-size:14px;font-weight:680">tuclaw general</span>
+                <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:14 PM</span>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5;text-wrap:pretty">Cinema scene fires at 21:59: lights to 20%, blinds down, projector on HDMI 2. A <span style="background:rgba(184,69,44,0.1);color:#94331f;padding:1px 5px;border-radius:5px;font-weight:590">media review</span> entry is queued — I'll ask for your take after the credits.</div>
+              <div style="display:flex;gap:6px;margin-top:9px">
+                <span class="chip" style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.1);background:#fff;font-size:12.5px;cursor:pointer">👍 <span style="font-weight:640;font-size:11.5px;color:#57534e">1</span></span>
+                <span class="chip" style="display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.1);background:#fff;cursor:pointer;color:#8d887f"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8"></path><path d="M9 9.5h.01"></path><path d="M15 9.5h.01"></path></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:none;padding:10px 16px 8px">
+          <sc-if value="{{ recording }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:linear-gradient(180deg,rgba(184,69,44,0.1),rgba(184,69,44,0.06));box-shadow:0 0 0 1px rgba(184,69,44,0.35)">
+              <span style="width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#b8452c;color:#fff;flex:none;box-shadow:0 0 0 6px rgba(184,69,44,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg></span>
+              <span style="font-size:13px;font-weight:640;color:#94331f">Listening</span>
+              <span style="flex:1;display:flex;align-items:center;gap:2.5px;height:26px">
+                <span style="width:3px;border-radius:2px;height:10px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:20px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:14px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:24px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:8px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:18px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:22px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:12px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:26px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:16px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:9px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:19px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:13px;background:#e0aa9b"></span><span style="width:3px;border-radius:2px;height:7px;background:#e0aa9b"></span><span style="width:3px;border-radius:2px;height:15px;background:#e0aa9b"></span>
+              </span>
+              <span style="font-size:13px;color:#94331f;font-weight:590">0:06</span>
+              <span style="font-size:12px;color:#a56454">release ⌥Space to send</span>
+              <span onClick="{{ stopRecording }}" class="chip" style="padding:6px 13px;border-radius:9px;border:0.5px solid rgba(184,69,44,0.4);background:#fff;font-size:12.5px;font-weight:590;color:#94331f;cursor:pointer">Release</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ notRecording }}" hint-placeholder-val="{{ true }}">
+            <div style="border-radius:14px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.14), 0 2px 10px -4px rgba(0,0,0,0.14)">
+              <div style="padding:14px 15px 8px;font-size:14.5px;color:#a5a09a">Message #movie-night</div>
+              <div style="display:flex;align-items:center;gap:2px;padding:6px 9px 9px">
+                <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path></svg></span>
+                <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
+                <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8"></path><path d="M9 9.5h.01"></path><path d="M15 9.5h.01"></path></svg></span>
+                <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64;font-size:13px;font-weight:640">Aa</span>
+                <span style="margin-left:auto;font-size:11.5px;color:#a5a09a;margin-right:6px">Hold ⌥Space to talk</span>
+                <span onClick="{{ startRecording }}" class="chip" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;font-size:12.5px;font-weight:590;cursor:pointer;color:#3f3b37">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:#b8452c"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+                  Talk
+                </span>
+                <span class="prim" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:7px;border-radius:50%;background:#b8452c;color:#fff;cursor:pointer;box-shadow:0 3px 8px -3px rgba(184,69,44,0.8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg></span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="flex:none;display:flex;align-items:center;gap:9px;height:34px;padding:0 18px;border-top:0.5px solid rgba(0,0,0,0.06);color:#6f6a64">
+          <span style="width:7px;height:7px;border-radius:50%;background:#4ba36a"></span>
+          <span style="font-size:12px"><span style="font-weight:640;color:#3f3b37">magnet feed sync</span> downloading · 61%</span>
+          <span style="width:3px;height:3px;border-radius:50%;background:#c4bfb8"></span>
+          <span style="font-size:12px"><span style="font-weight:640;color:#3f3b37">allspeak</span> syncing subtitles</span>
+          <span style="margin-left:auto;font-size:11.5px;color:#a5a09a">2 of 4 agents busy</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ threadOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="width:360px;flex:none;display:flex;flex-direction:column;min-height:0;background:#fffefd;border-radius:12px;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 8px 24px -10px rgba(30,28,26,0.22);overflow:hidden">
+          <div style="display:flex;align-items:center;height:52px;padding:0 14px;flex:none;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+            <div style="line-height:1.3">
+              <div style="font-size:14.5px;font-weight:680">Thread</div>
+              <div style="font-size:11.5px;color:#8d887f">#movie-night · allspeak</div>
+            </div>
+            <span class="ic" style="margin-left:auto;display:inline-flex;padding:6px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:16px;height:16px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg></span>
+            <span onClick="{{ closeThread }}" class="ic" style="display:inline-flex;padding:6px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:16px;height:16px"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></span>
+          </div>
+          <div style="flex:1;overflow:auto;padding:4px 14px 10px;min-height:0">
+            <div style="padding:12px 0 14px;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
+                <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8a6f6a,#63504c);color:#fff;font-size:9.5px;font-weight:640">as</span>
+                <span style="font-size:13.5px;font-weight:680">allspeak</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:05 PM</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5;color:#3f3b37">Three options. All 4K, original and RU audio.</div>
+            </div>
+            <div style="padding:12px 0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+                <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:9.5px;font-weight:640">YO</span>
+                <span style="font-size:13.5px;font-weight:680">You</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:07 PM</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5">Which of these have I not seen?</div>
+            </div>
+            <div style="padding:8px 0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+                <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:9.5px;font-weight:640">mr</span>
+                <span style="font-size:13.5px;font-weight:680">media review</span>
+                <span style="font-size:10px;font-weight:640;padding:1px 5px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64">AGENT</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:08 PM</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5">From the archive: Maltese Falcon in 2019, The Third Man in 2022. Touch of Evil isn't in there.</div>
+            </div>
+            <div style="padding:8px 0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+                <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:9.5px;font-weight:640">YO</span>
+                <span style="font-size:13.5px;font-weight:680">You</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:10 PM</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5">Touch of Evil then.</div>
+            </div>
+            <div style="padding:8px 0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+                <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8a6f6a,#63504c);color:#fff;font-size:9.5px;font-weight:640">as</span>
+                <span style="font-size:13.5px;font-weight:680">allspeak</span>
+                <span style="font-size:11.5px;color:#a5a09a">9:11 PM</span>
+              </div>
+              <div style="font-size:13.5px;line-height:1.5">Handed to magnet feed sync. Subtitles come as a separate file, I'll sync them once the download lands.</div>
+            </div>
+          </div>
+          <div style="flex:none;padding:8px 14px 14px">
+            <div style="border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.14), 0 2px 8px -4px rgba(0,0,0,0.12)">
+              <div style="padding:12px 13px 6px;font-size:13.5px;color:#a5a09a">Reply in thread</div>
+              <div style="display:flex;align-items:center;gap:2px;padding:4px 8px 8px">
+                <span class="ic" style="display:inline-flex;padding:6px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path></svg></span>
+                <span class="ic" style="display:inline-flex;padding:6px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg></span>
+                <span class="prim" style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#b8452c;color:#fff;cursor:pointer;box-shadow:0 3px 8px -3px rgba(184,69,44,0.8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isDm }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:#fffefd;border-radius:12px;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 8px 24px -10px rgba(30,28,26,0.22);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;flex:none;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+        <span style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:9.5px;font-weight:640">mr</span>
+        <span style="font-size:16px;font-weight:680;letter-spacing:-0.01em">media review</span>
+        <span style="font-size:12px;color:#8d887f;margin-left:2px">logs what you watch and play</span>
+        <span onClick="{{ goAgents }}" class="chip" style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:9px;border:0.5px solid rgba(0,0,0,0.1);background:rgba(255,255,255,0.7);font-size:12.5px;cursor:pointer;color:#3f3b37">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
+          Agent settings
+        </span>
+      </div>
+
+      <div style="flex:1;overflow:auto;min-height:0;padding:6px 0 10px">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 20px 8px">
+          <span style="flex:1;height:1px;background:rgba(0,0,0,0.07)"></span>
+          <span style="font-size:11.5px;color:#8d887f;font-weight:590">Yesterday, after the credits</span>
+          <span style="flex:1;height:1px;background:rgba(0,0,0,0.07)"></span>
+        </div>
+
+        <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+          <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:11px;font-weight:640">mr</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+              <span style="font-size:14px;font-weight:680">media review</span>
+              <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+              <span style="font-size:11.5px;color:#a5a09a">11:41 PM</span>
+            </div>
+            <div style="font-size:14.5px;line-height:1.5">Credits are rolling. How was Touch of Evil? Just talk at me, I'll sort it out.</div>
+          </div>
+        </div>
+
+        <div class="msg" style="display:flex;gap:12px;padding:8px 20px">
+          <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#c9744f,#a2472c);color:#fff;font-size:11px;font-weight:640">YO</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+              <span style="font-size:14px;font-weight:680">You</span>
+              <span style="font-size:11.5px;color:#a5a09a">11:43 PM</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#a5a09a">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+                voice · ⌥Space
+              </span>
+            </div>
+            <div style="max-width:560px;border-radius:14px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.07);overflow:hidden">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 13px">
+                <span style="width:30px;height:30px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#b8452c;color:#fff;cursor:pointer;box-shadow:0 2px 6px -2px rgba(184,69,44,0.7)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="width:11px;height:11px;margin-left:2px"><path d="M6 3l14 9-14 9z"></path></svg></span>
+                <span style="flex:1;display:flex;align-items:center;gap:2.5px;height:26px">
+                  <span style="width:3px;border-radius:2px;height:12px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:20px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:9px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:24px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:16px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:26px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:11px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:18px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:22px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:8px;background:#57534e"></span><span style="width:3px;border-radius:2px;height:15px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:21px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:13px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:25px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:10px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:17px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:23px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:14px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:7px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:19px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:12px;background:#c4bfb8"></span><span style="width:3px;border-radius:2px;height:6px;background:#c4bfb8"></span>
+                </span>
+                <span style="font-size:12px;color:#8d887f">0:34</span>
+              </div>
+              <div style="padding:9px 13px 11px;border-top:0.5px solid rgba(0,0,0,0.06);font-size:13px;color:#57534e;line-height:1.45">
+                <span style="font-size:11px;color:#a5a09a;margin-right:7px">Transcript</span>The first ten minutes are the best thing I've seen all year. It sags in the middle, but the ending pulls it back. Eight out of ten. Put it on the rewatch list in six months.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg" style="display:flex;gap:12px;padding:8px 20px 18px">
+          <span style="width:34px;height:34px;flex:none;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:11px;font-weight:640">mr</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1px">
+              <span style="font-size:14px;font-weight:680">media review</span>
+              <span style="font-size:10px;font-weight:640;letter-spacing:0.04em;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,0.06);color:#6f6a64;position:relative;top:-1px">AGENT</span>
+              <span style="font-size:11.5px;color:#a5a09a">11:44 PM</span>
+            </div>
+            <div style="font-size:14.5px;line-height:1.5">Filed to the archive.</div>
+            <div style="margin-top:9px;max-width:520px;border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 2px 8px -4px rgba(0,0,0,0.12);overflow:hidden">
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px">
+                <span style="color:#8d887f">Title</span><span style="font-weight:590">Touch of Evil · 1958</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px">
+                <span style="color:#8d887f">Rating</span><span style="font-weight:590">8 / 10</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px">
+                <span style="color:#8d887f">Tags</span><span style="font-weight:590">noir · strong opening · sags mid</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 13px;font-size:13.5px">
+                <span style="color:#8d887f">Rewatch reminder</span><span style="font-weight:590">in 6 months</span>
+              </div>
+            </div>
+            <div style="font-size:14px;line-height:1.5;margin-top:10px;color:#3f3b37;max-width:520px">That's the fourth noir this month. I can put together next week's shortlist myself if you want.</div>
+            <div style="display:flex;gap:7px;margin-top:9px">
+              <span class="prim" style="padding:5px 13px;border-radius:999px;background:#26241f;color:#fff;font-size:12.5px;font-weight:590;cursor:pointer">Do it</span>
+              <span class="chip" style="padding:5px 13px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;font-size:12.5px;font-weight:590;cursor:pointer;color:#57534e">Not now</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:none;padding:10px 16px 8px">
+        <sc-if value="{{ recording }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:linear-gradient(180deg,rgba(184,69,44,0.1),rgba(184,69,44,0.06));box-shadow:0 0 0 1px rgba(184,69,44,0.35)">
+            <span style="width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#b8452c;color:#fff;flex:none;box-shadow:0 0 0 6px rgba(184,69,44,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg></span>
+            <span style="font-size:13px;font-weight:640;color:#94331f">Listening</span>
+            <span style="flex:1;display:flex;align-items:center;gap:2.5px;height:26px">
+              <span style="width:3px;border-radius:2px;height:10px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:20px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:14px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:24px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:8px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:18px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:22px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:12px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:26px;background:#b8452c"></span><span style="width:3px;border-radius:2px;height:16px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:9px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:19px;background:#cf7d69"></span><span style="width:3px;border-radius:2px;height:13px;background:#e0aa9b"></span><span style="width:3px;border-radius:2px;height:7px;background:#e0aa9b"></span><span style="width:3px;border-radius:2px;height:15px;background:#e0aa9b"></span>
+            </span>
+            <span style="font-size:13px;color:#94331f;font-weight:590">0:06</span>
+            <span style="font-size:12px;color:#a56454">release ⌥Space to send</span>
+            <span onClick="{{ stopRecording }}" class="chip" style="padding:6px 13px;border-radius:9px;border:0.5px solid rgba(184,69,44,0.4);background:#fff;font-size:12.5px;font-weight:590;color:#94331f;cursor:pointer">Release</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ notRecording }}" hint-placeholder-val="{{ false }}">
+          <div style="border-radius:14px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.14), 0 2px 10px -4px rgba(0,0,0,0.14)">
+            <div style="padding:14px 15px 8px;font-size:14.5px;color:#a5a09a">Message media review</div>
+            <div style="display:flex;align-items:center;gap:2px;padding:6px 9px 9px">
+              <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path></svg></span>
+              <span class="ic" style="display:inline-flex;padding:7px;border-radius:8px;cursor:pointer;color:#6f6a64"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
+              <span style="margin-left:auto;font-size:11.5px;color:#a5a09a;margin-right:6px">Hold ⌥Space to talk</span>
+              <span onClick="{{ startRecording }}" class="chip" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;font-size:12.5px;font-weight:590;cursor:pointer;color:#3f3b37">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:#b8452c"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M12 19v3"></path></svg>
+                Talk
+              </span>
+              <span class="prim" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:7px;border-radius:50%;background:#b8452c;color:#fff;cursor:pointer;box-shadow:0 3px 8px -3px rgba(184,69,44,0.8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg></span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="flex:none;display:flex;align-items:center;gap:9px;height:34px;padding:0 18px;border-top:0.5px solid rgba(0,0,0,0.06);color:#6f6a64">
+        <span style="width:7px;height:7px;border-radius:50%;background:#c4bfb8"></span>
+        <span style="font-size:12px">media review is idle · last entry 11:44 PM</span>
+        <span style="margin-left:auto;font-size:11.5px;color:#a5a09a">Whisper local · 34 ms</span>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isAgents }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;min-width:0;min-height:0;gap:10px">
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:#fffefd;border-radius:12px;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 8px 24px -10px rgba(30,28,26,0.22);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;flex:none;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+          <span style="font-size:16px;font-weight:680;letter-spacing:-0.01em">Agents</span>
+          <span style="font-size:12px;color:#8d887f">4 connected · 2 busy</span>
+          <span class="prim" style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;background:#26241f;color:#fff;font-size:12.5px;font-weight:590;cursor:pointer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:13px;height:13px"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+            Add agent
+          </span>
+        </div>
+
+        <div style="flex:1;overflow:auto;min-height:0;padding:10px 12px 16px;display:flex;flex-direction:column;gap:8px">
+          <div class="chip" style="display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:#f7f5f2;box-shadow:0 0 0 1px rgba(184,69,44,0.28);cursor:pointer">
+            <span style="width:36px;height:36px;flex:none;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#7d8a72,#59634f);color:#fff;font-size:11px;font-weight:640">mf</span>
+            <div style="min-width:190px">
+              <div style="font-size:14px;font-weight:680">magnet feed sync</div>
+              <div style="font-size:12.5px;color:#8d887f">Watches feeds and pulls files down</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">#downloads</span>
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">#movie-night</span>
+            </div>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:590;color:#94331f"><span style="width:7px;height:7px;border-radius:50%;background:#b8452c"></span>Downloading 61%</span>
+          </div>
+
+          <div class="chip" style="display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer">
+            <span style="width:36px;height:36px;flex:none;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#8a6f6a,#63504c);color:#fff;font-size:11px;font-weight:640">as</span>
+            <div style="min-width:190px">
+              <div style="font-size:14px;font-weight:680">allspeak</div>
+              <div style="font-size:12.5px;color:#8d887f">Sets up the movie session</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">#movie-night</span>
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">night-shift</span>
+            </div>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:590;color:#94331f"><span style="width:7px;height:7px;border-radius:50%;background:#b8452c"></span>Syncing subtitles</span>
+          </div>
+
+          <div class="chip" style="display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer">
+            <span style="width:36px;height:36px;flex:none;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#6d7b8a,#4a5560);color:#fff;font-size:11px;font-weight:640">mr</span>
+            <div style="min-width:190px">
+              <div style="font-size:14px;font-weight:680">media review</div>
+              <div style="font-size:12.5px;color:#8d887f">Logs your take on films, shows and games</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">#media-archive</span>
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">media-desk</span>
+            </div>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#8d887f"><span style="width:7px;height:7px;border-radius:50%;background:#c4bfb8"></span>Idle</span>
+          </div>
+
+          <div class="chip" style="display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:#fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1);cursor:pointer">
+            <span style="width:36px;height:36px;flex:none;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#4d5a68,#2f3841);color:#fff;font-size:11px;font-weight:640">tg</span>
+            <div style="min-width:190px">
+              <div style="font-size:14px;font-weight:680">tuclaw general</div>
+              <div style="font-size:12.5px;color:#8d887f">Smart home, everything else, coordinates the others</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <span style="font-size:11.5px;color:#57534e;padding:2px 9px;border-radius:999px;background:rgba(0,0,0,0.05)">all channels</span>
+            </div>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#8d887f"><span style="width:7px;height:7px;border-radius:50%;background:#c4bfb8"></span>Idle</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:392px;flex:none;display:flex;flex-direction:column;min-height:0;background:#fffefd;border-radius:12px;box-shadow:0 0 0 0.5px rgba(0,0,0,0.1), 0 8px 24px -10px rgba(30,28,26,0.22);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;flex:none;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+          <span style="width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#7d8a72,#59634f);color:#fff;font-size:10px;font-weight:640">mf</span>
+          <div style="line-height:1.3">
+            <div style="font-size:14.5px;font-weight:680">magnet feed sync</div>
+            <div style="font-size:11.5px;color:#8d887f">Agent settings</div>
+          </div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:14px;min-height:0">
+          <div style="font-size:11.5px;color:#8d887f;margin-bottom:6px">Role</div>
+          <div style="font-size:13.5px;line-height:1.5;color:#3f3b37;margin-bottom:18px">Watches the feeds, picks releases by quality and seed count, downloads to the NAS and files them into folders. Never deletes anything without asking.</div>
+
+          <div style="font-size:11.5px;color:#8d887f;margin-bottom:7px">Permissions</div>
+          <div style="border-radius:12px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.07);overflow:hidden;margin-bottom:18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px"><span>NAS directory</span><span style="font-weight:590;color:#57534e">Write</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px"><span>Torrent client</span><span style="font-weight:590;color:#57534e">Full</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px"><span>Delete files</span><span style="font-weight:590;color:#94331f">Ask me first</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;font-size:13.5px"><span>Traffic cap</span><span style="font-weight:590;color:#57534e">200 GB / month</span></div>
+          </div>
+
+          <div style="font-size:11.5px;color:#8d887f;margin-bottom:7px">How it replies</div>
+          <div style="display:flex;gap:3px;padding:3px;border-radius:10px;background:rgba(0,0,0,0.05);margin-bottom:10px">
+            <span style="flex:1;padding:6px 10px;border-radius:8px;font-size:12.5px;font-weight:590;text-align:center;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.12);cursor:pointer">Short</span>
+            <span style="flex:1;padding:6px 10px;border-radius:8px;font-size:12.5px;text-align:center;color:#6f6a64;cursor:pointer">Detailed</span>
+            <span style="flex:1;padding:6px 10px;border-radius:8px;font-size:12.5px;text-align:center;color:#6f6a64;cursor:pointer">With run log</span>
+          </div>
+          <div style="border-radius:12px;background:#f7f5f2;box-shadow:0 0 0 0.5px rgba(0,0,0,0.07);overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px">
+              <span>Voice replies</span>
+              <span style="display:inline-flex;width:40px;height:23px;border-radius:999px;background:rgba(0,0,0,0.12);align-items:center;padding:2px;cursor:pointer"><span style="width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:13.5px"><span>Speaks up unprompted</span><span style="font-weight:590;color:#57534e">Errors only</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;font-size:13.5px">
+              <span>Push notifications</span>
+              <span style="display:inline-flex;width:40px;height:23px;border-radius:999px;background:#4ba36a;align-items:center;justify-content:flex-end;padding:2px;cursor:pointer"><span style="width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span></span>
+            </div>
+          </div>
+        </div>
+        <div style="flex:none;display:flex;gap:8px;padding:12px 14px;border-top:0.5px solid rgba(0,0,0,0.07)">
+          <span class="chip" style="padding:7px 13px;border-radius:999px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;font-size:12.5px;font-weight:590;cursor:pointer;color:#57534e">Disconnect</span>
+          <span onClick="{{ goDm }}" class="prim" style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:#26241f;color:#fff;font-size:12.5px;font-weight:590;cursor:pointer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            Open direct
+          </span>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1500,&quot;height&quot;:980}}">
+class Component extends DCLogic {
+  state = { screen: 'channel', threadOpen: true, recording: false };
+  set(screen) { this.setState({ screen, recording: screen === 'dm' }); }
+  renderVals() {
+    const s = this.state.screen;
+    const tab = (k) => s === k
+      ? { bg: '#fffefd', fg: '#1c1b19', shadow: '0 1px 3px rgba(0,0,0,0.16)' }
+      : { bg: 'transparent', fg: '#6f6a64', shadow: 'none' };
+    const nav = (k) => ({ bg: s === k ? 'rgba(0,0,0,0.075)' : 'transparent', weight: s === k ? 640 : 400 });
+    const c = tab('channel'), d = tab('dm'), a = tab('agents');
+    const nc = nav('channel'), nd = nav('dm'), na = nav('agents');
+    return {
+      isChannel: s === 'channel', isDm: s === 'dm', isAgents: s === 'agents',
+      threadOpen: this.state.threadOpen,
+      recording: this.state.recording, notRecording: !this.state.recording,
+      tabChannelBg: c.bg, tabChannelFg: c.fg, tabChannelShadow: c.shadow,
+      tabDmBg: d.bg, tabDmFg: d.fg, tabDmShadow: d.shadow,
+      tabAgentsBg: a.bg, tabAgentsFg: a.fg, tabAgentsShadow: a.shadow,
+      navChannelBg: nc.bg, navChannelWeight: nc.weight,
+      navDmBg: nd.bg, navDmWeight: nd.weight,
+      navAgentsBg: na.bg, navAgentsWeight: na.weight,
+      goChannel: () => this.set('channel'),
+      goDm: () => this.set('dm'),
+      goAgents: () => this.set('agents'),
+      toggleThread: () => this.setState(p => ({ threadOpen: !p.threadOpen })),
+      openThread: () => this.setState({ threadOpen: true }),
+      closeThread: () => this.setState({ threadOpen: false }),
+      startRecording: () => this.setState({ recording: true }),
+      stopRecording: () => this.setState({ recording: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

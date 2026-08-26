@@ -1,0 +1,4 @@
+target/
+!.revmux/
+.revmux/*
+!.revmux/profile.md
