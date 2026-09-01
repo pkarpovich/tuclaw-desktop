@@ -590,12 +590,18 @@ lines instead of expecting empty output.
 - Create: `core/src/grouping.rs`
 - Modify: `core/src/lib.rs`
 
-- [ ] implement grouping of messages into day sections, oldest first, preserving input order inside a
+- [x] implement grouping of messages into day sections, oldest first, preserving input order inside a
       section; the section title is `Today`, `Yesterday`, or a formatted date
-- [ ] take the timezone offset and `now` as parameters — never read the wall clock inside the function
-- [ ] write tests: empty input, all messages today, today plus yesterday, a run spanning several
+- [x] take the timezone offset and `now` as parameters — never read the wall clock inside the function
+- [x] write tests: empty input, all messages today, today plus yesterday, a run spanning several
       older days, and two messages either side of local midnight landing in different sections
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The contract is `group_by_day(messages: &[Message], offset: UtcOffset, now: OffsetDateTime) ->
+Vec<DaySection>`, where `DaySection { date: Date, title: String, messages: Vec<Message> }`. The `date`
+field is what the sections are sorted by, so the function is correct for unsorted input too, and Task
+9 flattens `title` + `messages` into the list's item sequence. The formatted title for an older day is
+`[weekday], [day] [month repr:long]` — "Thursday, 20 August".
 
 ### Task 4: SQLite store
 
