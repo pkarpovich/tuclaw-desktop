@@ -528,16 +528,29 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 
 `.gitignore` already exists and already ignores `target/`; leave it alone.
 
-- [ ] create the workspace with members `core` and `app`; `core` must not list `gpui` as a dependency
-- [ ] pin Rust 1.98.0 in `mise.toml` and add the dependencies exactly as written in Toolchain
-- [ ] write the `Makefile` with `build`, `run`, `test`, `lint`, `fmt`, `fmt-check` targets, **every
+- [x] create the workspace with members `core` and `app`; `core` must not list `gpui` as a dependency
+- [x] pin Rust 1.98.0 in `mise.toml` and add the dependencies exactly as written in Toolchain
+- [x] write the `Makefile` with `build`, `run`, `test`, `lint`, `fmt`, `fmt-check` targets, **every
       one wrapping cargo in `mise exec --`**
-- [ ] confirm `mise exec -- rustc --version` prints 1.98.0 before the first build
-- [ ] open an empty window from `app/src/main.rs` through `gpui_platform::application()` per the
+- [x] confirm `mise exec -- rustc --version` prints 1.98.0 before the first build
+- [x] open an empty window from `app/src/main.rs` through `gpui_platform::application()` per the
       Toolchain bullet, so the Metal build step and window creation are exercised; the window is
       expected to be blank until Task 7
-- [ ] write one placeholder test in each crate and confirm `make test` passes
-- [ ] run the per-task gate
+- [x] write one placeholder test in each crate and confirm `make test` passes
+- [x] run the per-task gate
+
+➕ The GPUI dependency lines from Toolchain are declared once in the root `[workspace.dependencies]`
+together with `rusqlite`, `serde`, `serde_json`, `time` and `anyhow`; each crate opts in with
+`workspace = true` as the task that needs it arrives, which is what the later `Modify:
+core/Cargo.toml` steps do. `app` takes `gpui` + `gpui_platform` now, plus `gpui` with `test-support`
+under `[dev-dependencies]`.
+
+➕ `cx.new(...)` needs `gpui::AppContext` in scope at this revision; without the import it fails with
+`E0599: no method named 'new' found for &mut App`.
+
+⚠️ The window opening is verified by compilation only. `make build` compiles `gpui_apple`, which is
+the Metal shader build step, but the agent does not launch the app (Development Approach) and the
+plan defers "the window must render" to the Task 7 user checkpoint.
 
 ### Task 2: Domain types and the body encoding
 
