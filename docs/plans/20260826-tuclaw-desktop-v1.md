@@ -558,14 +558,31 @@ plan defers "the window must render" to the Task 7 user checkpoint.
 - Create: `core/src/model.rs`
 - Modify: `core/src/lib.rs`, `core/Cargo.toml`
 
-- [ ] define every type from the Domain section, deriving `Debug`, `Clone`, `PartialEq` and, for the
+- [x] define every type from the Domain section, deriving `Debug`, `Clone`, `PartialEq` and, for the
       id newtypes, `Eq` and `Hash`
-- [ ] derive `Serialize` and `Deserialize` on `Span` and provide `encode(&[Span]) -> String` and
+- [x] derive `Serialize` and `Deserialize` on `Span` and provide `encode(&[Span]) -> String` and
       `decode(&str) -> Result<Vec<Span>>` over `serde_json`
-- [ ] write tests: plain text, a mention mid-sentence, inline code, several spans in one body, an
+- [x] write tests: plain text, a mention mid-sentence, inline code, several spans in one body, an
       empty body, text containing `[`, `{`, `"` and a backslash — all survive `encode` then `decode`;
       malformed JSON is an error, not a panic
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The id newtypes also derive `Copy`: they are passed by value through the store and state contracts
+(`messages(channel: ChannelId)`, `selected: ChannelId`) and a clone at every call site buys nothing.
+`ChannelKind` and `Author` derive `Copy` and `Eq` for the same reason, since `AgentId` is `Copy`.
+
+➕ `encode` panics rather than returning a `Result`, as its signature in Technical Details requires:
+`Vec<Span>` holds only strings, so `serde_json::to_string` has no reachable failure. Documented under
+`# Panics`.
+
+➕ Two tests beyond the list: the encoded form is asserted to be serde's externally tagged shape
+(`[{"Text":"on it "},{"Mention":"allspeak"}]`), pinning the on-disk format the store will read, and a
+Cyrillic + emoji body round-trips.
+
+⚠️ Task 17's comment check, `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src`, also matches `///`
+doc comments (it hits the second and third slash of the triple). `core` is required to carry `///`
+docs on its public items, so that grep will not print nothing. Task 17 must exclude `///` and `//!`
+lines instead of expecting empty output.
 
 ### Task 3: Day grouping
 
