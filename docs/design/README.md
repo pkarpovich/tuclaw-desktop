@@ -29,8 +29,9 @@ out of scope** — do not build it, and do not treat its absence as a defect:
 - every **structured message card**: the film picker with Pick buttons, the run log with its progress
   stages, the decision card with Do it / Not now, the task header with the Stop button, the archive
   entry table. v1 messages are plain text only
-- **push-to-talk** in the composer: the Talk button, the Listening state with its waveform, the
-  transcript block, and the attachment and emoji buttons. v1 sends typed text only
+- the composer's **behaviour beyond typed text**: the Talk button, the Listening state with its
+  waveform, the transcript block, and the `@` / paperclip / smiley / `Aa` icon row are all drawn as
+  the mockup shows them and do nothing. v1 sends typed text only
 - the **agent settings panel** (Role / Permissions / How it replies / Voice replies / Push
   notifications / Disconnect) — v1 shows agent cards, not an editor
 - the **channel chips on agent cards** (`#downloads`, `#movie-night`, `night-shift`, `all channels`) — the
@@ -38,9 +39,14 @@ out of scope** — do not build it, and do not treat its absence as a defect:
 - the search field's behaviour — it is rendered as a static affordance, it searches nothing
 - the reaction row
 
-The **Channel / Direct / Agents** switcher, the **status dots**, the **"2 running" pill** and the
-**bottom status bar** ARE in scope for this version: they are part of the window chrome the app draws
-itself, which is the whole reason this version exists.
+- the **"2 running" pill** on a channel row, the **plain activity dot** on `smart-home` and
+  `downloads`, and the header's **"N tasks running"** — the domain has no per-channel agent or task
+  data. The header shows a derived `N agents` count instead
+- the **third status-dot colour**: agents are idle (green) or busy (amber), nothing else
+
+The **Channel / Direct / Agents** switcher, the two-colour **status dots**, the **unread badge** and
+the **bottom status bar** ARE in scope for this version: they are part of the window chrome the app
+draws itself, which is the whole reason this version exists.
 
 ## What to take from them
 
