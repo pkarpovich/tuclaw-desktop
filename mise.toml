@@ -1,0 +1,26 @@
+[tools]
+rust = "1.98.0"
+
+[tasks.build]
+description = "Build the workspace, tests included"
+run = "cargo build --workspace --all-targets"
+
+[tasks.dev]
+description = "Build and run the app"
+run = "cargo run -p tuclaw-desktop"
+
+[tasks.test]
+description = "Run both test tiers"
+run = "cargo test --workspace"
+
+[tasks.lint]
+description = "Clippy with warnings as errors"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.fmt]
+description = "Format the workspace"
+run = "cargo fmt --all"
+
+[tasks.fmt-check]
+description = "Fail on unformatted code"
+run = "cargo fmt --all -- --check"

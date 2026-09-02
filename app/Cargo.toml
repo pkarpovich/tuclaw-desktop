@@ -1,0 +1,14 @@
+[package]
+name = "tuclaw-desktop"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+gpui.workspace = true
+gpui_platform.workspace = true
+time = { workspace = true }
+tuclaw-core = { path = "../core" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }

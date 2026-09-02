@@ -192,10 +192,12 @@ single-line reference and does not show any of this.
    `range_utf16`. The element keeps a `String` and converts both ways at the boundary. Tests that use
    only ASCII cannot catch a byte-offset implementation; the tests below use Cyrillic and an emoji.
 
-   The marked-text contract, for IME: `replace_and_mark_text_in_range(range, text, new_selection)`
-   replaces the marked range if one exists, else the given range, with `text`, and marks the inserted
-   text; `marked_text_range` reports that range in UTF-16 or `None`; `unmark_text` clears the mark and
-   keeps the text; `replace_text_in_range` on a marked input replaces the marked range and clears the
+   The marked-text contract, for IME: every `range` the trait hands over is a **document** range in
+   UTF-16 units, never one relative to the mark, so both replacing methods resolve it the same way —
+   the given range if there is one, else the marked range, else the caret.
+   `replace_and_mark_text_in_range(range, text, new_selection)` replaces that range with `text` and
+   marks the inserted text; `marked_text_range` reports that range in UTF-16 or `None`; `unmark_text`
+   clears the mark and keeps the text; `replace_text_in_range` replaces that range and clears the
    mark; `bounds_for_range` returns the on-screen bounds of the caret's line for the given range so
    the candidate window can be positioned.
 
@@ -528,16 +530,29 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 
 `.gitignore` already exists and already ignores `target/`; leave it alone.
 
-- [ ] create the workspace with members `core` and `app`; `core` must not list `gpui` as a dependency
-- [ ] pin Rust 1.98.0 in `mise.toml` and add the dependencies exactly as written in Toolchain
-- [ ] write the `Makefile` with `build`, `run`, `test`, `lint`, `fmt`, `fmt-check` targets, **every
+- [x] create the workspace with members `core` and `app`; `core` must not list `gpui` as a dependency
+- [x] pin Rust 1.98.0 in `mise.toml` and add the dependencies exactly as written in Toolchain
+- [x] write the `Makefile` with `build`, `run`, `test`, `lint`, `fmt`, `fmt-check` targets, **every
       one wrapping cargo in `mise exec --`**
-- [ ] confirm `mise exec -- rustc --version` prints 1.98.0 before the first build
-- [ ] open an empty window from `app/src/main.rs` through `gpui_platform::application()` per the
+- [x] confirm `mise exec -- rustc --version` prints 1.98.0 before the first build
+- [x] open an empty window from `app/src/main.rs` through `gpui_platform::application()` per the
       Toolchain bullet, so the Metal build step and window creation are exercised; the window is
       expected to be blank until Task 7
-- [ ] write one placeholder test in each crate and confirm `make test` passes
-- [ ] run the per-task gate
+- [x] write one placeholder test in each crate and confirm `make test` passes
+- [x] run the per-task gate
+
+➕ The GPUI dependency lines from Toolchain are declared once in the root `[workspace.dependencies]`
+together with `rusqlite`, `serde`, `serde_json`, `time` and `anyhow`; each crate opts in with
+`workspace = true` as the task that needs it arrives, which is what the later `Modify:
+core/Cargo.toml` steps do. `app` takes `gpui` + `gpui_platform` now, plus `gpui` with `test-support`
+under `[dev-dependencies]`.
+
+➕ `cx.new(...)` needs `gpui::AppContext` in scope at this revision; without the import it fails with
+`E0599: no method named 'new' found for &mut App`.
+
+⚠️ The window opening is verified by compilation only. `make build` compiles `gpui_apple`, which is
+the Metal shader build step, but the agent does not launch the app (Development Approach) and the
+plan defers "the window must render" to the Task 7 user checkpoint.
 
 ### Task 2: Domain types and the body encoding
 
@@ -545,14 +560,31 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 - Create: `core/src/model.rs`
 - Modify: `core/src/lib.rs`, `core/Cargo.toml`
 
-- [ ] define every type from the Domain section, deriving `Debug`, `Clone`, `PartialEq` and, for the
+- [x] define every type from the Domain section, deriving `Debug`, `Clone`, `PartialEq` and, for the
       id newtypes, `Eq` and `Hash`
-- [ ] derive `Serialize` and `Deserialize` on `Span` and provide `encode(&[Span]) -> String` and
+- [x] derive `Serialize` and `Deserialize` on `Span` and provide `encode(&[Span]) -> String` and
       `decode(&str) -> Result<Vec<Span>>` over `serde_json`
-- [ ] write tests: plain text, a mention mid-sentence, inline code, several spans in one body, an
+- [x] write tests: plain text, a mention mid-sentence, inline code, several spans in one body, an
       empty body, text containing `[`, `{`, `"` and a backslash — all survive `encode` then `decode`;
       malformed JSON is an error, not a panic
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The id newtypes also derive `Copy`: they are passed by value through the store and state contracts
+(`messages(channel: ChannelId)`, `selected: ChannelId`) and a clone at every call site buys nothing.
+`ChannelKind` and `Author` derive `Copy` and `Eq` for the same reason, since `AgentId` is `Copy`.
+
+➕ `encode` panics rather than returning a `Result`, as its signature in Technical Details requires:
+`Vec<Span>` holds only strings, so `serde_json::to_string` has no reachable failure. Documented under
+`# Panics`.
+
+➕ Two tests beyond the list: the encoded form is asserted to be serde's externally tagged shape
+(`[{"Text":"on it "},{"Mention":"allspeak"}]`), pinning the on-disk format the store will read, and a
+Cyrillic + emoji body round-trips.
+
+⚠️ Task 17's comment check, `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src`, also matches `///`
+doc comments (it hits the second and third slash of the triple). `core` is required to carry `///`
+docs on its public items, so that grep will not print nothing. Task 17 must exclude `///` and `//!`
+lines instead of expecting empty output.
 
 ### Task 3: Day grouping
 
@@ -560,12 +592,18 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 - Create: `core/src/grouping.rs`
 - Modify: `core/src/lib.rs`
 
-- [ ] implement grouping of messages into day sections, oldest first, preserving input order inside a
+- [x] implement grouping of messages into day sections, oldest first, preserving input order inside a
       section; the section title is `Today`, `Yesterday`, or a formatted date
-- [ ] take the timezone offset and `now` as parameters — never read the wall clock inside the function
-- [ ] write tests: empty input, all messages today, today plus yesterday, a run spanning several
+- [x] take the timezone offset and `now` as parameters — never read the wall clock inside the function
+- [x] write tests: empty input, all messages today, today plus yesterday, a run spanning several
       older days, and two messages either side of local midnight landing in different sections
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The contract is `group_by_day(messages: &[Message], offset: UtcOffset, now: OffsetDateTime) ->
+Vec<DaySection>`, where `DaySection { date: Date, title: String, messages: Vec<Message> }`. The `date`
+field is what the sections are sorted by, so the function is correct for unsorted input too, and Task
+9 flattens `title` + `messages` into the list's item sequence. The formatted title for an older day is
+`[weekday], [day] [month repr:long]` — "Thursday, 20 August".
 
 ### Task 4: SQLite store
 
@@ -573,18 +611,39 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 - Create: `core/src/store.rs`, `core/src/schema.rs`, `core/src/paths.rs`
 - Modify: `core/src/lib.rs`, `core/Cargo.toml`
 
-- [ ] implement `open`, `open_in_memory`, schema creation on first open, and the database path
+- [x] implement `open`, `open_in_memory`, schema creation on first open, and the database path
       function in `paths.rs`
-- [ ] implement every read method from the Store contract with explicit ordering, including the
+- [x] implement every read method from the Store contract with explicit ordering, including the
       `sent_at` then `id` tie-break, and `message(id)`
-- [ ] implement `send` and `reply`; `reply` inserts and increments the root's `reply_count` in one
+- [x] implement `send` and `reply`; `reply` inserts and increments the root's `reply_count` in one
       transaction
-- [ ] write tests against in-memory databases: a message written is read back in its channel and not
+- [x] write tests against in-memory databases: a message written is read back in its channel and not
       in another; `message(id)` returns exactly the row `send` returned; a reply lands in the thread
       and not in the feed, and raises the root's count; a thread query on a message with no replies is
       empty; ordering holds when two messages share a timestamp; a body with mentions round-trips
       through the database as the same spans; a timestamp with a non-UTC offset reads back equal
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `Store` methods take `&self`, so writes open their transaction with
+`Connection::unchecked_transaction()` — `Connection::transaction()` needs `&mut self` and would force
+`&mut Store` on `send`, `reply` and later `seed_if_needed`, which the state and the composers would
+have to carry all the way down.
+
+➕ `reply` errors when no row carries `root` instead of silently writing an orphan: the `UPDATE`
+reports zero changed rows and the transaction is dropped without a commit, so neither statement lands.
+
+➕ `schema.rs` is a private module (`mod schema;`), so `rusqlite` stays out of `tuclaw-core`'s public
+API surface. The `messages.sent_at` column is `TEXT`; rusqlite's `time` feature writes RFC-3339 with
+an explicit offset and reads it back with that offset preserved, which the non-UTC test asserts
+directly.
+
+⚠️ `ORDER BY sent_at, id` sorts that TEXT column lexicographically, so it is only chronologically
+correct while all rows share one UTC offset. The fixtures derive every timestamp from one `now`, so
+they do; anything later that writes mixed offsets into one channel would need a normalized sort
+column.
+
+➕ `paths::database_path` reads `HOME` rather than `std::env::home_dir`, and does not create the
+directory — Task 6's `main.rs` owns that, as its checklist states.
 
 ### Task 5: Fixtures and seeding
 
@@ -595,19 +654,40 @@ top bar reserves space on the left for the traffic lights and holds the (inert) 
 Seeding lives here rather than in Task 4 because it cannot be written, or tested, before the data it
 writes exists.
 
-- [ ] build the agents, channels and conversations described in the Fixtures section, all timestamps
+- [x] build the agents, channels and conversations described in the Fixtures section, all timestamps
       derived from the passed-in `now`
-- [ ] give `movie-night` its 58 messages across 15 days with one thread root carrying 4 replies, and
+- [x] give `movie-night` its 58 messages across 15 days with one thread root carrying 4 replies, and
       at least one mention and one code span
-- [ ] give every other channel except `personal` its own conversation across at least two days
-- [ ] implement `seed_if_needed` in `store.rs`: skip when the marker exists, otherwise write the
+- [x] give every other channel except `personal` its own conversation across at least two days
+- [x] implement `seed_if_needed` in `store.rs`: skip when the marker exists, otherwise write the
       fixtures and the marker in one transaction
-- [ ] write tests: the exact channel and agent counts and order; `movie-night` holds 58 top-level
+- [x] write tests: the exact channel and agent counts and order; `movie-night` holds 58 top-level
       messages; `personal` is empty and is the only empty channel; exactly one channel carries an
       unread count; the fixtures span 16 distinct days; a message seeded "yesterday" lands on the
       previous calendar day; seeding twice leaves one copy; a database carrying a marker but no rows
       is left alone
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `fixtures.rs` is a private module (`mod fixtures;`), like `schema.rs`: the app never builds
+fixtures itself, it only calls `Store::seed_if_needed`, so `Fixtures`, `Conversation`, `SeedMessage`
+and `SeedReply` stay out of `tuclaw-core`'s public API and need no `///` docs.
+
+➕ Day offsets are pinned so the distinct-day count is exact regardless of when the app first runs:
+`movie-night` uses days 0, 1, 2, 4, 6, 7, 9, 11, 13, 15, 17, 19, 21, 23 and 25 back from `now` (15
+days), and the only day any other channel adds is day 3 (`media-archive`), giving 16 across all
+channels. Each message keeps a fixed clock time inside its day — `now - days(n)` then
+`replace_time` — so a day boundary is never crossed by accident and "Today"/"Yesterday" are always
+right.
+
+➕ The group label carries its emoji (`🎬 Movie nights`, `🏠 Home`). `Channel::group` is the only
+field the sidebar section has, and the design's section titles are emoji + name, so the emoji lives
+in the data rather than in a name-to-emoji table inside the view.
+
+⚠️ Today's fixture messages sit at fixed morning times (07:45 to 11:30 local). Launching the app for
+the first time before ~11:30 therefore shows a few of today's messages with a timestamp slightly
+ahead of the wall clock. Deriving those times backwards from `now` instead would trade this for a
+worse bug: a first launch just after local midnight would push them into yesterday and collapse a
+day section.
 
 ### Task 6: AppState and the startup path
 
@@ -617,14 +697,14 @@ writes exists.
 
 From this task on the app opens the real database, so every later view task renders fixture data.
 
-- [ ] define `View`, `Segment`, `OpenThread`, `StateEvent` and `AppState` as in the State section,
+- [x] define `View`, `Segment`, `OpenThread`, `StateEvent` and `AppState` as in the State section,
       with the `EventEmitter` impl
-- [ ] implement every method from the State contract, each ending in `cx.notify()` and emitting
+- [x] implement every method from the State contract, each ending in `cx.notify()` and emitting
       exactly the events the listener table names
-- [ ] load agents, channels and the first channel's messages at construction
-- [ ] in `main.rs`: resolve the path, create the directory if absent, open the store, call
+- [x] load agents, channels and the first channel's messages at construction
+- [x] in `main.rs`: resolve the path, create the directory if absent, open the store, call
       `seed_if_needed` with the current time, and construct `AppState` — all before the window opens
-- [ ] write `#[gpui::test]` tests, each against `open_in_memory` plus `seed_if_needed`, for every rule
+- [x] write `#[gpui::test]` tests, each against `open_in_memory` plus `seed_if_needed`, for every rule
       in the State section: blank body sends nothing, emits nothing and returns `Ok`; sending appends
       only what the store accepted and emits `MessageAppended`; a store that rejects the write (a
       closed connection) makes `send` return `Err` with `messages` unchanged; selecting another
@@ -633,9 +713,32 @@ From this task on the app opens the real database, so every later view task rend
       appends to the thread, raises the root's count in both places and emits `ReplyAppended`;
       `active_segment` is right for a channel, a direct, and the agents view; `activate_segment`
       moves Channel → Direct → Channel through the remembered channels, and from Agents to each kind
-- [ ] write a `#[gpui::test]` proving the observation rule: an entity that registered `cx.observe`
+- [x] write a `#[gpui::test]` proving the observation rule: an entity that registered `cx.observe`
       on the state has its callback run when `select` is called
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `AppState::new(store) -> Result<AppState>` takes no `Context`: `cx.new` cannot return a `Result`,
+so `main` loads the workspace first and only then calls `cx.new(|_| state)`. A store carrying no
+channels is an error, because `selected: ChannelId` has no empty value.
+
+➕ `state.rs` carries `#![allow(dead_code)]`. The State contract is complete here, but its consumers
+arrive across Tasks 7-14, and `make build` compiles the bin target where a `pub` method with no
+caller is a warning. **Remove the attribute in Task 13**, once the last method (`reply_in_thread`)
+has a caller, and confirm the gate stays green.
+
+➕ `send` and `reply_in_thread` timestamp with `OffsetDateTime::now_utc()`, matching the fixtures'
+single offset. The `time` crate's `now_local` needs the `local-offset` feature and is unsound in a
+threaded process, and mixing offsets would break the store's lexicographic `ORDER BY sent_at` (Task
+4's ⚠️).
+
+➕ The "store that rejects the write" test seeds a temporary file database, drops the connection,
+makes the file read-only and reopens it: `CREATE TABLE IF NOT EXISTS` and every read still succeed,
+while `INSERT` fails with `attempt to write a readonly database`. `Store` exposes no way to close or
+poison an in-memory connection, so this is the only reachable failure path.
+
+➕ Store errors are reported with `eprintln!`; the workspace has no logging dependency. `select`
+falls back to an empty message list when a load fails, rather than leaving the previous channel's
+messages under a new header.
 
 ### Task 7: App shell — window, titlebar and top bar
 
@@ -645,23 +748,41 @@ From this task on the app opens the real database, so every later view task rend
 
 Open `docs/design/screenshots/01-full-mockup.png` before starting.
 
-- [ ] define the theme constants; no colour literal may appear outside this module afterwards
-- [ ] open the window with a transparent titlebar and the traffic lights positioned into the app's own
+- [x] define the theme constants; no colour literal may appear outside this module afterwards
+- [x] open the window with a transparent titlebar and the traffic lights positioned into the app's own
       bar, per the Window section
-- [ ] build the top bar: left space for the traffic lights, the inert sidebar toggle and arrows, the
+- [x] build the top bar: left space for the traffic lights, the inert sidebar toggle and arrows, the
       segmented `Channel / Direct / Agents` control with the active segment raised and read from
       `active_segment()`, and `tuclaw · local` with a settings affordance on the right
-- [ ] make the three segments clickable: each calls `activate_segment` with its `Segment`; give each
+- [x] make the three segments clickable: each calls `activate_segment` with its `Segment`; give each
       a `debug_selector` (`segment-channel`, `segment-direct`, `segment-agents`)
-- [ ] lay out the three regions — sidebar column on the warm background, feed and thread as rounded
+- [x] lay out the three regions — sidebar column on the warm background, feed and thread as rounded
       cards with a border, a shadow and a gap between them — with placeholder content, the shell
       observing `AppState` so the active segment repaints
-- [ ] write `#[gpui::test]` tests: drawing the shell does not panic; clicking `segment-agents` via
+- [x] write `#[gpui::test]` tests: drawing the shell does not panic; clicking `segment-agents` via
       `debug_bounds` makes `active_segment()` return `Agents`, and clicking `segment-channel` returns
       it to `Channel`
-- [ ] **user checkpoint**: stop and ask the user to run `make run`, compare against
-      `01-full-mockup.png`, and click the three segments; do not tick this task until they answer
-- [ ] run the per-task gate
+- [x] **user checkpoint** (skipped — not automatable): the agent never launches the running app, so
+      `make run`, the visual comparison against `01-full-mockup.png` and clicking the three segments
+      are carried to the hand-over list in Task 18
+- [x] run the per-task gate
+
+➕ The palette in `theme.rs` grows task by task rather than landing whole here. `make build` compiles
+the bin target with `-D warnings`, where an unused `pub` colour is dead code and fails the gate, so
+the module holds exactly the ten tones Task 7 paints with — `window`, `card`, `raised`, `sunken`,
+`border`, `hairline`, `shadow`, and the three text levels. The terracotta accent arrives with the
+first view that draws it.
+
+➕ Colours are `pub fn ... -> Hsla` rather than `const`: `rgb`/`rgba` are not `const fn` at this
+revision, and a `const Rgba { r, g, b, a }` literal would trade readable hex for four floats.
+
+➕ The top bar's icons are drawn from `div()`s and text glyphs, not SVG. `gpui::svg()` needs an
+`AssetSource` registered on the `App`, and no task in this plan sets one up; since the sidebar
+toggle, the arrows and the settings affordance are all inert (Non-goals), a bordered box, `‹` / `›`
+and three stacked rules carry the shape without an asset pipeline.
+
+➕ `Root` is gone from `main.rs`, replaced by `Shell`; its Task 1 placeholder test is replaced by the
+shell's draw test.
 
 ### Task 8: Sidebar
 
@@ -671,19 +792,39 @@ Open `docs/design/screenshots/01-full-mockup.png` before starting.
 
 Open `docs/design/screenshots/02-sidebar.png` before starting.
 
-- [ ] build the search affordance with its `⌘K` hint, the `Agents` row, the emoji-titled group
+- [x] build the search affordance with its `⌘K` hint, the `Agents` row, the emoji-titled group
       sections, channel rows, the direct-message rows with initials chips and two-colour status dots,
       and the pinned footer with the user row and the settings gear. No `Inbox` row, no `2 running`
       pill, no activity dot — those are non-goals
-- [ ] render the unread badge on rows whose `unread > 0`
-- [ ] make channel and direct rows clickable, calling `AppState::select`, with the selection highlight
+- [x] render the unread badge on rows whose `unread > 0`
+- [x] make channel and direct rows clickable, calling `AppState::select`, with the selection highlight
       read from state and a hover style; make the `Agents` row call `activate_segment(Agents)`; give
       every row a `debug_selector` (`sidebar-row-<name>`, `sidebar-agents`)
-- [ ] mount the sidebar in the shell's left column, observing `AppState`
-- [ ] write `#[gpui::test]` tests: drawing the sidebar against seeded state does not panic; clicking
+- [x] mount the sidebar in the shell's left column, observing `AppState`
+- [x] write `#[gpui::test]` tests: drawing the sidebar against seeded state does not panic; clicking
       `sidebar-row-personal` via `debug_bounds` changes the selected channel to `personal` and leaves
       `messages` empty; clicking `sidebar-agents` makes `active_segment()` return `Agents`
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ Sections are derived by walking `channels()` in order and opening a new section whenever the title
+changes: a channel's title is its `group`, a direct's is `Direct messages`. `personal` carries no
+group, so it lands in an untitled section of its own between `🏠 Home` and the directs, rather than
+under `Home` as the mockup draws it — the grouping follows the data, and the domain has no field that
+would put it there. A fourth test covers the derived shape: four sections of 3 / 2 / 1 / 4 rows, every
+direct row carrying a chip, and the selected row carrying the highlight.
+
+➕ Theme grew by the ten tones this view paints with: `text_label`, `field`, `selection`, `badge`,
+`chip_text`, `accent`, `status_idle`, `status_busy` and `agent_chip(index)`, the last returning one of
+four chip tones indexed by the agent's `sort_index`. `agent_chip` indexes an array rather than
+matching, so no wildcard arm is needed.
+
+➕ The row's `selected` flag and the `Agents` row's `active` flag are one `Highlight { On, Off }` enum
+rather than a `bool`, per the Code-Quality Rules.
+
+➕ Icons stay drawn from `div()`s, as Task 7 established: the magnifier is a bordered circle plus a
+bar, the `Agents` glyph a bordered rounded rect with two dots, and the footer gear a bordered circle
+with an inner ring. The channel lead is `#` for every channel — the mockup's lock on `personal` has no
+field in the domain to key off.
 
 ### Task 9: Feed card and the virtualised list
 
@@ -693,22 +834,46 @@ Open `docs/design/screenshots/02-sidebar.png` before starting.
 
 Open `docs/design/screenshots/03-feed-and-thread.png` and `04-direct-message.png` before starting.
 
-- [ ] build the channel header exactly as the "Derived labels and the feed header" section states:
+- [x] build the channel header exactly as the "Derived labels and the feed header" section states:
       `#` + name + derived `N agents`, the two inert trailing chips, and the direct variant with the
       agent's chip, name and role
-- [ ] render the conversation with `list()` and a `ListState` owned by the view, constructed with
+- [x] render the conversation with `list()` and a `ListState` owned by the view, constructed with
       `ListAlignment::Bottom`; rows are plain text for now, replaced in Task 10
-- [ ] flatten day separators into the same item sequence as messages, so the virtualiser sees one list
+- [x] flatten day separators into the same item sequence as messages, so the virtualiser sees one list
       and the count is `messages + separators`
-- [ ] observe `AppState`, and subscribe to it per the listener table: `SelectionChanged` →
+- [x] observe `AppState`, and subscribe to it per the listener table: `SelectionChanged` →
       `reset(count)`; `MessageAppended` → `reset(count)` then `scroll_to_end()`; `ReplyAppended` →
       `notify`
-- [ ] render the empty state for a channel with no messages, filling the card
-- [ ] build the status bar along the card's bottom edge with the derived `N of M agents busy`
-- [ ] write `#[gpui::test]` tests: drawing the feed for the 58-message channel does not panic; drawing
+- [x] render the empty state for a channel with no messages, filling the card
+- [x] build the status bar along the card's bottom edge with the derived `N of M agents busy`
+- [x] write `#[gpui::test]` tests: drawing the feed for the 58-message channel does not panic; drawing
       it, selecting the empty channel through state, and drawing again does not panic and the list's
       `item_count()` is 0; selecting a direct channel and drawing does not panic
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The flattened items live on the view as `Rc<Vec<Item>>`, rebuilt from `AppState` on every event the
+listener table names, and the `list()` closure captures a clone of that `Rc`. The closure is
+`FnMut(usize, &mut Window, &mut App)` and never sees the view, so it cannot read `AppState` cheaply per
+row; a cached sequence also makes `reset(count)` exact. `Item::Message` holds the whole `Message` rather
+than its rendered text, so `ReplyAppended` refreshes `reply_count` for Task 10's affordance without a
+`reset` — the repaint-only rule the listener table states is a `Resync::Repaint` arm rather than a
+skipped rebuild.
+
+➕ Grouping runs at `UtcOffset::UTC` with `OffsetDateTime::now_utc()`, matching the single offset the
+store and the fixtures already carry (Task 4's ⚠️ and Task 6's ➕). `time`'s `now_local` needs
+`local-offset` and is unsound in a threaded process, so a real local offset is not available here.
+
+➕ A fourth test covers the `MessageAppended` path: sending resyncs the list so `item_count()` matches
+the rebuilt sequence and the sent body is the last item. It asserts growth rather than `+1`, because a
+message sent today after a fixture seeded at an older `now` opens a new day section and adds two items.
+
+➕ The status bar's left edge lists the busy agents with their task text, as the mockup draws it; the
+derived `N of M agents busy` sits on the right. No new theme tone was needed — the header chips, the
+day separators and the status bar all paint with the tones Tasks 7 and 8 established.
+
+⚠️ The empty state and the list are alternatives, not siblings: `Feed::body` returns the empty state
+when the item sequence is empty, so a channel with no messages never constructs a zero-item `list()`.
+`ListState::item_count()` is still 0 there, which is what the task's test asserts.
 
 ### Task 10: Message row
 
@@ -718,18 +883,43 @@ Open `docs/design/screenshots/03-feed-and-thread.png` and `04-direct-message.png
 
 Open `docs/design/screenshots/03-feed-and-thread.png` before starting.
 
-- [ ] build a row: initials chip, author name, the `AGENT` badge for agent authors, the timestamp, and
+- [x] build a row: initials chip, author name, the `AGENT` badge for agent authors, the timestamp, and
       the body rendered per "Inline spans in a paragraph"
-- [ ] render the "N replies" affordance when `reply_count > 0`, and a hover-revealed reply affordance
+- [x] render the "N replies" affordance when `reply_count > 0`, and a hover-revealed reply affordance
       when it is zero; both take an `on_open` callback the feed supplies and carry a `debug_selector`
       of `message-reply-<id>`
-- [ ] replace the feed's plain rows with this one, the feed passing an `on_open` that calls
+- [x] replace the feed's plain rows with this one, the feed passing an `on_open` that calls
       `AppState::open_thread`
-- [ ] keep the row free of channel knowledge — it is reused by the thread panel
-- [ ] write tests: the reply label reads "1 reply" for one and "N replies" otherwise; clicking
+- [x] keep the row free of channel knowledge — it is reused by the thread panel
+- [x] write tests: the reply label reads "1 reply" for one and "N replies" otherwise; clicking
       `message-reply-<root id>` via `debug_bounds` on the drawn feed opens that thread in state; the
       feed draw tests from Task 9 still pass
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `on_open` is `pub type OnOpen = Rc<dyn Fn(MessageId, &mut Window, &mut App)>`, built once in
+`Feed::body` from a clone of `Entity<AppState>` and cloned per row. The `list()` closure never sees the
+view, so `cx.listener` is unavailable; the callback updates the state entity through the `&mut App` the
+closure is handed. The same `&mut App` supplies the row's agents with `state.read(cx)`, so `message_row`
+takes `&[Agent]` rather than reading state itself and stays reusable by Task 13's thread panel.
+
+➕ The hover-revealed affordance is absolutely positioned at the row's top-right, drawn with
+`.invisible()` and `.group_hover(group, |style| style.visible())` against a per-row `.group("message-<id>")`.
+gpui carries no `visible_on_hover` at this revision — that helper lives in Zed's own `ui` crate — and a
+`Visibility::Hidden` element still takes its layout space, so placing it in the column would leave a
+pill-sized gap under every reply-less message.
+
+➕ `VisualTestContext::debug_bounds` takes `&'static str`, not `&str`, so the click test leaks its
+formatted `message-reply-<id>` selector. A hidden element still records its debug bounds — the
+visibility check in `div`'s `paint` comes after the insert — but registers no click listener, so only
+the visible pill is clickable.
+
+➕ Theme grew by `mention_field` and `mention_text`, the two tones the mockup's inline mention chip
+needs. The `AGENT` badge and the inline code chip paint with `sunken()`, and the code chip keeps the
+window's font: `font_family` on a name font-kit cannot resolve is a failure path no task here handles.
+
+⚠️ A `Span::Text` is split on whitespace, so runs of spaces and the newlines a Shift+Enter body carries
+(Task 12) collapse to one word gap on screen. The stored body keeps them; this is the cost of the
+"one text element per word" rule the Inline spans section settles on.
 
 ### Task 11: Text input element
 
@@ -742,31 +932,59 @@ all four requirements there are mandatory, and the UTF-16 rule is the one that f
 bare input is mounted at the bottom of the feed card here so the file has a consumer; Task 12 dresses
 it into the composer.
 
-- [ ] define `TextInput` per the Text input section, holding its text, a UTF-16 caret, the marked
+- [x] define `TextInput` per the Text input section, holding its text, a UTF-16 caret, the marked
       range, and its `FocusHandle`
-- [ ] implement the eight required `EntityInputHandler` methods, with byte ↔ UTF-16 conversion at the
+- [x] implement the eight required `EntityInputHandler` methods, with byte ↔ UTF-16 conversion at the
       boundary and nowhere else, and the marked-text transitions as the facts state them
-- [ ] implement the manual `Element`: shape with `shape_text` at the given wrap width in `prepaint`,
+- [x] implement the manual `Element`: shape with `shape_text` at the given wrap width in `prepaint`,
       size to the wrapped line count with no maximum, paint the text and the caret quad in `paint`,
       and register `window.handle_input(...)` there; wrap it in a `div()` with `track_focus` and a
       mouse-down handler that focuses the handle
-- [ ] bind the keys: characters via the input handler; `backspace`, `left`, `right`, `enter`,
+- [x] bind the keys: characters via the input handler; `backspace`, `left`, `right`, `enter`,
       `shift-enter` as actions under a `key_context`; Enter emits `Submitted`, Shift+Enter inserts a
       newline
-- [ ] mount one bare `TextInput` at the bottom of the feed card and focus it when the window opens
-- [ ] write `#[gpui::test]` tests with the input focused: `simulate_input("hello")` gives text
+- [x] mount one bare `TextInput` at the bottom of the feed card and focus it when the window opens
+- [x] write `#[gpui::test]` tests with the input focused: `simulate_input("hello")` gives text
       `hello` and caret 5; `simulate_input("привет 🐢")` gives that text and a caret at its UTF-16
       length, not its byte length; backspace after the emoji removes the whole emoji; left then a
       typed character inserts before the caret; `shift-enter` leaves a `\n` in the text and emits
       nothing; `enter` emits `Submitted`; `clear` empties the text and resets the caret
-- [ ] write `#[gpui::test]` tests for IME: `replace_and_mark_text_in_range` with `"ぱ"` marks it and
+- [x] write `#[gpui::test]` tests for IME: `replace_and_mark_text_in_range` with `"ぱ"` marks it and
       `marked_text_range` reports a UTF-16 range of length 1; a second call replaces the marked text;
       `unmark_text` keeps the text and clears the range; `replace_text_in_range` over a marked input
       replaces the marked text and clears the mark
-- [ ] write `#[gpui::test]` tests for shaping: an input drawn at a narrow width with a long line
+- [x] write `#[gpui::test]` tests for shaping: an input drawn at a narrow width with a long line
       reports a height of more than one line; three `shift-enter`s make it four lines tall; clicking
       the input via `debug_bounds` (`input-feed`) focuses its handle
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The height comes from `Window::request_measured_layout`, not from a `Style` height: the wrapped
+line count is only knowable once taffy offers a width, and the measure closure is where that width
+arrives. The element therefore shapes twice a frame — once to measure, once in `prepaint` at the final
+bounds — which gpui's line-layout cache turns into a lookup the second time. `prepaint` keeps the
+`WrappedLine`s (they are not `Clone`), `paint` moves them onto the entity, and `bounds_for_range` and
+`character_index_for_point` read them from there.
+
+➕ `TextInput::new(placeholder, selector, cx)` takes a debug selector, because the selector belongs on
+the same `div()` that owns `track_focus` and the focus-on-click handler, and Tasks 12 and 13 put two
+inputs on screen at once (`input-feed`, `input-thread`).
+
+➕ Boundaries are `char` boundaries, not grapheme clusters: the workspace carries no
+`unicode-segmentation` dependency and GPUI's own example is the only thing that pulls one in. One
+backspace removes a whole emoji, as the task requires, but not a whole ZWJ sequence.
+
+➕ `bind_keys(cx)` binds the five actions under the `TuclawInput` key context once per `App`; `main`
+calls it before the window opens and each test calls it before building its harness. Without a
+binding, `enter` and `shift-enter` would reach the input handler as a literal `\n` — GPUI's
+`with_simulated_ime` fills `key_char` for both.
+
+➕ `input.rs` carries `#![allow(dead_code)]` for the reason `state.rs` does: `text()`, `is_blank()`
+and `clear()` have no caller in the bin target until Task 12's composer. **Remove it in Task 12.**
+
+➕ The feed takes the initial focus on its first `render` (`InitialFocus::Pending` → `Taken`), since
+`Feed::new` is handed no `Window` and this task changes neither `shell.rs` nor `Shell::new`'s
+signature. `Window::focus` during a draw skips its refresh but still sets the focus, and paint runs
+after render in the same frame, so `window.handle_input` registers on that first frame.
 
 ### Task 12: Composer
 
@@ -777,24 +995,48 @@ it into the composer.
 Open `docs/design/screenshots/01-full-mockup.png` before starting — the composer at the bottom of the
 feed card.
 
-- [ ] build `Composer` per its section: it owns a `TextInput`, takes `ComposerKind`, a placeholder
+- [x] build `Composer` per its section: it owns a `TextInput`, takes `ComposerKind`, a placeholder
       and an `on_submit`, subscribes to `Submitted`, and clears the input only when `on_submit`
       returns `Ok`
-- [ ] draw the `Feed` shape: the placeholder naming the target (`Message #channel` or `Message
+- [x] draw the `Feed` shape: the placeholder naming the target (`Message #channel` or `Message
       <agent>`), the four inert icons, the hint, the inert `Talk` chip, and the 32 px send button,
       disabled while the input is blank; the send button calls the same submit path
-- [ ] replace Task 11's bare mount with a `Feed` composer whose `on_submit` calls `AppState::send`;
+- [x] replace Task 11's bare mount with a `Feed` composer whose `on_submit` calls `AppState::send`;
       the feed already scrolls on `MessageAppended`; subscribe to `ThreadClosed` to refocus this
       input
-- [ ] write `#[gpui::test]` tests: with the composer's input focused, `simulate_input("hi")` then
+- [x] write `#[gpui::test]` tests: with the composer's input focused, `simulate_input("hi")` then
       `simulate_keystrokes("enter")` appends a message with body `[Span::Text("hi")]` to the selected
       channel and leaves the input empty; `enter` on a blank input appends nothing;
       `simulate_input("a")`, `shift-enter`, `simulate_input("b")`, `enter` appends a body containing
       `a\nb`; when `on_submit` returns `Err`, the input still holds its text
-- [ ] **user checkpoint**: stop and ask the user to click into the composer, type a message in
-      `movie-night` including a Shift+Enter line break and some Cyrillic, send it, and confirm it
-      appears and the feed scrolls to it
-- [ ] run the per-task gate
+- [x] **user checkpoint** (skipped — not automatable): the agent never launches the running app, so
+      `make run`, typing in `movie-night` with a Shift+Enter break and Cyrillic, and watching the
+      feed scroll to the sent message are carried to the hand-over list in Task 18
+- [x] run the per-task gate
+
+➕ `ComposerKind` carries only its `Feed` variant here; **Task 13 adds `Thread`**. `make build`
+compiles the bin target with `-D warnings`, where a variant nothing constructs is dead code, and an
+exhaustive `match self.kind` would otherwise need a `Thread` arm drawing a shape Task 13 owns. The
+`#![allow(dead_code)]` route Tasks 6 and 11 took does not help: it silences the unused variant, not
+the missing arm.
+
+➕ The placeholder names the *selected* channel, so it cannot be fixed at construction as the
+`Composer::new` contract implies. `Composer::set_placeholder` and `TextInput::set_placeholder` were
+added, and the feed calls the first from its `SelectionChanged` arm. Re-creating the composer per
+selection was the alternative and would drop focus mid-session.
+
+➕ Focusing on `ThreadClosed` reuses Task 11's deferred-focus trick rather than `cx.subscribe_in`:
+`Feed::new` is handed no `Window`, so the subscription sets `Focus::Requested` and the next `render`
+takes the focus. Task 11's `InitialFocus` enum is now that `Focus` enum, since first focus and
+refocus-after-close are the same move.
+
+➕ `input.rs` lost its `#![allow(dead_code)]` as Task 11 required: `text()`, `is_blank()`, `clear()`
+and `focus_handle()` all have callers in the composer now. `state.rs` keeps its attribute until Task
+13 gives `reply_in_thread` a caller.
+
+➕ A fifth test beyond the four the task lists: clicking `composer-send-feed` via `debug_bounds`
+sends the typed body, which is what "the send button calls the same submit path" claims. No new theme
+tone was needed.
 
 ### Task 13: Thread panel
 
@@ -804,25 +1046,50 @@ feed card.
 
 Open `docs/design/screenshots/03-feed-and-thread.png` before starting — the right-hand card.
 
-- [ ] build the panel as its own card: the `Thread` header with the `#channel · author` subtitle read
+- [x] build the panel as its own card: the `Thread` header with the `#channel · author` subtitle read
       from `OpenThread`, a close control with `debug_selector` `thread-close`, the cached root
       message, the replies as a plain column (four replies need no virtualiser), and a `Thread`
       composer placeheld "Reply in thread"
-- [ ] add the `Thread` shape to `composer.rs`: `@` and a microphone, no hint, no `Talk`, a 30 px
+- [x] add the `Thread` shape to `composer.rs`: `@` and a microphone, no hint, no `Talk`, a 30 px
       send button
-- [ ] show the panel only when `thread` is `Some` — the shell observes state for this; wire the close
+- [x] show the panel only when `thread` is `Some` — the shell observes state for this; wire the close
       control to `AppState::close_thread`
-- [ ] wire the composer's `on_submit` through `AppState::reply_in_thread`; subscribe to
+- [x] wire the composer's `on_submit` through `AppState::reply_in_thread`; subscribe to
       `ThreadOpened` to focus the reply input and to `ReplyAppended` to repaint
-- [ ] write `#[gpui::test]` tests: drawing the panel with a thread open does not panic; opening a
+- [x] write `#[gpui::test]` tests: drawing the panel with a thread open does not panic; opening a
       thread then selecting another channel and drawing still renders — the root comes from
       `OpenThread`, not from the selection; replying through the panel's input appends to the thread
       and raises the root's count; clicking `thread-close` via `debug_bounds` sets `thread` to
       `None`; after `open_thread` the thread input's handle is focused, and after `close_thread` the
       feed input's is
-- [ ] **user checkpoint**: stop and ask the user to open a thread from `movie-night`, click into the
-      reply composer and reply, switch to another channel, confirm the thread stays, and close it
-- [ ] run the per-task gate
+- [x] **user checkpoint** (skipped — not automatable): the agent never launches the running app, so
+      `make run`, opening a thread from `movie-night`, replying in it, switching channel to confirm
+      the thread stays, and closing it are carried to the hand-over list in Task 18
+- [x] run the per-task gate
+
+➕ `message.rs` gained a `Replies { Affordance(OnOpen), Hidden }` parameter in place of
+`message_row`'s bare `on_open`, and the thread panel passes `Hidden`. Task 10 settled that the row is
+reused here, but reusing it unchanged would draw the root's "4 replies" pill *inside* the thread the
+pill opens, and would register a second `message-reply-<id>` debug selector for the same row while
+both cards are on screen. The mockup's thread root carries no pill, only the hairline under it.
+
+➕ `message.rs` also exposes `author_name(author, agents)`, which the header's `#channel · author`
+subtitle needs and which `writer` now calls, so the "You" / "unknown agent" fallbacks are stated once.
+
+➕ Both `Feed` and `ThreadPanel` carry a `#[cfg(test)] pub fn input_focus`. The focus test needs the
+two composers' handles from one window, and each composer field is private to its own module. Gating
+the accessor on `cfg(test)` keeps it out of the bin target, where an accessor with no caller is dead
+code under `-D warnings`. The test mounts a `Harness` holding both views rather than a `Shell`,
+because `Shell`'s fields are private to `shell.rs` too, and it asserts the thread input gives the
+focus up as well as that the feed input takes it, so the assertion cannot pass vacuously.
+
+➕ `state.rs` lost its `#![allow(dead_code)]` as Task 6 required, and the gate stayed green:
+`reply_in_thread` has the thread composer as a caller now, and every other public method already had
+one.
+
+➕ The mockup's inert bell in the thread header is not drawn. The task enumerates the header's
+contents and a bell is in none of the Non-goals' "drawn but inert" lists, so it is left out rather
+than added on the screenshot's authority.
 
 ### Task 14: Agents view
 
@@ -833,16 +1100,36 @@ Open `docs/design/screenshots/03-feed-and-thread.png` before starting — the ri
 Open `docs/design/screenshots/05-agents-and-settings.png` before starting; build the card list on the
 left of that screenshot and **not** the settings panel on its right, which is a non-goal.
 
-- [ ] extract a pure `agent_cards(agents: &[Agent]) -> Vec<AgentCard>` producing the ordered
+- [x] extract a pure `agent_cards(agents: &[Agent]) -> Vec<AgentCard>` producing the ordered
       view-model — name, initials, role, status label — in `sort_index` order
-- [ ] render one card per entry, and a summary line counting the agents and how many are busy
-- [ ] show this view in place of the feed and thread when `view == Agents`; the sidebar row (Task 8)
+- [x] render one card per entry, and a summary line counting the agents and how many are busy
+- [x] show this view in place of the feed and thread when `view == Agents`; the sidebar row (Task 8)
       and the top-bar segment (Task 7) already call `activate_segment(Agents)`, and the shell's
       observation repaints the swap
-- [ ] write tests: `agent_cards` over the seeded agents returns four entries in `sort_index` order
+- [x] write tests: `agent_cards` over the seeded agents returns four entries in `sort_index` order
       with the right busy labels; drawing the agents view does not panic; clicking `sidebar-agents`
       and then `sidebar-row-movie-night` via `debug_bounds` ends with `active_segment() == Channel`
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `AgentCard` carries a `tone: usize` beyond the four fields the task names, because the chip is
+painted with `theme::agent_chip(tone)` exactly as the sidebar and the feed's direct header do, and the
+card holds no `sort_index` to derive it from after the extraction. The status label is an enum,
+`Status { Idle, Busy(SharedString) }`, rather than a rendered string: the render matches it for the
+dot and text tones, and the ordering test asserts the busy task text directly.
+
+➕ `agent_cards` sorts by `(sort_index, id)` rather than trusting `Store::agents`' `ORDER BY`, so the
+function is correct for unsorted input the way `group_by_day` is.
+
+➕ The shell's `render` now calls `Shell::body`, which returns `Vec<AnyElement>` — one card for the
+agents view, or the feed card plus the optional thread card. The feed and the thread panel stay
+constructed while the agents view is up, so their composers keep their buffers and the feed keeps its
+`ListState` across a segment round trip.
+
+➕ Two things the screenshot draws are left out, on Task 13's precedent that a header element named by
+neither the task nor the Non-goals is not added on the screenshot's authority: the `Add agent` button,
+and the per-card channel chips (`#downloads`, `#movie-night`) — the latter is per-channel agent
+membership, an explicit non-goal. The accent border on the first card is the selected-agent state of
+the settings panel, which is also a non-goal, so every card draws the same border.
 
 ### Task 15: Failure view
 
@@ -850,42 +1137,199 @@ left of that screenshot and **not** the settings panel on its right, which is a 
 - Create: `app/src/failure.rs`
 - Modify: `app/src/main.rs`
 
-- [ ] when the store cannot be opened, show a plain view naming the path and the error instead of
+- [x] when the store cannot be opened, show a plain view naming the path and the error instead of
       panicking; the window must still open
-- [ ] write a test: constructing the app against an unwritable path produces the failure state
-- [ ] run the per-task gate
+- [x] write a test: constructing the app against an unwritable path produces the failure state
+- [x] run the per-task gate
+
+➕ The whole startup path moved out of `main.rs` into `failure.rs` as `start(now) -> Startup`, where
+`Startup` is `Ready(Box<AppState>)` or `Failed(FailureView)`. `main` no longer returns early on an
+error: it builds one `WindowOptions` and opens the window with either `Shell` or `FailureView` as its
+root, so the window opens in both cases. The path resolution, the directory creation, `Store::open`,
+`seed_if_needed` and `AppState::new` all live behind that one function, which is what makes the
+failure state reachable from a test.
+
+➕ `start_at(path, now)` is the testable half — `start` resolves `database_path()` and delegates to
+it. A `database_path()` failure (only `HOME` unset) has no path to name, so the view shows the
+directory it would have used and the error explains why; every other failure names the real path.
+
+➕ `Startup::Ready` boxes its `AppState`: clippy's `large_enum_variant` fails the `-D warnings` gate
+at a 336-byte variant next to a 48-byte one.
+
+➕ The test blocks the store with a regular file where a directory must be, rather than by clearing
+the write bit on a directory: a suite running as root ignores the permission bits but still cannot
+create a directory under a file, so the failure is reachable in any environment. A second test draws
+the view, per the one-draw-test-per-view rule. No new theme tone was needed.
 
 ### Task 16: README and repository documentation
 
 **Files:**
 - Create: `README.md`, `CLAUDE.md`
 
-- [ ] write the README: what the app is, the toolchain traps from the Toolchain section including the
+- [x] write the README: what the app is, the toolchain traps from the Toolchain section including the
       `mise exec` rule and the `gpui_platform` entry point, and how to build, run and test through
       `make`
-- [ ] write `CLAUDE.md`: the crate split and why `core` must never depend on `gpui`, the state
+- [x] write `CLAUDE.md`: the crate split and why `core` must never depend on `gpui`, the state
       ownership rule and the input-owns-its-buffer rule, the observe-at-construction rule, the
       `ListState` resync rule, the focus rule, the two settled behaviours, and where the design lives
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The README carries two sections beyond the checklist: the crate/directory table, and the database
+location with the "delete the file for a fresh workspace" note. Both are the first questions a cold
+reader asks, and neither is written down anywhere else outside this plan.
+
+➕ `CLAUDE.md` also carries the Code-Quality Rules and the test conventions (the `debug_selector` +
+`debug_bounds` click path, the `"<view>-<thing>-<key>"` selector convention, "a draw test proves only
+that rendering did not panic"). They are rules a future session must follow and they live nowhere in
+the repository once this plan moves to `completed/`. The inert-controls list is called out
+explicitly, so their inertness reads as a decision rather than an unfinished edge.
 
 ### Task 17: Verify acceptance criteria
 
-- [ ] `make fmt-check`, `make lint`, `make test`, `make build` — all clean
-- [ ] confirm `core` has no `gpui` dependency: `tree=$(mise exec -- cargo tree -p tuclaw-core)` must
+- [x] `make fmt-check`, `make lint`, `make test`, `make build` — all clean
+- [x] confirm `core` has no `gpui` dependency: `tree=$(mise exec -- cargo tree -p tuclaw-core)` must
       succeed, and then `printf '%s' "$tree" | grep -q gpui` must exit 1
-- [ ] confirm no comments were added: `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src` and
+- [x] confirm no comments were added: `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src` and
       `grep -rn '/\*' core/src app/src` both print nothing
-- [ ] confirm no colour literal exists outside `app/src/theme.rs`
-- [ ] confirm every non-goal is still absent — nothing from that list crept in
-- [ ] state in this plan what could not be verified without the user running the app
+- [x] confirm no colour literal exists outside `app/src/theme.rs`
+- [x] confirm every non-goal is still absent — nothing from that list crept in
+- [x] state in this plan what could not be verified without the user running the app
+
+➕ Gate results: `fmt-check` silent, `lint` clean under `-D warnings`, `test` 133 green (51 `core`,
+61 `app`, 21 doc-tests), `build` clean. The only output from `lint` and `build` is cargo's
+future-incompatibility notice for `block v0.1.6`, a transitive dependency of `gpui_platform`'s
+Objective-C bridge; nothing in this workspace can act on it and it is not a warning against our code.
+
+➕ `cargo tree -p tuclaw-core` lists `anyhow`, `rusqlite`, `serde`, `serde_json` and `time` and
+nothing else; `grep -q gpui` over it exits 1, so the crate split holds directly and transitively.
+
+➕ The comment grep ran as Task 2's ⚠️ requires — the raw regex is filtered through
+`grep -vE '^[^:]+:[0-9]+: *(///|//!)'`, because it matches the second and third slash of every `///`
+doc line in `core`. With doc lines excluded both greps print nothing: no line comments and no block
+comments anywhere in `core/src` or `app/src`.
+
+➕ The colour check covered three shapes, not one: `rgb(` / `rgba(` / `hsla(` calls, `0x` hex
+literals and `Hsla {` / `Rgba {` struct literals, plus `gpui`'s named helpers (`white()`, `black()`,
+`red()`, `transparent_black()` and the rest). Every hit is inside `app/src/theme.rs`, which exposes
+21 colour functions. No other file names a colour.
+
+➕ Non-goals swept individually and all still absent. No networking dependency or call (`http` appears
+only in the pinned `zed` git URL in the root `Cargo.toml`). `AgentStatus` has exactly two variants and
+`Span` exactly three, so no third status colour and no structured message cards. No `Inbox` row, no
+`Agent crews` section, no `2 running` / `N tasks running` / member-count pill / activity dot. No edit,
+delete or reaction path on a message. No mouse-driven selection or caret placement in `input.rs` — its
+only mouse handler is the focus-taking `on_mouse_down` the focus rule requires. No `max_h`,
+`line_clamp` or internal scrolling on the composer, so the field still grows without a cap. `main.rs`
+holds two `open_window` calls on mutually exclusive `Startup::Ready` / `Startup::Failed` branches, so
+one window opens, never two. The drawn-and-inert controls are all still drawn: the sidebar toggle, the
+`‹` / `›` arrows, the search field with its `⌘K` hint, the feed header's thread-toggle and `···`
+chips, and the composer's icon row, `Hold ⌥Space to talk` hint and `Talk` chip. The only wired click
+paths are the eight the plan calls for — the three segments, the sidebar's channel/direct rows and its
+`Agents` row, the message reply affordances, the composer send button, the thread close control, and
+the input's focus grab.
+
+➕ Two code-quality rules the four gates cannot see were checked by grep as well: no `_ =>` wildcard
+arm and no `matches!` anywhere in `core/src` or `app/src`. Task 6's `#![allow(dead_code)]` on
+`state.rs` is gone, as Task 13 required, and no `allow` attribute remains in either crate.
+
+**Not verifiable without the user running the app.** Everything below needs a window on screen, and
+the agent never launches the app (Development Approach). Task 18 carries these to the hand-over list.
+
+- That a window opens at all, and that the traffic lights land inside the app's own top bar rather
+  than over its content. The Metal shader build is exercised by `make build`, but window creation and
+  the transparent-titlebar geometry are not.
+- Whether the shell still reads as `01-full-mockup.png` — spacing, the card shadows, the warm
+  background, the raised active segment.
+- Scroll smoothness and virtualiser behaviour across `movie-night`'s 58 messages, and whether the feed
+  opens on its newest row.
+- Typing latency, the caret's position across wrapped lines, and IME candidate placement. The input
+  tests drive `simulate_input` and `simulate_keystrokes`, which prove the buffer and the UTF-16
+  boundary, not what the caret looks like.
+- Whether Enter sends and Shift+Enter breaks the line under a real keyboard and a real key map.
+- Focus moves as felt rather than asserted: that clicking a composer focuses it, and that opening and
+  closing a thread moves the caret to the right field.
+- The hover-revealed reply affordance, and every hover style in the sidebar and the feed. GPUI's test
+  context simulates clicks, not a hovering pointer.
+- The empty state on `personal`, the failure view, and the day separators as drawn — the tests prove
+  only that each renders without a panic.
 
 ### Task 18: [Final] Hand over
 
-- [ ] list in this plan what the user should check by hand: scroll smoothness at 58 messages, typing
+- [x] list in this plan what the user should check by hand: scroll smoothness at 58 messages, typing
       latency, clicking each channel and direct, the three segments, opening and closing a thread,
       Cyrillic and emoji in the composer, and whether the window still matches
       `docs/design/screenshots/01-full-mockup.png`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] move this plan to `docs/plans/completed/`
+
+#### Hand-over checklist
+
+Everything below needs a window on screen, which the agent never opens (Development Approach). This
+list absorbs the three deferred user checkpoints — Task 7's shell comparison, Task 12's composer and
+Task 13's thread focus moves — and the "not verifiable" list Task 17 recorded. Run `make run` once and
+work down it; nothing here needs a rebuild between steps.
+
+**Window and chrome** — against `docs/design/screenshots/01-full-mockup.png`
+
+1. The window opens at all, centred at 1280×820.
+2. The traffic lights sit inside the app's own top bar, aligned with the bar's controls, not floating
+   over the sidebar or the content.
+3. The chrome reads as the mockup: the warm window background, the feed and thread as rounded white
+   cards with a border, a shadow and a gap between them.
+4. The top bar's inert controls are drawn — the sidebar toggle, the `‹` / `›` arrows, `tuclaw · local`
+   and the settings affordance — and clicking them does nothing, which is correct.
+
+**The three segments** — against `01-full-mockup.png`
+
+5. `Channel`, `Direct` and `Agents` each raise on click, and the raised one is the active one.
+6. `Channel` → `Direct` → `Channel` returns to the channel last visited, not to the first channel.
+7. `Agents` swaps the feed for the agent card list (`05-agents-and-settings.png`), and clicking a
+   sidebar channel row from there comes straight back to the conversation.
+
+**Sidebar** — against `02-sidebar.png`
+
+8. Every channel row and every direct row selects its conversation on click, and the selection
+   highlight follows.
+9. Hover styles appear on rows under the pointer — the tests cannot simulate a hovering pointer.
+10. `magnet feed sync` carries its unread badge, the direct rows carry initials chips, and the status
+    dots are green or amber.
+11. `personal` shows the empty state filling the feed card.
+
+**Feed** — against `03-feed-and-thread.png` and `04-direct-message.png`
+
+12. `movie-night` opens on its newest row without a scroll gesture.
+13. Scrolling all 58 messages is smooth, rows keep their heights, and day separators (including
+    `Today` and `Yesterday`) sit where the dates change.
+14. Inline mentions and inline code render as chips inside the paragraph, not as plain words.
+15. The hover-revealed reply affordance appears on rows with no replies; the `N replies` affordance is
+    always visible on the one root that has them.
+16. A direct channel's header shows the agent's chip, name and role instead of `#` + name, and the
+    status bar reads `N of M agents busy`.
+
+**Composer** — against `01-full-mockup.png`
+
+17. Clicking the field focuses it and a caret appears; typing has no perceptible latency.
+18. Cyrillic and an emoji type, delete and re-type correctly — this is the UTF-16 boundary under a
+    real keyboard.
+19. IME composition: switch to a system input method that uses a candidate window and confirm the
+    candidates appear at the caret, not at the window's origin.
+20. Enter sends; Shift+Enter breaks the line. The field grows with the text and never scrolls
+    internally.
+21. The send button is disabled while the field is blank, and the sent message lands at the bottom of
+    the feed with the feed scrolled to it.
+22. The icon row, the `Hold ⌥Space to talk` hint and the `Talk` chip are drawn and inert.
+
+**Thread** — against `03-feed-and-thread.png`
+
+23. Clicking a reply affordance opens the thread panel and moves the caret into the thread composer.
+24. A reply appends to the panel and raises the `N replies` count in the feed behind it.
+25. Switching channels with the thread open leaves it open, still showing its own root.
+26. The close control shuts the panel and returns the caret to the feed composer.
+
+**Failure view**
+
+27. Optional: move or chmod `~/Library/Application Support/tuclaw-desktop/tuclaw.sqlite` so the store
+    cannot open, launch, and confirm the failure view renders instead of a blank window. Restore the
+    file afterwards.
 
 ## Post-Completion
 
