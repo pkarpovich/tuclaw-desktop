@@ -34,19 +34,21 @@ Prerequisites: macOS, [mise](https://mise.jdx.dev) — the Rust pin is enforced 
 Toolchain traps — and Xcode's Metal toolchain. Run `mise install` in the repository root to fetch the
 version named in `mise.toml`.
 
-Everything runs through `make`. Read the Toolchain traps below before running anything else.
+Everything runs through mise tasks, defined in `mise.toml`. Read the Toolchain traps below before
+running anything else.
 
 ```
-make build       # cargo build --workspace --all-targets
-make run         # cargo run -p tuclaw-desktop
-make test        # cargo test --workspace
-make lint        # cargo clippy --workspace --all-targets -- -D warnings
-make fmt         # cargo fmt --all
-make fmt-check   # cargo fmt --all -- --check
+mise run build       # cargo build --workspace --all-targets
+mise run dev         # cargo run -p tuclaw-desktop
+mise run test        # cargo test --workspace
+mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
+mise run fmt         # cargo fmt --all
+mise run fmt-check   # cargo fmt --all -- --check
 ```
 
-The four gates that must be green before any change lands: `make fmt-check`, `make lint`, `make
-test`, `make build`. A clean build takes about a minute; incremental builds are a few seconds.
+The four gates that must be green before any change lands: `mise run fmt-check`, `mise run lint`,
+`mise run test`, `mise run build`. A clean build takes about a minute; incremental builds are a few
+seconds.
 
 ## Toolchain traps
 
@@ -58,10 +60,9 @@ against the pinned revision and compiles the whole dependency tree clean.
 
 **Never run a bare `cargo`.** The pin does not reach it. On the author's machine `which cargo`
 resolves to an older install placed ahead of mise's shims by the global mise config, and a
-non-interactive session runs no directory hook, so `mise.toml` alone changes nothing. Every target in
-the `Makefile` wraps its cargo call in `mise exec --`, which is the only thing that makes the pin
-effective. Use `make`; if you must call cargo directly, spell it `mise exec -- cargo ...`. Confirm
-the pin with:
+non-interactive session runs no directory hook, so `mise.toml` alone changes nothing. A mise task
+runs inside the environment `mise.toml` declares, which is what makes the pin effective. Use
+`mise run`; if you must call cargo directly, spell it `mise exec -- cargo ...`. Confirm the pin with:
 
 ```
 mise exec -- rustc --version
@@ -124,4 +125,4 @@ transitions through `AppState` methods, the input element through `simulate_inpu
 `simulate_keystrokes`, click paths through `debug_selector` + `debug_bounds` + `simulate_click`, pure
 view-model functions, and one draw test per view.
 
-Both tiers run under `make test`.
+Both tiers run under `mise run test`.

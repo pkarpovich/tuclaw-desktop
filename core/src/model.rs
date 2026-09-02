@@ -197,8 +197,8 @@ pub fn encode(body: &[Span]) -> String {
 /// ```
 /// use tuclaw_core::model::{decode, Span};
 ///
-/// let body = decode(r#"[{"Code":"make run"}]"#).unwrap();
-/// assert_eq!(body, vec![Span::Code("make run".to_string())]);
+/// let body = decode(r#"[{"Code":"mise run dev"}]"#).unwrap();
+/// assert_eq!(body, vec![Span::Code("mise run dev".to_string())]);
 /// assert!(decode("not json").is_err());
 /// ```
 pub fn decode(json: &str) -> Result<Vec<Span>> {

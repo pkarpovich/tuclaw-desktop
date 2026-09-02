@@ -2,7 +2,7 @@
 
 Rules for working in this repository. They are load-bearing: each one was settled the hard way, and
 breaking one is how this app regresses. Read `README.md` for what the app is and for the toolchain
-traps (the `mise exec --` rule above all — never run a bare `cargo`).
+traps (the `mise run` rule above all — never run a bare `cargo`).
 
 ## The crate split
 
@@ -178,5 +178,5 @@ target is dead code under the `-D warnings` gate.
 A draw test proves only that rendering did not panic. It says nothing about what was drawn, so it is
 never the only test for a behaviour.
 
-All four gates green before any change is done: `make fmt-check`, `make lint`, `make test`,
-`make build`.
+All four gates green before any change is done: `mise run fmt-check`, `mise run lint`,
+`mise run test`, `mise run build`.
