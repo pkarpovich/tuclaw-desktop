@@ -790,19 +790,39 @@ shell's draw test.
 
 Open `docs/design/screenshots/02-sidebar.png` before starting.
 
-- [ ] build the search affordance with its `⌘K` hint, the `Agents` row, the emoji-titled group
+- [x] build the search affordance with its `⌘K` hint, the `Agents` row, the emoji-titled group
       sections, channel rows, the direct-message rows with initials chips and two-colour status dots,
       and the pinned footer with the user row and the settings gear. No `Inbox` row, no `2 running`
       pill, no activity dot — those are non-goals
-- [ ] render the unread badge on rows whose `unread > 0`
-- [ ] make channel and direct rows clickable, calling `AppState::select`, with the selection highlight
+- [x] render the unread badge on rows whose `unread > 0`
+- [x] make channel and direct rows clickable, calling `AppState::select`, with the selection highlight
       read from state and a hover style; make the `Agents` row call `activate_segment(Agents)`; give
       every row a `debug_selector` (`sidebar-row-<name>`, `sidebar-agents`)
-- [ ] mount the sidebar in the shell's left column, observing `AppState`
-- [ ] write `#[gpui::test]` tests: drawing the sidebar against seeded state does not panic; clicking
+- [x] mount the sidebar in the shell's left column, observing `AppState`
+- [x] write `#[gpui::test]` tests: drawing the sidebar against seeded state does not panic; clicking
       `sidebar-row-personal` via `debug_bounds` changes the selected channel to `personal` and leaves
       `messages` empty; clicking `sidebar-agents` makes `active_segment()` return `Agents`
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ Sections are derived by walking `channels()` in order and opening a new section whenever the title
+changes: a channel's title is its `group`, a direct's is `Direct messages`. `personal` carries no
+group, so it lands in an untitled section of its own between `🏠 Home` and the directs, rather than
+under `Home` as the mockup draws it — the grouping follows the data, and the domain has no field that
+would put it there. A fourth test covers the derived shape: four sections of 3 / 2 / 1 / 4 rows, every
+direct row carrying a chip, and the selected row carrying the highlight.
+
+➕ Theme grew by the ten tones this view paints with: `text_label`, `field`, `selection`, `badge`,
+`chip_text`, `accent`, `status_idle`, `status_busy` and `agent_chip(index)`, the last returning one of
+four chip tones indexed by the agent's `sort_index`. `agent_chip` indexes an array rather than
+matching, so no wildcard arm is needed.
+
+➕ The row's `selected` flag and the `Agents` row's `active` flag are one `Highlight { On, Off }` enum
+rather than a `bool`, per the Code-Quality Rules.
+
+➕ Icons stay drawn from `div()`s, as Task 7 established: the magnifier is a bordered circle plus a
+bar, the `Agents` glyph a bordered rounded rect with two dots, and the footer gear a bordered circle
+with an inner ring. The channel lead is `#` for every channel — the mockup's lock on `personal` has no
+field in the domain to key off.
 
 ### Task 9: Feed card and the virtualised list
 

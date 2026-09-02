@@ -39,3 +39,40 @@ pub fn text_secondary() -> Hsla {
 pub fn text_muted() -> Hsla {
     rgb(0xa5a09a).into()
 }
+
+pub fn text_label() -> Hsla {
+    rgb(0x8d887f).into()
+}
+
+pub fn field() -> Hsla {
+    rgba(0xffffff99).into()
+}
+
+pub fn selection() -> Hsla {
+    rgba(0x00000012).into()
+}
+
+pub fn badge() -> Hsla {
+    rgb(0x26241f).into()
+}
+
+pub fn chip_text() -> Hsla {
+    rgb(0xffffff).into()
+}
+
+pub fn accent() -> Hsla {
+    rgb(0xb45c3c).into()
+}
+
+pub fn status_idle() -> Hsla {
+    rgb(0x4ba36a).into()
+}
+
+pub fn status_busy() -> Hsla {
+    rgb(0xe0a33a).into()
+}
+
+pub fn agent_chip(index: usize) -> Hsla {
+    let tones = [rgb(0x6b7663), rgb(0x76605b), rgb(0x5c6975), rgb(0x3e4954)];
+    tones[index % tones.len()].into()
+}

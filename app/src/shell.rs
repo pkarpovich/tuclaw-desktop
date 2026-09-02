@@ -3,19 +3,24 @@ use gpui::{
     Subscription, Window, div, prelude::*, px,
 };
 
+use crate::sidebar::Sidebar;
 use crate::state::{AppState, Segment};
 use crate::theme;
 
 pub struct Shell {
     state: Entity<AppState>,
+    sidebar: Entity<Sidebar>,
     _observation: Subscription,
 }
 
 impl Shell {
     pub fn new(state: Entity<AppState>, cx: &mut Context<Self>) -> Shell {
         let observation = cx.observe(&state, |_shell, _state, cx| cx.notify());
+        let built = state.clone();
+        let sidebar = cx.new(|cx| Sidebar::new(built, cx));
         Shell {
             state,
+            sidebar,
             _observation: observation,
         }
     }
@@ -133,7 +138,7 @@ impl Render for Shell {
                             .flex()
                             .flex_col()
                             .min_h(px(0.))
-                            .child(placeholder("Sidebar")),
+                            .child(self.sidebar.clone()),
                     )
                     .child(
                         card()

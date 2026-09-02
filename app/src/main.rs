@@ -1,4 +1,5 @@
 mod shell;
+mod sidebar;
 mod state;
 mod theme;
 
