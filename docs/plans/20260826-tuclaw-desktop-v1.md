@@ -609,18 +609,39 @@ field is what the sections are sorted by, so the function is correct for unsorte
 - Create: `core/src/store.rs`, `core/src/schema.rs`, `core/src/paths.rs`
 - Modify: `core/src/lib.rs`, `core/Cargo.toml`
 
-- [ ] implement `open`, `open_in_memory`, schema creation on first open, and the database path
+- [x] implement `open`, `open_in_memory`, schema creation on first open, and the database path
       function in `paths.rs`
-- [ ] implement every read method from the Store contract with explicit ordering, including the
+- [x] implement every read method from the Store contract with explicit ordering, including the
       `sent_at` then `id` tie-break, and `message(id)`
-- [ ] implement `send` and `reply`; `reply` inserts and increments the root's `reply_count` in one
+- [x] implement `send` and `reply`; `reply` inserts and increments the root's `reply_count` in one
       transaction
-- [ ] write tests against in-memory databases: a message written is read back in its channel and not
+- [x] write tests against in-memory databases: a message written is read back in its channel and not
       in another; `message(id)` returns exactly the row `send` returned; a reply lands in the thread
       and not in the feed, and raises the root's count; a thread query on a message with no replies is
       empty; ordering holds when two messages share a timestamp; a body with mentions round-trips
       through the database as the same spans; a timestamp with a non-UTC offset reads back equal
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `Store` methods take `&self`, so writes open their transaction with
+`Connection::unchecked_transaction()` — `Connection::transaction()` needs `&mut self` and would force
+`&mut Store` on `send`, `reply` and later `seed_if_needed`, which the state and the composers would
+have to carry all the way down.
+
+➕ `reply` errors when no row carries `root` instead of silently writing an orphan: the `UPDATE`
+reports zero changed rows and the transaction is dropped without a commit, so neither statement lands.
+
+➕ `schema.rs` is a private module (`mod schema;`), so `rusqlite` stays out of `tuclaw-core`'s public
+API surface. The `messages.sent_at` column is `TEXT`; rusqlite's `time` feature writes RFC-3339 with
+an explicit offset and reads it back with that offset preserved, which the non-UTC test asserts
+directly.
+
+⚠️ `ORDER BY sent_at, id` sorts that TEXT column lexicographically, so it is only chronologically
+correct while all rows share one UTC offset. The fixtures derive every timestamp from one `now`, so
+they do; anything later that writes mixed offsets into one channel would need a normalized sort
+column.
+
+➕ `paths::database_path` reads `HOME` rather than `std::env::home_dir`, and does not create the
+directory — Task 6's `main.rs` owns that, as its checklist states.
 
 ### Task 5: Fixtures and seeding
 
