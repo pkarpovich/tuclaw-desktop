@@ -1,3 +1,4 @@
+mod composer;
 mod feed;
 mod input;
 mod message;

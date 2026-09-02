@@ -993,24 +993,48 @@ after render in the same frame, so `window.handle_input` registers on that first
 Open `docs/design/screenshots/01-full-mockup.png` before starting — the composer at the bottom of the
 feed card.
 
-- [ ] build `Composer` per its section: it owns a `TextInput`, takes `ComposerKind`, a placeholder
+- [x] build `Composer` per its section: it owns a `TextInput`, takes `ComposerKind`, a placeholder
       and an `on_submit`, subscribes to `Submitted`, and clears the input only when `on_submit`
       returns `Ok`
-- [ ] draw the `Feed` shape: the placeholder naming the target (`Message #channel` or `Message
+- [x] draw the `Feed` shape: the placeholder naming the target (`Message #channel` or `Message
       <agent>`), the four inert icons, the hint, the inert `Talk` chip, and the 32 px send button,
       disabled while the input is blank; the send button calls the same submit path
-- [ ] replace Task 11's bare mount with a `Feed` composer whose `on_submit` calls `AppState::send`;
+- [x] replace Task 11's bare mount with a `Feed` composer whose `on_submit` calls `AppState::send`;
       the feed already scrolls on `MessageAppended`; subscribe to `ThreadClosed` to refocus this
       input
-- [ ] write `#[gpui::test]` tests: with the composer's input focused, `simulate_input("hi")` then
+- [x] write `#[gpui::test]` tests: with the composer's input focused, `simulate_input("hi")` then
       `simulate_keystrokes("enter")` appends a message with body `[Span::Text("hi")]` to the selected
       channel and leaves the input empty; `enter` on a blank input appends nothing;
       `simulate_input("a")`, `shift-enter`, `simulate_input("b")`, `enter` appends a body containing
       `a\nb`; when `on_submit` returns `Err`, the input still holds its text
-- [ ] **user checkpoint**: stop and ask the user to click into the composer, type a message in
-      `movie-night` including a Shift+Enter line break and some Cyrillic, send it, and confirm it
-      appears and the feed scrolls to it
-- [ ] run the per-task gate
+- [x] **user checkpoint** (skipped — not automatable): the agent never launches the running app, so
+      `make run`, typing in `movie-night` with a Shift+Enter break and Cyrillic, and watching the
+      feed scroll to the sent message are carried to the hand-over list in Task 18
+- [x] run the per-task gate
+
+➕ `ComposerKind` carries only its `Feed` variant here; **Task 13 adds `Thread`**. `make build`
+compiles the bin target with `-D warnings`, where a variant nothing constructs is dead code, and an
+exhaustive `match self.kind` would otherwise need a `Thread` arm drawing a shape Task 13 owns. The
+`#![allow(dead_code)]` route Tasks 6 and 11 took does not help: it silences the unused variant, not
+the missing arm.
+
+➕ The placeholder names the *selected* channel, so it cannot be fixed at construction as the
+`Composer::new` contract implies. `Composer::set_placeholder` and `TextInput::set_placeholder` were
+added, and the feed calls the first from its `SelectionChanged` arm. Re-creating the composer per
+selection was the alternative and would drop focus mid-session.
+
+➕ Focusing on `ThreadClosed` reuses Task 11's deferred-focus trick rather than `cx.subscribe_in`:
+`Feed::new` is handed no `Window`, so the subscription sets `Focus::Requested` and the next `render`
+takes the focus. Task 11's `InitialFocus` enum is now that `Focus` enum, since first focus and
+refocus-after-close are the same move.
+
+➕ `input.rs` lost its `#![allow(dead_code)]` as Task 11 required: `text()`, `is_blank()`, `clear()`
+and `focus_handle()` all have callers in the composer now. `state.rs` keeps its attribute until Task
+13 gives `reply_in_thread` a caller.
+
+➕ A fifth test beyond the four the task lists: clicking `composer-send-feed` via `debug_bounds`
+sends the typed body, which is what "the send button calls the same submit path" claims. No new theme
+tone was needed.
 
 ### Task 13: Thread panel
 
