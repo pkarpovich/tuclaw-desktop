@@ -13,6 +13,12 @@ The window draws its own chrome. The titlebar is transparent, the traffic lights
 inside the app's own top bar, and the feed and thread are rounded cards floating on a warm
 background. Nothing on screen is a system control.
 
+Enter sends; Shift+Enter breaks the line. Clicking the composer focuses it, and it grows with its
+text — there is no selection, no mouse caret placement and no height cap. Several controls are drawn
+and inert on purpose: the search field and its `⌘K` hint, the sidebar toggle, the back and forward
+arrows, the feed header's two trailing chips, and the composer's icon row and `Talk` chip. Times are
+shown in UTC, not in the local zone.
+
 ## Layout
 
 | Path | What it is |
@@ -20,9 +26,13 @@ background. Nothing on screen is a system control.
 | `core/` | `tuclaw-core`: domain types, the SQLite store, the fixtures, day grouping. No `gpui` dependency, so it is testable without a window. |
 | `app/` | `tuclaw-desktop`: the binary — state, views, the text input element, the theme. |
 | `docs/design/` | The designer's mockup and five screenshots of it. Look here before touching a view. |
-| `docs/plans/` | The implementation plan this repository was built from. |
+| `docs/plans/completed/` | The implementation plan this repository was built from, archived complete. |
 
 ## Building
+
+Prerequisites: macOS, [mise](https://mise.jdx.dev) — the Rust pin is enforced through it, see
+Toolchain traps — and Xcode's Metal toolchain. Run `mise install` in the repository root to fetch the
+version named in `mise.toml`.
 
 Everything runs through `make`. Read the Toolchain traps below before running anything else.
 

@@ -36,7 +36,8 @@ impl Store {
     /// ```
     /// use tuclaw_core::store::Store;
     ///
-    /// let path = std::env::temp_dir().join("tuclaw-doc-open.sqlite");
+    /// let path =
+    ///     std::env::temp_dir().join(format!("tuclaw-doc-open-{}.sqlite", std::process::id()));
     /// let store = Store::open(&path).unwrap();
     /// assert!(store.channels().unwrap().is_empty());
     /// std::fs::remove_file(&path).unwrap();
@@ -127,6 +128,12 @@ impl Store {
     ///
     /// Replies are excluded; they belong to [`Store::thread`]. Messages sharing
     /// a timestamp are ordered by identifier.
+    ///
+    /// Timestamps are stored as text and sorted lexicographically, so the
+    /// ordering only matches the instants the rows carry when every row was
+    /// written at `UTC`. Write through [`Store::send`] and [`Store::reply`]
+    /// with a `UTC` timestamp; a row carrying any other offset sorts by its
+    /// wall clock rather than its instant.
     ///
     /// # Errors
     ///
@@ -246,6 +253,9 @@ impl Store {
 
     /// Writes a top-level message from the user and returns the stored row.
     ///
+    /// `at` is expected to carry the `UTC` offset, because [`Store::messages`]
+    /// orders rows by the stored text.
+    ///
     /// # Errors
     ///
     /// Returns an error if the insert fails.
@@ -290,7 +300,8 @@ impl Store {
     ///
     /// The insert and the root's `reply_count` increment share one
     /// transaction, so a reply is never stored without the count the feed
-    /// reads to draw its affordance.
+    /// reads to draw its affordance. `at` is expected to carry the `UTC`
+    /// offset, because [`Store::thread`] orders rows by the stored text.
     ///
     /// # Errors
     ///
@@ -894,6 +905,94 @@ mod tests {
             )
             .expect("the message is written");
         assert!(store.messages(ChannelId(1)).is_err());
+    }
+
+    #[test]
+    fn a_message_from_an_agent_that_names_none_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        let at: OffsetDateTime = datetime!(2026-08-26 09:00 UTC);
+        store
+            .connection
+            .execute(
+                "INSERT INTO messages
+                     (channel_id, thread_root_id, author, agent_id, body, sent_at, reply_count)
+                 VALUES (1, NULL, 'agent', NULL, '[]', ?1, 0)",
+                (at,),
+            )
+            .expect("the message is written");
+        assert!(store.messages(ChannelId(1)).is_err());
+    }
+
+    #[test]
+    fn a_message_carrying_an_undecodable_body_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        let at: OffsetDateTime = datetime!(2026-08-26 09:00 UTC);
+        store
+            .connection
+            .execute(
+                "INSERT INTO messages
+                     (channel_id, thread_root_id, author, agent_id, body, sent_at, reply_count)
+                 VALUES (1, NULL, 'user', NULL, 'not json', ?1, 0)",
+                (at,),
+            )
+            .expect("the message is written");
+        assert!(store.messages(ChannelId(1)).is_err());
+    }
+
+    #[test]
+    fn a_direct_channel_that_names_no_agent_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        store
+            .connection
+            .execute(
+                "INSERT INTO channels (id, name, group_name, kind, agent_id, unread, sort_index)
+                 VALUES (1, 'allspeak', NULL, 'direct', NULL, 0, 0)",
+                (),
+            )
+            .expect("the channel is written");
+        assert!(store.channels().is_err());
+    }
+
+    #[test]
+    fn a_channel_carrying_an_unknown_kind_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        store
+            .connection
+            .execute(
+                "INSERT INTO channels (id, name, group_name, kind, agent_id, unread, sort_index)
+                 VALUES (1, 'movie-night', NULL, 'broadcast', NULL, 0, 0)",
+                (),
+            )
+            .expect("the channel is written");
+        assert!(store.channels().is_err());
+    }
+
+    #[test]
+    fn a_busy_agent_that_names_no_task_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        store
+            .connection
+            .execute(
+                "INSERT INTO agents (id, name, initials, role, status, status_detail, sort_index)
+                 VALUES (1, 'allspeak', 'AL', 'translator', 'busy', NULL, 0)",
+                (),
+            )
+            .expect("the agent is written");
+        assert!(store.agents().is_err());
+    }
+
+    #[test]
+    fn an_agent_carrying_an_unknown_status_is_an_error() {
+        let store = Store::open_in_memory().expect("the schema is created");
+        store
+            .connection
+            .execute(
+                "INSERT INTO agents (id, name, initials, role, status, status_detail, sort_index)
+                 VALUES (1, 'allspeak', 'AL', 'translator', 'asleep', NULL, 0)",
+                (),
+            )
+            .expect("the agent is written");
+        assert!(store.agents().is_err());
     }
 
     fn seeded() -> Store {

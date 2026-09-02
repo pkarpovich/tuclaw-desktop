@@ -729,6 +729,38 @@ mod tests {
     }
 
     #[gpui::test]
+    fn moving_right_steps_over_a_whole_emoji(cx: &mut TestAppContext) {
+        let (input, cx) = harness(cx, px(400.));
+        focus(&input, cx);
+        cx.simulate_input("a🐢b");
+        cx.simulate_keystrokes("left left");
+        input.read_with(cx, |input, _cx| assert_eq!(input.cursor_utf16, 1));
+        cx.simulate_keystrokes("right");
+        input.read_with(cx, |input, _cx| assert_eq!(input.cursor_utf16, 3));
+        cx.simulate_input("c");
+        input.read_with(cx, |input, _cx| {
+            assert_eq!(input.text(), "a🐢cb");
+            assert_eq!(input.cursor_utf16, 4);
+        });
+    }
+
+    #[gpui::test]
+    fn the_caret_stops_at_both_ends_of_the_buffer(cx: &mut TestAppContext) {
+        let (input, cx) = harness(cx, px(400.));
+        focus(&input, cx);
+        cx.simulate_input("ab");
+        cx.simulate_keystrokes("right right");
+        input.read_with(cx, |input, _cx| assert_eq!(input.cursor_utf16, 2));
+        cx.simulate_keystrokes("left left left");
+        input.read_with(cx, |input, _cx| assert_eq!(input.cursor_utf16, 0));
+        cx.simulate_keystrokes("backspace");
+        input.read_with(cx, |input, _cx| {
+            assert_eq!(input.text(), "ab");
+            assert_eq!(input.cursor_utf16, 0);
+        });
+    }
+
+    #[gpui::test]
     fn shift_enter_breaks_the_line_and_submits_nothing(cx: &mut TestAppContext) {
         let (input, cx) = harness(cx, px(400.));
         focus(&input, cx);
@@ -814,6 +846,20 @@ mod tests {
         input.read_with(cx, |input, _cx| {
             assert_eq!(input.text(), "は");
             assert_eq!(input.cursor_utf16, 1);
+        });
+    }
+
+    #[gpui::test]
+    fn replacing_a_given_utf16_range_counts_units_not_bytes(cx: &mut TestAppContext) {
+        let (input, cx) = harness(cx, px(400.));
+        focus(&input, cx);
+        cx.simulate_input("привет 🐢");
+        input.update_in(cx, |input, window, cx| {
+            input.replace_text_in_range(Some(7..9), "мир", window, cx);
+        });
+        input.read_with(cx, |input, _cx| {
+            assert_eq!(input.text(), "привет мир");
+            assert_eq!(input.cursor_utf16, 10);
         });
     }
 

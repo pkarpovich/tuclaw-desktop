@@ -109,14 +109,15 @@ impl AppState {
         let Some(kind) = self.kind_of(channel) else {
             return;
         };
-        self.selected = channel;
-        self.messages = match self.store.messages(channel) {
+        let messages = match self.store.messages(channel) {
             Ok(messages) => messages,
             Err(error) => {
                 eprintln!("could not load the messages of the selected channel: {error}");
-                Vec::new()
+                return;
             }
         };
+        self.selected = channel;
+        self.messages = messages;
         match kind {
             ChannelKind::Channel => self.last_channel = Some(channel),
             ChannelKind::Direct(_) => self.last_direct = Some(channel),
@@ -142,32 +143,23 @@ impl AppState {
     }
 
     pub fn activate_segment(&mut self, segment: Segment, cx: &mut Context<Self>) {
-        match segment {
-            Segment::Channel => {
-                let target = match self.last_channel {
-                    Some(channel) => Some(channel),
-                    None => self.first_of_kind(Segment::Channel),
-                };
-                let Some(target) = target else {
-                    return;
-                };
-                self.select(target, cx);
-            }
-            Segment::Direct => {
-                let target = match self.last_direct {
-                    Some(channel) => Some(channel),
-                    None => self.first_of_kind(Segment::Direct),
-                };
-                let Some(target) = target else {
-                    return;
-                };
-                self.select(target, cx);
-            }
+        let remembered = match segment {
+            Segment::Channel => self.last_channel,
+            Segment::Direct => self.last_direct,
             Segment::Agents => {
                 self.view = View::Agents;
                 cx.notify();
+                return;
             }
-        }
+        };
+        let target = match remembered {
+            Some(channel) => Some(channel),
+            None => self.first_of_kind(segment),
+        };
+        let Some(target) = target else {
+            return;
+        };
+        self.select(target, cx);
     }
 
     pub fn send(&mut self, body: String, cx: &mut Context<Self>) -> Result<()> {
@@ -586,6 +578,62 @@ mod tests {
             assert_eq!(in_feed, Some(5));
         });
         assert_eq!(*events.borrow(), vec![StateEvent::ReplyAppended]);
+    }
+
+    #[gpui::test]
+    fn a_reply_after_a_channel_switch_stays_in_the_thread(cx: &mut TestAppContext) {
+        let state = seeded(cx);
+        let root = thread_root(&state, cx);
+        let movie_night = state.read_with(cx, |state, _cx| state.selected());
+        state.update(cx, |state, cx| state.open_thread(root, cx));
+        let personal = channel_named(&state, cx, "personal");
+        state.update(cx, |state, cx| state.select(personal, cx));
+        state.update(cx, |state, cx| {
+            state
+                .reply_in_thread("me too".to_string(), cx)
+                .expect("the reply is written")
+        });
+        state.read_with(cx, |state, _cx| {
+            let thread = state.thread().expect("the thread stays open");
+            assert_eq!(thread.channel, movie_night);
+            assert_eq!(thread.replies.len(), 5);
+            assert!(
+                state.messages().is_empty(),
+                "the reply does not land in the selected channel"
+            );
+        });
+        state.update(cx, |state, cx| state.select(movie_night, cx));
+        state.read_with(cx, |state, _cx| {
+            let mut in_feed = None;
+            for message in state.messages() {
+                if message.id == root {
+                    in_feed = Some(message.reply_count);
+                    break;
+                }
+            }
+            assert_eq!(in_feed, Some(5));
+        });
+    }
+
+    #[gpui::test]
+    fn opening_a_thread_on_a_missing_root_changes_nothing(cx: &mut TestAppContext) {
+        let state = seeded(cx);
+        let (events, _subscription) = events(&state, cx);
+        state.update(cx, |state, cx| state.open_thread(MessageId(9_999), cx));
+        state.read_with(cx, |state, _cx| assert_eq!(state.thread(), None));
+        assert!(events.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn a_missing_root_leaves_an_open_thread_alone(cx: &mut TestAppContext) {
+        let state = seeded(cx);
+        let root = thread_root(&state, cx);
+        state.update(cx, |state, cx| state.open_thread(root, cx));
+        state.update(cx, |state, cx| state.open_thread(MessageId(9_999), cx));
+        state.read_with(cx, |state, _cx| {
+            let thread = state.thread().expect("the thread stays open");
+            assert_eq!(thread.root.id, root);
+        });
     }
 
     #[gpui::test]

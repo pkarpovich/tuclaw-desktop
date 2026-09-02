@@ -24,6 +24,14 @@ render path. `cargo tree -p tuclaw-core` must not mention `gpui`. If a core type
 types out of `tuclaw-core`'s public API. Public items in `core` carry `///` docs (`rustdoc` skill);
 `app` items do not.
 
+**`failure.rs` is not only a view: it owns the startup path.** `start(now) -> Startup` resolves the
+database path, creates the directory, opens the store, seeds it and builds `AppState`, returning
+`Ready(Box<AppState>)` or `Failed(FailureView)`; `main` opens one window with either as its root, so
+a store failure still gets a window. `start_at(path, now)` is the testable half — look there, not in
+`main.rs`. `AppState::new` takes no `Context` because `cx.new` cannot return a `Result`, so the state
+is built before `cx.new(|_| state)`. `Ready` boxes its payload or clippy's `large_enum_variant` fails
+the `-D warnings` gate.
+
 ## State ownership
 
 One `AppState` entity owns all mutable application state: the channel list, the selected channel and
@@ -41,7 +49,9 @@ visited of each kind.
 entity that owns its own buffer, because `EntityInputHandler` requires the element to hold the string
 and because two composers on screen at once would fight over one shared field. The composer hands the
 body to `AppState` on submit and clears the input **only if the state reports `Ok`** — a failed write
-leaves the text in place so the user can retry.
+leaves the text in place so the user can retry. The placeholder names the *selected* channel, so it
+cannot be fixed at construction: the feed calls `Composer::set_placeholder` from its
+`SelectionChanged` arm rather than rebuilding the composer, which would drop focus mid-session.
 
 ## Observe at construction
 
@@ -54,7 +64,7 @@ fails, the pixels just stop updating.
 
 | event | listener | reaction |
 |---|---|---|
-| `SelectionChanged` | feed | rebuild items, `ListState::reset(count)` |
+| `SelectionChanged` | feed | rebuild items, `ListState::reset(count)`, push the new placeholder into the composer |
 | `MessageAppended` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `ReplyAppended` | feed, thread panel | rebuild items, repaint only — no reset |
 | `ThreadOpened` | thread panel | focus its composer's input |
@@ -115,16 +125,20 @@ test`.
 renders of it. **Open the relevant screenshot before touching a view.**
 `docs/design/README.md` states which parts are in scope and which are not.
 
-The full list of non-goals lives in `docs/plans/` alongside the plan this repository was built from.
-The short version: no networking, no voice, no attachments or pickers, no structured message cards,
-no working search, no message editing or reactions, no dark mode. Several controls are drawn and
-inert on purpose — the sidebar toggle, the back/forward arrows, the feed header's two trailing chips,
-the composer's icon row and `Talk` chip. Their inertness is a decision, not a bug; do not wire them up
-without being asked.
+The full list of non-goals lives in `docs/plans/completed/20260826-tuclaw-desktop-v1.md`, the plan
+this repository was built from. The short version: no networking, no voice, no attachments or
+pickers, no structured message cards, no working search, no message editing or reactions, no dark
+mode, no selection or mouse caret placement inside the text input (clicking it focuses it, nothing
+more), no height cap or internal scrolling on the composer, and no local time — grouping and the
+clock both run at UTC, because `time`'s `now_local` needs `local-offset` and is unsound in a threaded
+process. Several controls are drawn and inert on purpose — the sidebar toggle, the back/forward
+arrows, the feed header's two trailing chips, the composer's icon row and `Talk` chip. Their
+inertness is a decision, not a bug; do not wire them up without being asked.
 
 `theme.rs` holds every colour. **No colour literal appears anywhere else.** The palette grows one
 tone at a time as views need them, because an unused `pub` colour is dead code under the
-`-D warnings` gate.
+`-D warnings` gate. Tones are `pub fn name() -> Hsla`, not consts — `rgb`/`rgba` are not `const fn`
+at the pinned revision.
 
 ## Code style
 
@@ -150,7 +164,16 @@ Click paths are testable in-process: `InteractiveElement::debug_selector(|| "nam
 `div()` records its laid-out bounds under `test-support`, `VisualTestContext::debug_bounds("name")`
 returns them, and `simulate_click(bounds.center(), Modifiers::default())` clicks it. The convention is
 `"<view>-<thing>-<key>"` — `sidebar-row-movie-night`, `segment-agents`, `message-reply-<id>`,
-`thread-close`. Selectors are test-only strings and never appear in rendered output.
+`thread-close`. Selectors are test-only strings and never appear in rendered output. `TextInput::new`
+takes its selector as a constructor argument, because it has to land on the same `div()` that owns
+`track_focus`, and two inputs (`input-feed`, `input-thread`) are on screen at once.
+
+**Any `#[gpui::test]` that simulates keys calls `cx.update(input::bind_keys)` before it builds its
+harness.** The bindings live under the `TuclawInput` key context and are registered per `App`;
+without them `enter` and `shift-enter` arrive as a literal newline and the test fails as if the logic
+were wrong. Test-only accessors that reach across module privacy — `Feed::input_focus`,
+`ThreadPanel::input_focus` — are `#[cfg(test)]`-gated, because an accessor with no caller in the bin
+target is dead code under the `-D warnings` gate.
 
 A draw test proves only that rendering did not panic. It says nothing about what was drawn, so it is
 never the only test for a behaviour.

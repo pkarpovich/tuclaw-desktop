@@ -128,15 +128,48 @@ impl Render for FailureView {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
 
     use gpui::TestAppContext;
     use time::macros::datetime;
 
     use super::{FailureView, SharedString, Startup, start_at};
 
+    fn scratch(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("tuclaw-desktop-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn a_missing_directory_is_created_and_the_workspace_is_seeded() {
+        let directory = scratch("startup").join("nested");
+        let _ = fs::remove_dir_all(
+            directory
+                .parent()
+                .expect("the scratch directory has a parent"),
+        );
+        let path = directory.join("tuclaw.sqlite");
+        let startup = start_at(&path, datetime!(2026-08-26 21:00 UTC));
+        match startup {
+            Startup::Failed(FailureView { path, error }) => {
+                panic!("the workspace must open at {path}: {error}")
+            }
+            Startup::Ready(state) => {
+                assert_eq!(state.channels().len(), 10);
+                assert_eq!(state.agents().len(), 4);
+                assert!(!state.messages().is_empty());
+            }
+        }
+        assert!(path.exists(), "the database file is written");
+        let _ = fs::remove_dir_all(
+            directory
+                .parent()
+                .expect("the scratch directory has a parent"),
+        );
+    }
+
     #[test]
     fn an_unwritable_path_produces_the_failure_state() {
-        let directory = std::env::temp_dir().join("tuclaw-desktop-failure-view");
+        let directory = scratch("failure-view");
         fs::create_dir_all(&directory).expect("the temporary directory is created");
         let blocker = directory.join("blocker");
         fs::write(&blocker, b"not a directory").expect("the blocking file is written");

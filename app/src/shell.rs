@@ -313,4 +313,62 @@ mod tests {
             assert_eq!(state.active_segment(), Segment::Channel)
         });
     }
+
+    #[gpui::test]
+    fn the_agents_view_replaces_the_feed(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        assert!(
+            cx.debug_bounds("input-feed").is_some(),
+            "the conversation view draws its composer"
+        );
+        let agents = cx
+            .debug_bounds("segment-agents")
+            .expect("the agents segment is drawn");
+        cx.simulate_click(agents.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("input-feed").is_none(),
+            "the agents view takes the feed's place"
+        );
+        let channel = cx
+            .debug_bounds("segment-channel")
+            .expect("the channel segment is drawn");
+        cx.simulate_click(channel.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("input-feed").is_some(),
+            "the feed comes back with the conversation view"
+        );
+    }
+
+    #[gpui::test]
+    fn the_thread_card_follows_the_open_thread(cx: &mut TestAppContext) {
+        let (state, cx) = shell(cx);
+        assert!(
+            cx.debug_bounds("thread-close").is_none(),
+            "no thread card is drawn before a thread opens"
+        );
+        let root = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.reply_count > 0 {
+                    found = Some(message.id);
+                    break;
+                }
+            }
+            found.expect("movie-night carries a thread root")
+        });
+        state.update(cx, |state, cx| state.open_thread(root, cx));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("thread-close").is_some(),
+            "the thread card joins the feed"
+        );
+        state.update(cx, |state, cx| state.close_thread(cx));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("thread-close").is_none(),
+            "the thread card leaves with the thread"
+        );
+    }
 }

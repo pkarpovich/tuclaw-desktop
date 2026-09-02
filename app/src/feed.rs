@@ -280,14 +280,7 @@ fn agent_authors(messages: &[Message]) -> usize {
         let Author::Agent(agent) = author else {
             continue;
         };
-        let mut known = false;
-        for candidate in &seen {
-            if candidate == agent {
-                known = true;
-                break;
-            }
-        }
-        if !known {
+        if !seen.contains(agent) {
             seen.push(*agent);
         }
     }
@@ -516,13 +509,36 @@ fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
+    use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
     use time::macros::datetime;
-    use tuclaw_core::model::{ChannelId, ChannelKind, MessageId, Span};
+    use tuclaw_core::model::{
+        Agent, AgentId, AgentStatus, Author, ChannelId, ChannelKind, Message, MessageId, Span,
+    };
     use tuclaw_core::store::Store;
 
-    use super::{Feed, Item};
+    use super::{Busy, Feed, Item, agent_authors, busy_agents};
     use crate::state::AppState;
+
+    fn from(author: Author, id: i64) -> Message {
+        Message {
+            id: MessageId(id),
+            author,
+            body: vec![Span::Text("hi".to_string())],
+            sent_at: datetime!(2026-08-26 09:00 UTC),
+            reply_count: 0,
+        }
+    }
+
+    fn agent(id: i64, status: AgentStatus) -> Agent {
+        Agent {
+            id: AgentId(id),
+            name: format!("agent {id}"),
+            initials: "AG".to_string(),
+            role: "role".to_string(),
+            status,
+            sort_index: id,
+        }
+    }
 
     fn feed(cx: &mut TestAppContext) -> (Entity<AppState>, Entity<Feed>, &mut VisualTestContext) {
         let store = Store::open_in_memory().expect("the schema is created");
@@ -563,6 +579,47 @@ mod tests {
             }
             found.expect("the fixtures carry a direct channel")
         })
+    }
+
+    #[test]
+    fn the_header_counts_each_agent_once_and_skips_the_user() {
+        let messages = vec![
+            from(Author::Agent(AgentId(2)), 1),
+            from(Author::User, 2),
+            from(Author::Agent(AgentId(2)), 3),
+            from(Author::Agent(AgentId(5)), 4),
+        ];
+        assert_eq!(agent_authors(&messages), 2);
+        assert_eq!(agent_authors(&[]), 0);
+        assert_eq!(agent_authors(&[from(Author::User, 1)]), 0);
+    }
+
+    #[test]
+    fn the_status_bar_lists_only_the_busy_agents() {
+        let agents = vec![
+            agent(1, AgentStatus::Busy("Syncing subtitles".to_string())),
+            agent(2, AgentStatus::Idle),
+            agent(3, AgentStatus::Busy("Downloading".to_string())),
+        ];
+        let busy = busy_agents(&agents);
+        let mut named = Vec::new();
+        for Busy { name, task } in &busy {
+            named.push((name.clone(), task.clone()));
+        }
+        assert_eq!(
+            named,
+            vec![
+                (
+                    SharedString::new_static("agent 1"),
+                    SharedString::new_static("Syncing subtitles")
+                ),
+                (
+                    SharedString::new_static("agent 3"),
+                    SharedString::new_static("Downloading")
+                ),
+            ]
+        );
+        assert!(busy_agents(&[agent(4, AgentStatus::Idle)]).is_empty());
     }
 
     #[gpui::test]
@@ -622,6 +679,46 @@ mod tests {
             let thread = state.thread().expect("the thread is open");
             assert_eq!(thread.root.id, root);
             assert_eq!(thread.replies.len(), 4);
+        });
+    }
+
+    #[gpui::test]
+    fn a_reply_keeps_the_list_length_and_raises_the_root_count(cx: &mut TestAppContext) {
+        let (state, feed, cx) = feed(cx);
+        let root = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.reply_count > 0 {
+                    found = Some(message.id);
+                    break;
+                }
+            }
+            found.expect("movie-night carries a thread root")
+        });
+        state.update(cx, |state, cx| state.open_thread(root, cx));
+        cx.run_until_parked();
+        let before = feed.read_with(cx, |feed, _cx| feed.items.len());
+        state.update(cx, |state, cx| {
+            state
+                .reply_in_thread("me too".to_string(), cx)
+                .expect("the reply is written")
+        });
+        cx.run_until_parked();
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.items.len(), before);
+            assert_eq!(feed.list.item_count(), feed.items.len());
+            let mut counted = None;
+            for item in feed.items.iter() {
+                match item {
+                    Item::Message(message) => {
+                        if message.id == root {
+                            counted = Some(message.reply_count);
+                        }
+                    }
+                    Item::Separator(_) => {}
+                }
+            }
+            assert_eq!(counted, Some(5));
         });
     }
 

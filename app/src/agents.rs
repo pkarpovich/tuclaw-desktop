@@ -217,6 +217,7 @@ fn status_frame(dot: Hsla, text: Hsla, weight: FontWeight) -> Div {
 mod tests {
     use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
     use time::macros::datetime;
+    use tuclaw_core::model::{Agent, AgentId, AgentStatus};
     use tuclaw_core::store::Store;
 
     use super::{AgentCard, AgentsView, Status, agent_cards};
@@ -268,6 +269,62 @@ mod tests {
                 Status::Busy(SharedString::new_static("Syncing subtitles for tonight")),
                 Status::Idle,
                 Status::Idle,
+            ]
+        );
+    }
+
+    #[test]
+    fn shuffled_agents_are_ordered_by_the_sort_index() {
+        let mut agents = Vec::new();
+        for (id, sort_index) in [(7, 3), (2, 1), (9, 0), (4, 2)] {
+            agents.push(Agent {
+                id: AgentId(id),
+                name: format!("agent {id}"),
+                initials: "AG".to_string(),
+                role: "role".to_string(),
+                status: AgentStatus::Idle,
+                sort_index,
+            });
+        }
+        let cards = agent_cards(&agents);
+        let mut names = Vec::new();
+        for card in &cards {
+            names.push(card.name.clone());
+        }
+        assert_eq!(
+            names,
+            vec![
+                SharedString::new_static("agent 9"),
+                SharedString::new_static("agent 2"),
+                SharedString::new_static("agent 4"),
+                SharedString::new_static("agent 7"),
+            ]
+        );
+    }
+
+    #[test]
+    fn agents_sharing_a_sort_index_are_ordered_by_identifier() {
+        let mut agents = Vec::new();
+        for id in [5, 1] {
+            agents.push(Agent {
+                id: AgentId(id),
+                name: format!("agent {id}"),
+                initials: "AG".to_string(),
+                role: "role".to_string(),
+                status: AgentStatus::Idle,
+                sort_index: 0,
+            });
+        }
+        let cards = agent_cards(&agents);
+        let mut names = Vec::new();
+        for card in &cards {
+            names.push(card.name.clone());
+        }
+        assert_eq!(
+            names,
+            vec![
+                SharedString::new_static("agent 1"),
+                SharedString::new_static("agent 5"),
             ]
         );
     }
