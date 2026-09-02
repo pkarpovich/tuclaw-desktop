@@ -1253,11 +1253,81 @@ the agent never launches the app (Development Approach). Task 18 carries these t
 
 ### Task 18: [Final] Hand over
 
-- [ ] list in this plan what the user should check by hand: scroll smoothness at 58 messages, typing
+- [x] list in this plan what the user should check by hand: scroll smoothness at 58 messages, typing
       latency, clicking each channel and direct, the three segments, opening and closing a thread,
       Cyrillic and emoji in the composer, and whether the window still matches
       `docs/design/screenshots/01-full-mockup.png`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] move this plan to `docs/plans/completed/`
+
+#### Hand-over checklist
+
+Everything below needs a window on screen, which the agent never opens (Development Approach). This
+list absorbs the three deferred user checkpoints — Task 7's shell comparison, Task 12's composer and
+Task 13's thread focus moves — and the "not verifiable" list Task 17 recorded. Run `make run` once and
+work down it; nothing here needs a rebuild between steps.
+
+**Window and chrome** — against `docs/design/screenshots/01-full-mockup.png`
+
+1. The window opens at all, centred at 1280×820.
+2. The traffic lights sit inside the app's own top bar, aligned with the bar's controls, not floating
+   over the sidebar or the content.
+3. The chrome reads as the mockup: the warm window background, the feed and thread as rounded white
+   cards with a border, a shadow and a gap between them.
+4. The top bar's inert controls are drawn — the sidebar toggle, the `‹` / `›` arrows, `tuclaw · local`
+   and the settings affordance — and clicking them does nothing, which is correct.
+
+**The three segments** — against `01-full-mockup.png`
+
+5. `Channel`, `Direct` and `Agents` each raise on click, and the raised one is the active one.
+6. `Channel` → `Direct` → `Channel` returns to the channel last visited, not to the first channel.
+7. `Agents` swaps the feed for the agent card list (`05-agents-and-settings.png`), and clicking a
+   sidebar channel row from there comes straight back to the conversation.
+
+**Sidebar** — against `02-sidebar.png`
+
+8. Every channel row and every direct row selects its conversation on click, and the selection
+   highlight follows.
+9. Hover styles appear on rows under the pointer — the tests cannot simulate a hovering pointer.
+10. `magnet feed sync` carries its unread badge, the direct rows carry initials chips, and the status
+    dots are green or amber.
+11. `personal` shows the empty state filling the feed card.
+
+**Feed** — against `03-feed-and-thread.png` and `04-direct-message.png`
+
+12. `movie-night` opens on its newest row without a scroll gesture.
+13. Scrolling all 58 messages is smooth, rows keep their heights, and day separators (including
+    `Today` and `Yesterday`) sit where the dates change.
+14. Inline mentions and inline code render as chips inside the paragraph, not as plain words.
+15. The hover-revealed reply affordance appears on rows with no replies; the `N replies` affordance is
+    always visible on the one root that has them.
+16. A direct channel's header shows the agent's chip, name and role instead of `#` + name, and the
+    status bar reads `N of M agents busy`.
+
+**Composer** — against `01-full-mockup.png`
+
+17. Clicking the field focuses it and a caret appears; typing has no perceptible latency.
+18. Cyrillic and an emoji type, delete and re-type correctly — this is the UTF-16 boundary under a
+    real keyboard.
+19. IME composition: switch to a system input method that uses a candidate window and confirm the
+    candidates appear at the caret, not at the window's origin.
+20. Enter sends; Shift+Enter breaks the line. The field grows with the text and never scrolls
+    internally.
+21. The send button is disabled while the field is blank, and the sent message lands at the bottom of
+    the feed with the feed scrolled to it.
+22. The icon row, the `Hold ⌥Space to talk` hint and the `Talk` chip are drawn and inert.
+
+**Thread** — against `03-feed-and-thread.png`
+
+23. Clicking a reply affordance opens the thread panel and moves the caret into the thread composer.
+24. A reply appends to the panel and raises the `N replies` count in the feed behind it.
+25. Switching channels with the thread open leaves it open, still showing its own root.
+26. The close control shuts the panel and returns the caret to the feed composer.
+
+**Failure view**
+
+27. Optional: move or chmod `~/Library/Application Support/tuclaw-desktop/tuclaw.sqlite` so the store
+    cannot open, launch, and confirm the failure view renders instead of a blank window. Restore the
+    file afterwards.
 
 ## Post-Completion
 
