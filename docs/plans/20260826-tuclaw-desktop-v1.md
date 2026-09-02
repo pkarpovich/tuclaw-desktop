@@ -881,18 +881,43 @@ when the item sequence is empty, so a channel with no messages never constructs 
 
 Open `docs/design/screenshots/03-feed-and-thread.png` before starting.
 
-- [ ] build a row: initials chip, author name, the `AGENT` badge for agent authors, the timestamp, and
+- [x] build a row: initials chip, author name, the `AGENT` badge for agent authors, the timestamp, and
       the body rendered per "Inline spans in a paragraph"
-- [ ] render the "N replies" affordance when `reply_count > 0`, and a hover-revealed reply affordance
+- [x] render the "N replies" affordance when `reply_count > 0`, and a hover-revealed reply affordance
       when it is zero; both take an `on_open` callback the feed supplies and carry a `debug_selector`
       of `message-reply-<id>`
-- [ ] replace the feed's plain rows with this one, the feed passing an `on_open` that calls
+- [x] replace the feed's plain rows with this one, the feed passing an `on_open` that calls
       `AppState::open_thread`
-- [ ] keep the row free of channel knowledge — it is reused by the thread panel
-- [ ] write tests: the reply label reads "1 reply" for one and "N replies" otherwise; clicking
+- [x] keep the row free of channel knowledge — it is reused by the thread panel
+- [x] write tests: the reply label reads "1 reply" for one and "N replies" otherwise; clicking
       `message-reply-<root id>` via `debug_bounds` on the drawn feed opens that thread in state; the
       feed draw tests from Task 9 still pass
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `on_open` is `pub type OnOpen = Rc<dyn Fn(MessageId, &mut Window, &mut App)>`, built once in
+`Feed::body` from a clone of `Entity<AppState>` and cloned per row. The `list()` closure never sees the
+view, so `cx.listener` is unavailable; the callback updates the state entity through the `&mut App` the
+closure is handed. The same `&mut App` supplies the row's agents with `state.read(cx)`, so `message_row`
+takes `&[Agent]` rather than reading state itself and stays reusable by Task 13's thread panel.
+
+➕ The hover-revealed affordance is absolutely positioned at the row's top-right, drawn with
+`.invisible()` and `.group_hover(group, |style| style.visible())` against a per-row `.group("message-<id>")`.
+gpui carries no `visible_on_hover` at this revision — that helper lives in Zed's own `ui` crate — and a
+`Visibility::Hidden` element still takes its layout space, so placing it in the column would leave a
+pill-sized gap under every reply-less message.
+
+➕ `VisualTestContext::debug_bounds` takes `&'static str`, not `&str`, so the click test leaks its
+formatted `message-reply-<id>` selector. A hidden element still records its debug bounds — the
+visibility check in `div`'s `paint` comes after the insert — but registers no click listener, so only
+the visible pill is clickable.
+
+➕ Theme grew by `mention_field` and `mention_text`, the two tones the mockup's inline mention chip
+needs. The `AGENT` badge and the inline code chip paint with `sunken()`, and the code chip keeps the
+window's font: `font_family` on a name font-kit cannot resolve is a failure path no task here handles.
+
+⚠️ A `Span::Text` is split on whitespace, so runs of spaces and the newlines a Shift+Enter body carries
+(Task 12) collapse to one word gap on screen. The stored body keeps them; this is the cost of the
+"one text element per word" rule the Inline spans section settles on.
 
 ### Task 11: Text input element
 

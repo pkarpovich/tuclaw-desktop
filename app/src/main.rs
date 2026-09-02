@@ -1,4 +1,5 @@
 mod feed;
+mod message;
 mod shell;
 mod sidebar;
 mod state;

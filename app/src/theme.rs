@@ -64,6 +64,14 @@ pub fn accent() -> Hsla {
     rgb(0xb45c3c).into()
 }
 
+pub fn mention_field() -> Hsla {
+    rgba(0xb8452c1a).into()
+}
+
+pub fn mention_text() -> Hsla {
+    rgb(0x94331f).into()
+}
+
 pub fn status_idle() -> Hsla {
     rgb(0x4ba36a).into()
 }

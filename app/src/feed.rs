@@ -6,10 +6,9 @@ use gpui::{
 };
 use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
-use tuclaw_core::model::{
-    Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message, Span,
-};
+use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message};
 
+use crate::message::{OnOpen, message_row};
 use crate::state::{AppState, StateEvent};
 use crate::theme;
 
@@ -88,13 +87,21 @@ impl Feed {
             return empty_state().into_any_element();
         }
         let items = self.items.clone();
-        list(self.list.clone(), move |index, _window, _cx| {
+        let state = self.state.clone();
+        let opener = self.state.clone();
+        let on_open: OnOpen = Rc::new(move |root, _window, cx| {
+            opener.update(cx, |state, cx| state.open_thread(root, cx));
+        });
+        list(self.list.clone(), move |index, _window, cx| {
             let Some(item) = items.get(index) else {
                 return div().into_any_element();
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
-                Item::Message(message) => message_row(message).into_any_element(),
+                Item::Message(message) => {
+                    message_row(message, state.read(cx).agents(), on_open.clone())
+                        .into_any_element()
+                }
             }
         })
         .flex_1()
@@ -249,21 +256,6 @@ fn busy_agents(agents: &[Agent]) -> Vec<Busy> {
     busy
 }
 
-fn plain_text(body: &[Span]) -> String {
-    let mut text = String::new();
-    for span in body {
-        match span {
-            Span::Text(value) => text.push_str(value),
-            Span::Mention(value) => {
-                text.push('@');
-                text.push_str(value);
-            }
-            Span::Code(value) => text.push_str(value),
-        }
-    }
-    text
-}
-
 fn header_element(header: Header) -> impl IntoElement {
     let lead = match header {
         Header::Channel { name, agents } => div()
@@ -393,21 +385,6 @@ fn rule() -> Div {
     div().flex_1().h(px(1.)).bg(theme::hairline())
 }
 
-fn message_row(message: &Message) -> impl IntoElement {
-    let Message {
-        id: _,
-        author: _,
-        body,
-        sent_at: _,
-        reply_count: _,
-    } = message;
-    div()
-        .px(px(20.))
-        .py(px(5.))
-        .text_size(px(13.5))
-        .child(plain_text(body))
-}
-
 fn empty_state() -> impl IntoElement {
     div()
         .flex_1()
@@ -479,9 +456,9 @@ fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, TestAppContext, VisualTestContext};
+    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
     use time::macros::datetime;
-    use tuclaw_core::model::{ChannelId, ChannelKind, Span};
+    use tuclaw_core::model::{ChannelId, ChannelKind, MessageId, Span};
     use tuclaw_core::store::Store;
 
     use super::{Feed, Item};
@@ -559,6 +536,32 @@ mod tests {
         feed.read_with(cx, |feed, _cx| {
             assert!(!feed.items.is_empty());
             assert_eq!(feed.list.item_count(), feed.items.len());
+        });
+    }
+
+    #[gpui::test]
+    fn clicking_the_reply_affordance_opens_that_thread(cx: &mut TestAppContext) {
+        let (state, _feed, cx) = feed(cx);
+        let root = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.reply_count > 0 {
+                    found = Some(message.id);
+                    break;
+                }
+            }
+            found.expect("movie-night carries a thread root")
+        });
+        let MessageId(raw) = root;
+        let selector: &'static str = format!("message-reply-{raw}").leak();
+        let affordance = cx
+            .debug_bounds(selector)
+            .expect("the replies affordance is drawn");
+        cx.simulate_click(affordance.center(), Modifiers::default());
+        state.read_with(cx, |state, _cx| {
+            let thread = state.thread().expect("the thread is open");
+            assert_eq!(thread.root.id, root);
+            assert_eq!(thread.replies.len(), 4);
         });
     }
 
