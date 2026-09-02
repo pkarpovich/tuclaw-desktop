@@ -832,22 +832,46 @@ field in the domain to key off.
 
 Open `docs/design/screenshots/03-feed-and-thread.png` and `04-direct-message.png` before starting.
 
-- [ ] build the channel header exactly as the "Derived labels and the feed header" section states:
+- [x] build the channel header exactly as the "Derived labels and the feed header" section states:
       `#` + name + derived `N agents`, the two inert trailing chips, and the direct variant with the
       agent's chip, name and role
-- [ ] render the conversation with `list()` and a `ListState` owned by the view, constructed with
+- [x] render the conversation with `list()` and a `ListState` owned by the view, constructed with
       `ListAlignment::Bottom`; rows are plain text for now, replaced in Task 10
-- [ ] flatten day separators into the same item sequence as messages, so the virtualiser sees one list
+- [x] flatten day separators into the same item sequence as messages, so the virtualiser sees one list
       and the count is `messages + separators`
-- [ ] observe `AppState`, and subscribe to it per the listener table: `SelectionChanged` →
+- [x] observe `AppState`, and subscribe to it per the listener table: `SelectionChanged` →
       `reset(count)`; `MessageAppended` → `reset(count)` then `scroll_to_end()`; `ReplyAppended` →
       `notify`
-- [ ] render the empty state for a channel with no messages, filling the card
-- [ ] build the status bar along the card's bottom edge with the derived `N of M agents busy`
-- [ ] write `#[gpui::test]` tests: drawing the feed for the 58-message channel does not panic; drawing
+- [x] render the empty state for a channel with no messages, filling the card
+- [x] build the status bar along the card's bottom edge with the derived `N of M agents busy`
+- [x] write `#[gpui::test]` tests: drawing the feed for the 58-message channel does not panic; drawing
       it, selecting the empty channel through state, and drawing again does not panic and the list's
       `item_count()` is 0; selecting a direct channel and drawing does not panic
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The flattened items live on the view as `Rc<Vec<Item>>`, rebuilt from `AppState` on every event the
+listener table names, and the `list()` closure captures a clone of that `Rc`. The closure is
+`FnMut(usize, &mut Window, &mut App)` and never sees the view, so it cannot read `AppState` cheaply per
+row; a cached sequence also makes `reset(count)` exact. `Item::Message` holds the whole `Message` rather
+than its rendered text, so `ReplyAppended` refreshes `reply_count` for Task 10's affordance without a
+`reset` — the repaint-only rule the listener table states is a `Resync::Repaint` arm rather than a
+skipped rebuild.
+
+➕ Grouping runs at `UtcOffset::UTC` with `OffsetDateTime::now_utc()`, matching the single offset the
+store and the fixtures already carry (Task 4's ⚠️ and Task 6's ➕). `time`'s `now_local` needs
+`local-offset` and is unsound in a threaded process, so a real local offset is not available here.
+
+➕ A fourth test covers the `MessageAppended` path: sending resyncs the list so `item_count()` matches
+the rebuilt sequence and the sent body is the last item. It asserts growth rather than `+1`, because a
+message sent today after a fixture seeded at an older `now` opens a new day section and adds two items.
+
+➕ The status bar's left edge lists the busy agents with their task text, as the mockup draws it; the
+derived `N of M agents busy` sits on the right. No new theme tone was needed — the header chips, the
+day separators and the status bar all paint with the tones Tasks 7 and 8 established.
+
+⚠️ The empty state and the list are alternatives, not siblings: `Feed::body` returns the empty state
+when the item sequence is empty, so a channel with no messages never constructs a zero-item `list()`.
+`ListState::item_count()` is still 0 there, which is what the task's test asserts.
 
 ### Task 10: Message row
 

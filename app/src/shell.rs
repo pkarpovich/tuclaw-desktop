@@ -3,6 +3,7 @@ use gpui::{
     Subscription, Window, div, prelude::*, px,
 };
 
+use crate::feed::Feed;
 use crate::sidebar::Sidebar;
 use crate::state::{AppState, Segment};
 use crate::theme;
@@ -10,6 +11,7 @@ use crate::theme;
 pub struct Shell {
     state: Entity<AppState>,
     sidebar: Entity<Sidebar>,
+    feed: Entity<Feed>,
     _observation: Subscription,
 }
 
@@ -18,9 +20,12 @@ impl Shell {
         let observation = cx.observe(&state, |_shell, _state, cx| cx.notify());
         let built = state.clone();
         let sidebar = cx.new(|cx| Sidebar::new(built, cx));
+        let built = state.clone();
+        let feed = cx.new(|cx| Feed::new(built, cx));
         Shell {
             state,
             sidebar,
+            feed,
             _observation: observation,
         }
     }
@@ -144,7 +149,8 @@ impl Render for Shell {
                         card()
                             .flex_1()
                             .min_w(px(0.))
-                            .child(placeholder("Conversation")),
+                            .overflow_hidden()
+                            .child(self.feed.clone()),
                     )
                     .child(card().w(px(360.)).flex_none().child(placeholder("Thread"))),
             )
