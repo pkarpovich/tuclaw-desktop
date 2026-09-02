@@ -652,19 +652,40 @@ directory — Task 6's `main.rs` owns that, as its checklist states.
 Seeding lives here rather than in Task 4 because it cannot be written, or tested, before the data it
 writes exists.
 
-- [ ] build the agents, channels and conversations described in the Fixtures section, all timestamps
+- [x] build the agents, channels and conversations described in the Fixtures section, all timestamps
       derived from the passed-in `now`
-- [ ] give `movie-night` its 58 messages across 15 days with one thread root carrying 4 replies, and
+- [x] give `movie-night` its 58 messages across 15 days with one thread root carrying 4 replies, and
       at least one mention and one code span
-- [ ] give every other channel except `personal` its own conversation across at least two days
-- [ ] implement `seed_if_needed` in `store.rs`: skip when the marker exists, otherwise write the
+- [x] give every other channel except `personal` its own conversation across at least two days
+- [x] implement `seed_if_needed` in `store.rs`: skip when the marker exists, otherwise write the
       fixtures and the marker in one transaction
-- [ ] write tests: the exact channel and agent counts and order; `movie-night` holds 58 top-level
+- [x] write tests: the exact channel and agent counts and order; `movie-night` holds 58 top-level
       messages; `personal` is empty and is the only empty channel; exactly one channel carries an
       unread count; the fixtures span 16 distinct days; a message seeded "yesterday" lands on the
       previous calendar day; seeding twice leaves one copy; a database carrying a marker but no rows
       is left alone
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `fixtures.rs` is a private module (`mod fixtures;`), like `schema.rs`: the app never builds
+fixtures itself, it only calls `Store::seed_if_needed`, so `Fixtures`, `Conversation`, `SeedMessage`
+and `SeedReply` stay out of `tuclaw-core`'s public API and need no `///` docs.
+
+➕ Day offsets are pinned so the distinct-day count is exact regardless of when the app first runs:
+`movie-night` uses days 0, 1, 2, 4, 6, 7, 9, 11, 13, 15, 17, 19, 21, 23 and 25 back from `now` (15
+days), and the only day any other channel adds is day 3 (`media-archive`), giving 16 across all
+channels. Each message keeps a fixed clock time inside its day — `now - days(n)` then
+`replace_time` — so a day boundary is never crossed by accident and "Today"/"Yesterday" are always
+right.
+
+➕ The group label carries its emoji (`🎬 Movie nights`, `🏠 Home`). `Channel::group` is the only
+field the sidebar section has, and the design's section titles are emoji + name, so the emoji lives
+in the data rather than in a name-to-emoji table inside the view.
+
+⚠️ Today's fixture messages sit at fixed morning times (07:45 to 11:30 local). Launching the app for
+the first time before ~11:30 therefore shows a few of today's messages with a timestamp slightly
+ahead of the wall clock. Deriving those times backwards from `now` instead would trade this for a
+worse bug: a first launch just after local midnight would push them into yesterday and collapse a
+day section.
 
 ### Task 6: AppState and the startup path
 
