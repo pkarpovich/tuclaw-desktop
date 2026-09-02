@@ -5556,8 +5556,10 @@ dependencies = [
 name = "tuclaw-desktop"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "gpui",
  "gpui_platform",
+ "time",
  "tuclaw-core",
 ]
 

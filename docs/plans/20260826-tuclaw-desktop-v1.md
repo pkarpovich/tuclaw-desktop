@@ -695,14 +695,14 @@ day section.
 
 From this task on the app opens the real database, so every later view task renders fixture data.
 
-- [ ] define `View`, `Segment`, `OpenThread`, `StateEvent` and `AppState` as in the State section,
+- [x] define `View`, `Segment`, `OpenThread`, `StateEvent` and `AppState` as in the State section,
       with the `EventEmitter` impl
-- [ ] implement every method from the State contract, each ending in `cx.notify()` and emitting
+- [x] implement every method from the State contract, each ending in `cx.notify()` and emitting
       exactly the events the listener table names
-- [ ] load agents, channels and the first channel's messages at construction
-- [ ] in `main.rs`: resolve the path, create the directory if absent, open the store, call
+- [x] load agents, channels and the first channel's messages at construction
+- [x] in `main.rs`: resolve the path, create the directory if absent, open the store, call
       `seed_if_needed` with the current time, and construct `AppState` — all before the window opens
-- [ ] write `#[gpui::test]` tests, each against `open_in_memory` plus `seed_if_needed`, for every rule
+- [x] write `#[gpui::test]` tests, each against `open_in_memory` plus `seed_if_needed`, for every rule
       in the State section: blank body sends nothing, emits nothing and returns `Ok`; sending appends
       only what the store accepted and emits `MessageAppended`; a store that rejects the write (a
       closed connection) makes `send` return `Err` with `messages` unchanged; selecting another
@@ -711,9 +711,32 @@ From this task on the app opens the real database, so every later view task rend
       appends to the thread, raises the root's count in both places and emits `ReplyAppended`;
       `active_segment` is right for a channel, a direct, and the agents view; `activate_segment`
       moves Channel → Direct → Channel through the remembered channels, and from Agents to each kind
-- [ ] write a `#[gpui::test]` proving the observation rule: an entity that registered `cx.observe`
+- [x] write a `#[gpui::test]` proving the observation rule: an entity that registered `cx.observe`
       on the state has its callback run when `select` is called
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `AppState::new(store) -> Result<AppState>` takes no `Context`: `cx.new` cannot return a `Result`,
+so `main` loads the workspace first and only then calls `cx.new(|_| state)`. A store carrying no
+channels is an error, because `selected: ChannelId` has no empty value.
+
+➕ `state.rs` carries `#![allow(dead_code)]`. The State contract is complete here, but its consumers
+arrive across Tasks 7-14, and `make build` compiles the bin target where a `pub` method with no
+caller is a warning. **Remove the attribute in Task 13**, once the last method (`reply_in_thread`)
+has a caller, and confirm the gate stays green.
+
+➕ `send` and `reply_in_thread` timestamp with `OffsetDateTime::now_utc()`, matching the fixtures'
+single offset. The `time` crate's `now_local` needs the `local-offset` feature and is unsound in a
+threaded process, and mixing offsets would break the store's lexicographic `ORDER BY sent_at` (Task
+4's ⚠️).
+
+➕ The "store that rejects the write" test seeds a temporary file database, drops the connection,
+makes the file read-only and reopens it: `CREATE TABLE IF NOT EXISTS` and every read still succeed,
+while `INSERT` fails with `attempt to write a readonly database`. `Store` exposes no way to close or
+poison an in-memory connection, so this is the only reachable failure path.
+
+➕ Store errors are reported with `eprintln!`; the workspace has no logging dependency. `select`
+falls back to an empty message list when a load fails, rather than leaving the previous channel's
+messages under a new header.
 
 ### Task 7: App shell — window, titlebar and top bar
 
