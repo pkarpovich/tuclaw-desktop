@@ -1135,10 +1135,29 @@ the settings panel, which is also a non-goal, so every card draws the same borde
 - Create: `app/src/failure.rs`
 - Modify: `app/src/main.rs`
 
-- [ ] when the store cannot be opened, show a plain view naming the path and the error instead of
+- [x] when the store cannot be opened, show a plain view naming the path and the error instead of
       panicking; the window must still open
-- [ ] write a test: constructing the app against an unwritable path produces the failure state
-- [ ] run the per-task gate
+- [x] write a test: constructing the app against an unwritable path produces the failure state
+- [x] run the per-task gate
+
+➕ The whole startup path moved out of `main.rs` into `failure.rs` as `start(now) -> Startup`, where
+`Startup` is `Ready(Box<AppState>)` or `Failed(FailureView)`. `main` no longer returns early on an
+error: it builds one `WindowOptions` and opens the window with either `Shell` or `FailureView` as its
+root, so the window opens in both cases. The path resolution, the directory creation, `Store::open`,
+`seed_if_needed` and `AppState::new` all live behind that one function, which is what makes the
+failure state reachable from a test.
+
+➕ `start_at(path, now)` is the testable half — `start` resolves `database_path()` and delegates to
+it. A `database_path()` failure (only `HOME` unset) has no path to name, so the view shows the
+directory it would have used and the error explains why; every other failure names the real path.
+
+➕ `Startup::Ready` boxes its `AppState`: clippy's `large_enum_variant` fails the `-D warnings` gate
+at a 336-byte variant next to a 48-byte one.
+
+➕ The test blocks the store with a regular file where a directory must be, rather than by clearing
+the write bit on a directory: a suite running as root ignores the permission bits but still cannot
+create a directory under a file, so the failure is reachable in any environment. A second test draws
+the view, per the one-draw-test-per-view rule. No new theme tone was needed.
 
 ### Task 16: README and repository documentation
 
