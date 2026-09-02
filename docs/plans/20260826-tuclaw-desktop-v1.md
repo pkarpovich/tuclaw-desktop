@@ -1164,13 +1164,23 @@ the view, per the one-draw-test-per-view rule. No new theme tone was needed.
 **Files:**
 - Create: `README.md`, `CLAUDE.md`
 
-- [ ] write the README: what the app is, the toolchain traps from the Toolchain section including the
+- [x] write the README: what the app is, the toolchain traps from the Toolchain section including the
       `mise exec` rule and the `gpui_platform` entry point, and how to build, run and test through
       `make`
-- [ ] write `CLAUDE.md`: the crate split and why `core` must never depend on `gpui`, the state
+- [x] write `CLAUDE.md`: the crate split and why `core` must never depend on `gpui`, the state
       ownership rule and the input-owns-its-buffer rule, the observe-at-construction rule, the
       `ListState` resync rule, the focus rule, the two settled behaviours, and where the design lives
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The README carries two sections beyond the checklist: the crate/directory table, and the database
+location with the "delete the file for a fresh workspace" note. Both are the first questions a cold
+reader asks, and neither is written down anywhere else outside this plan.
+
+➕ `CLAUDE.md` also carries the Code-Quality Rules and the test conventions (the `debug_selector` +
+`debug_bounds` click path, the `"<view>-<thing>-<key>"` selector convention, "a draw test proves only
+that rendering did not panic"). They are rules a future session must follow and they live nowhere in
+the repository once this plan moves to `completed/`. The inert-controls list is called out
+explicitly, so their inertness reads as a decision rather than an unfinished edge.
 
 ### Task 17: Verify acceptance criteria
 
