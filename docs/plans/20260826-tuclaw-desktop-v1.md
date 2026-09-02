@@ -1184,14 +1184,72 @@ explicitly, so their inertness reads as a decision rather than an unfinished edg
 
 ### Task 17: Verify acceptance criteria
 
-- [ ] `make fmt-check`, `make lint`, `make test`, `make build` — all clean
-- [ ] confirm `core` has no `gpui` dependency: `tree=$(mise exec -- cargo tree -p tuclaw-core)` must
+- [x] `make fmt-check`, `make lint`, `make test`, `make build` — all clean
+- [x] confirm `core` has no `gpui` dependency: `tree=$(mise exec -- cargo tree -p tuclaw-core)` must
       succeed, and then `printf '%s' "$tree" | grep -q gpui` must exit 1
-- [ ] confirm no comments were added: `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src` and
+- [x] confirm no comments were added: `grep -rnE '(^|[^:"])//($|[^/!])' core/src app/src` and
       `grep -rn '/\*' core/src app/src` both print nothing
-- [ ] confirm no colour literal exists outside `app/src/theme.rs`
-- [ ] confirm every non-goal is still absent — nothing from that list crept in
-- [ ] state in this plan what could not be verified without the user running the app
+- [x] confirm no colour literal exists outside `app/src/theme.rs`
+- [x] confirm every non-goal is still absent — nothing from that list crept in
+- [x] state in this plan what could not be verified without the user running the app
+
+➕ Gate results: `fmt-check` silent, `lint` clean under `-D warnings`, `test` 133 green (51 `core`,
+61 `app`, 21 doc-tests), `build` clean. The only output from `lint` and `build` is cargo's
+future-incompatibility notice for `block v0.1.6`, a transitive dependency of `gpui_platform`'s
+Objective-C bridge; nothing in this workspace can act on it and it is not a warning against our code.
+
+➕ `cargo tree -p tuclaw-core` lists `anyhow`, `rusqlite`, `serde`, `serde_json` and `time` and
+nothing else; `grep -q gpui` over it exits 1, so the crate split holds directly and transitively.
+
+➕ The comment grep ran as Task 2's ⚠️ requires — the raw regex is filtered through
+`grep -vE '^[^:]+:[0-9]+: *(///|//!)'`, because it matches the second and third slash of every `///`
+doc line in `core`. With doc lines excluded both greps print nothing: no line comments and no block
+comments anywhere in `core/src` or `app/src`.
+
+➕ The colour check covered three shapes, not one: `rgb(` / `rgba(` / `hsla(` calls, `0x` hex
+literals and `Hsla {` / `Rgba {` struct literals, plus `gpui`'s named helpers (`white()`, `black()`,
+`red()`, `transparent_black()` and the rest). Every hit is inside `app/src/theme.rs`, which exposes
+21 colour functions. No other file names a colour.
+
+➕ Non-goals swept individually and all still absent. No networking dependency or call (`http` appears
+only in the pinned `zed` git URL in the root `Cargo.toml`). `AgentStatus` has exactly two variants and
+`Span` exactly three, so no third status colour and no structured message cards. No `Inbox` row, no
+`Agent crews` section, no `2 running` / `N tasks running` / member-count pill / activity dot. No edit,
+delete or reaction path on a message. No mouse-driven selection or caret placement in `input.rs` — its
+only mouse handler is the focus-taking `on_mouse_down` the focus rule requires. No `max_h`,
+`line_clamp` or internal scrolling on the composer, so the field still grows without a cap. `main.rs`
+holds two `open_window` calls on mutually exclusive `Startup::Ready` / `Startup::Failed` branches, so
+one window opens, never two. The drawn-and-inert controls are all still drawn: the sidebar toggle, the
+`‹` / `›` arrows, the search field with its `⌘K` hint, the feed header's thread-toggle and `···`
+chips, and the composer's icon row, `Hold ⌥Space to talk` hint and `Talk` chip. The only wired click
+paths are the eight the plan calls for — the three segments, the sidebar's channel/direct rows and its
+`Agents` row, the message reply affordances, the composer send button, the thread close control, and
+the input's focus grab.
+
+➕ Two code-quality rules the four gates cannot see were checked by grep as well: no `_ =>` wildcard
+arm and no `matches!` anywhere in `core/src` or `app/src`. Task 6's `#![allow(dead_code)]` on
+`state.rs` is gone, as Task 13 required, and no `allow` attribute remains in either crate.
+
+**Not verifiable without the user running the app.** Everything below needs a window on screen, and
+the agent never launches the app (Development Approach). Task 18 carries these to the hand-over list.
+
+- That a window opens at all, and that the traffic lights land inside the app's own top bar rather
+  than over its content. The Metal shader build is exercised by `make build`, but window creation and
+  the transparent-titlebar geometry are not.
+- Whether the shell still reads as `01-full-mockup.png` — spacing, the card shadows, the warm
+  background, the raised active segment.
+- Scroll smoothness and virtualiser behaviour across `movie-night`'s 58 messages, and whether the feed
+  opens on its newest row.
+- Typing latency, the caret's position across wrapped lines, and IME candidate placement. The input
+  tests drive `simulate_input` and `simulate_keystrokes`, which prove the buffer and the UTF-16
+  boundary, not what the caret looks like.
+- Whether Enter sends and Shift+Enter breaks the line under a real keyboard and a real key map.
+- Focus moves as felt rather than asserted: that clicking a composer focuses it, and that opening and
+  closing a thread moves the caret to the right field.
+- The hover-revealed reply affordance, and every hover style in the sidebar and the feed. GPUI's test
+  context simulates clicks, not a hovering pointer.
+- The empty state on `personal`, the failure view, and the day separators as drawn — the tests prove
+  only that each renders without a panic.
 
 ### Task 18: [Final] Hand over
 
