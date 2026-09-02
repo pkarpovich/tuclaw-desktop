@@ -247,7 +247,7 @@ impl EntityInputHandler for TextInput {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let range = committed_range(range_utf16, &self.marked_utf16, self.cursor_utf16);
+        let range = replacement_range(range_utf16, &self.marked_utf16, self.cursor_utf16);
         self.replace_utf16(range, text);
         cx.notify();
     }
@@ -260,7 +260,7 @@ impl EntityInputHandler for TextInput {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let range = composed_range(range_utf16, &self.marked_utf16, self.cursor_utf16);
+        let range = replacement_range(range_utf16, &self.marked_utf16, self.cursor_utf16);
         let start = range.start;
         self.replace_utf16(range, text);
         let len = utf16_len(text);
@@ -565,34 +565,16 @@ fn caret_position(lines: &[WrappedLine], offset: usize, line_height: Pixels) -> 
     point(px(0.), top)
 }
 
-fn committed_range(
+fn replacement_range(
     range: Option<Range<usize>>,
     marked: &Option<Range<usize>>,
     cursor: usize,
 ) -> Range<usize> {
-    let Some(marked) = marked else {
-        return document_range(range, cursor);
-    };
-    marked.clone()
-}
-
-fn composed_range(
-    range: Option<Range<usize>>,
-    marked: &Option<Range<usize>>,
-    cursor: usize,
-) -> Range<usize> {
-    let Some(marked) = marked else {
-        return document_range(range, cursor);
-    };
     let Some(range) = range else {
+        let Some(marked) = marked else {
+            return cursor..cursor;
+        };
         return marked.clone();
-    };
-    marked.start + range.start..marked.start + range.end
-}
-
-fn document_range(range: Option<Range<usize>>, cursor: usize) -> Range<usize> {
-    let Some(range) = range else {
-        return cursor..cursor;
     };
     range
 }
@@ -868,13 +850,13 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_range_given_while_composing_is_relative_to_the_mark(cx: &mut TestAppContext) {
+    fn a_range_given_while_composing_is_a_document_range(cx: &mut TestAppContext) {
         let (input, cx) = harness(cx, px(400.));
         focus(&input, cx);
         cx.simulate_input("привет ");
         input.update_in(cx, |input, window, cx| {
             input.replace_and_mark_text_in_range(None, "ぱす", None, window, cx);
-            input.replace_and_mark_text_in_range(Some(0..1), "ば", None, window, cx);
+            input.replace_and_mark_text_in_range(Some(7..8), "ば", None, window, cx);
             assert_eq!(input.marked_text_range(window, cx), Some(7..8));
         });
         input.read_with(cx, |input, _cx| {
@@ -884,13 +866,29 @@ mod tests {
     }
 
     #[gpui::test]
-    fn committing_while_composing_replaces_the_whole_mark(cx: &mut TestAppContext) {
+    fn committing_a_range_while_composing_replaces_only_that_range(cx: &mut TestAppContext) {
         let (input, cx) = harness(cx, px(400.));
         focus(&input, cx);
         cx.simulate_input("привет ");
         input.update_in(cx, |input, window, cx| {
             input.replace_and_mark_text_in_range(None, "ぱす", None, window, cx);
-            input.replace_text_in_range(Some(0..1), "мир", window, cx);
+            input.replace_text_in_range(Some(7..8), "мир", window, cx);
+            assert_eq!(input.marked_text_range(window, cx), None);
+        });
+        input.read_with(cx, |input, _cx| {
+            assert_eq!(input.text(), "привет мирす");
+            assert_eq!(input.cursor_utf16, 10);
+        });
+    }
+
+    #[gpui::test]
+    fn committing_without_a_range_while_composing_replaces_the_mark(cx: &mut TestAppContext) {
+        let (input, cx) = harness(cx, px(400.));
+        focus(&input, cx);
+        cx.simulate_input("привет ");
+        input.update_in(cx, |input, window, cx| {
+            input.replace_and_mark_text_in_range(None, "ぱす", None, window, cx);
+            input.replace_text_in_range(None, "мир", window, cx);
             assert_eq!(input.marked_text_range(window, cx), None);
         });
         input.read_with(cx, |input, _cx| {

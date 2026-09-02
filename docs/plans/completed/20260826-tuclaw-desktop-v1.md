@@ -192,10 +192,12 @@ single-line reference and does not show any of this.
    `range_utf16`. The element keeps a `String` and converts both ways at the boundary. Tests that use
    only ASCII cannot catch a byte-offset implementation; the tests below use Cyrillic and an emoji.
 
-   The marked-text contract, for IME: `replace_and_mark_text_in_range(range, text, new_selection)`
-   replaces the marked range if one exists, else the given range, with `text`, and marks the inserted
-   text; `marked_text_range` reports that range in UTF-16 or `None`; `unmark_text` clears the mark and
-   keeps the text; `replace_text_in_range` on a marked input replaces the marked range and clears the
+   The marked-text contract, for IME: every `range` the trait hands over is a **document** range in
+   UTF-16 units, never one relative to the mark, so both replacing methods resolve it the same way —
+   the given range if there is one, else the marked range, else the caret.
+   `replace_and_mark_text_in_range(range, text, new_selection)` replaces that range with `text` and
+   marks the inserted text; `marked_text_range` reports that range in UTF-16 or `None`; `unmark_text`
+   clears the mark and keeps the text; `replace_text_in_range` replaces that range and clears the
    mark; `bounds_for_range` returns the on-screen bounds of the caret's line for the given range so
    the candidate window can be positioned.
 
