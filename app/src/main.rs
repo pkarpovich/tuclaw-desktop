@@ -6,6 +6,7 @@ mod shell;
 mod sidebar;
 mod state;
 mod theme;
+mod thread;
 
 use anyhow::{Result, bail};
 use gpui::{

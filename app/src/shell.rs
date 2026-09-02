@@ -7,11 +7,13 @@ use crate::feed::Feed;
 use crate::sidebar::Sidebar;
 use crate::state::{AppState, Segment};
 use crate::theme;
+use crate::thread::ThreadPanel;
 
 pub struct Shell {
     state: Entity<AppState>,
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
+    thread: Entity<ThreadPanel>,
     _observation: Subscription,
 }
 
@@ -22,10 +24,13 @@ impl Shell {
         let sidebar = cx.new(|cx| Sidebar::new(built, cx));
         let built = state.clone();
         let feed = cx.new(|cx| Feed::new(built, cx));
+        let built = state.clone();
+        let thread = cx.new(|cx| ThreadPanel::new(built, cx));
         Shell {
             state,
             sidebar,
             feed,
+            thread,
             _observation: observation,
         }
     }
@@ -120,6 +125,16 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let thread = match self.state.read(cx).thread() {
+            Some(_) => Some(
+                card()
+                    .w(px(360.))
+                    .flex_none()
+                    .overflow_hidden()
+                    .child(self.thread.clone()),
+            ),
+            None => None,
+        };
         div()
             .size_full()
             .flex()
@@ -152,7 +167,7 @@ impl Render for Shell {
                             .overflow_hidden()
                             .child(self.feed.clone()),
                     )
-                    .child(card().w(px(360.)).flex_none().child(placeholder("Thread"))),
+                    .children(thread),
             )
     }
 }
@@ -171,17 +186,6 @@ fn card() -> Div {
                 .blur_radius(px(24.))
                 .spread_radius(px(-10.)),
         ])
-}
-
-fn placeholder(label: &'static str) -> impl IntoElement {
-    div()
-        .flex_1()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.5))
-        .text_color(theme::text_muted())
-        .child(SharedString::new_static(label))
 }
 
 fn sidebar_toggle() -> impl IntoElement {

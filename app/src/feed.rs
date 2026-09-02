@@ -9,7 +9,7 @@ use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message};
 
 use crate::composer::{Composer, ComposerKind};
-use crate::message::{OnOpen, message_row};
+use crate::message::{OnOpen, Replies, message_row};
 use crate::state::{AppState, StateEvent};
 use crate::theme;
 
@@ -98,6 +98,11 @@ impl Feed {
         }
     }
 
+    #[cfg(test)]
+    pub fn input_focus(&self, cx: &gpui::App) -> gpui::FocusHandle {
+        self.composer.read(cx).focus_handle(cx)
+    }
+
     fn refresh_placeholder(&mut self, cx: &mut Context<Self>) {
         let placeholder = placeholder(self.state.read(cx));
         self.composer
@@ -130,10 +135,12 @@ impl Feed {
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
-                Item::Message(message) => {
-                    message_row(message, state.read(cx).agents(), on_open.clone())
-                        .into_any_element()
-                }
+                Item::Message(message) => message_row(
+                    message,
+                    state.read(cx).agents(),
+                    Replies::Affordance(on_open.clone()),
+                )
+                .into_any_element(),
             }
         })
         .flex_1()

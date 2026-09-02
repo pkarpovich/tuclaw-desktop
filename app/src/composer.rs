@@ -9,6 +9,7 @@ use crate::theme;
 
 pub enum ComposerKind {
     Feed,
+    Thread,
 }
 
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
@@ -35,6 +36,7 @@ impl Composer {
     ) -> Composer {
         let selector = match kind {
             ComposerKind::Feed => "input-feed",
+            ComposerKind::Thread => "input-thread",
         };
         let input = cx.new(|cx| TextInput::new(placeholder, selector, cx));
         let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
@@ -76,8 +78,9 @@ impl Composer {
     }
 
     fn send_button(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        let selector = match self.kind {
-            ComposerKind::Feed => "composer-send-feed",
+        let (selector, size) = match self.kind {
+            ComposerKind::Feed => ("composer-send-feed", px(32.)),
+            ComposerKind::Thread => ("composer-send-thread", px(30.)),
         };
         let button = div()
             .id(selector)
@@ -86,8 +89,8 @@ impl Composer {
             .flex_none()
             .items_center()
             .justify_center()
-            .w(px(32.))
-            .h(px(32.))
+            .w(size)
+            .h(size)
             .ml(px(7.))
             .rounded_full()
             .text_size(px(14.))
@@ -158,6 +161,54 @@ impl Composer {
                     ),
             )
     }
+
+    fn thread_shape(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_none()
+            .flex_col()
+            .px(px(14.))
+            .pt(px(8.))
+            .pb(px(14.))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .rounded(px(12.))
+                    .bg(theme::raised())
+                    .border_1()
+                    .border_color(theme::border())
+                    .shadow(vec![
+                        BoxShadow::new(px(0.), px(2.), theme::shadow())
+                            .blur_radius(px(8.))
+                            .spread_radius(px(-4.)),
+                    ])
+                    .child(
+                        div()
+                            .flex()
+                            .px(px(13.))
+                            .pt(px(12.))
+                            .pb(px(6.))
+                            .min_w(px(0.))
+                            .text_size(px(13.5))
+                            .line_height(px(20.))
+                            .child(self.input.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(2.))
+                            .px(px(8.))
+                            .pt(px(4.))
+                            .pb(px(8.))
+                            .child(mention_icon())
+                            .child(microphone_icon())
+                            .child(div().flex_1())
+                            .child(self.send_button(sendable, cx)),
+                    ),
+            )
+    }
 }
 
 impl Render for Composer {
@@ -168,7 +219,8 @@ impl Render for Composer {
             Sendable::Ready
         };
         match self.kind {
-            ComposerKind::Feed => self.feed_shape(sendable, cx),
+            ComposerKind::Feed => self.feed_shape(sendable, cx).into_any_element(),
+            ComposerKind::Thread => self.thread_shape(sendable, cx).into_any_element(),
         }
     }
 }
@@ -223,6 +275,25 @@ fn eye() -> Div {
         .h(px(2.))
         .rounded_full()
         .bg(theme::text_secondary())
+}
+
+fn microphone_icon() -> impl IntoElement {
+    icon().child(
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(2.))
+            .child(
+                div()
+                    .w(px(6.))
+                    .h(px(9.))
+                    .rounded(px(3.))
+                    .border_1()
+                    .border_color(theme::text_secondary()),
+            )
+            .child(div().w(px(10.)).h(px(1.)).bg(theme::text_secondary())),
+    )
 }
 
 fn format_icon() -> impl IntoElement {

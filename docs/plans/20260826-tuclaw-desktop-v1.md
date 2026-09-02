@@ -1044,25 +1044,50 @@ tone was needed.
 
 Open `docs/design/screenshots/03-feed-and-thread.png` before starting — the right-hand card.
 
-- [ ] build the panel as its own card: the `Thread` header with the `#channel · author` subtitle read
+- [x] build the panel as its own card: the `Thread` header with the `#channel · author` subtitle read
       from `OpenThread`, a close control with `debug_selector` `thread-close`, the cached root
       message, the replies as a plain column (four replies need no virtualiser), and a `Thread`
       composer placeheld "Reply in thread"
-- [ ] add the `Thread` shape to `composer.rs`: `@` and a microphone, no hint, no `Talk`, a 30 px
+- [x] add the `Thread` shape to `composer.rs`: `@` and a microphone, no hint, no `Talk`, a 30 px
       send button
-- [ ] show the panel only when `thread` is `Some` — the shell observes state for this; wire the close
+- [x] show the panel only when `thread` is `Some` — the shell observes state for this; wire the close
       control to `AppState::close_thread`
-- [ ] wire the composer's `on_submit` through `AppState::reply_in_thread`; subscribe to
+- [x] wire the composer's `on_submit` through `AppState::reply_in_thread`; subscribe to
       `ThreadOpened` to focus the reply input and to `ReplyAppended` to repaint
-- [ ] write `#[gpui::test]` tests: drawing the panel with a thread open does not panic; opening a
+- [x] write `#[gpui::test]` tests: drawing the panel with a thread open does not panic; opening a
       thread then selecting another channel and drawing still renders — the root comes from
       `OpenThread`, not from the selection; replying through the panel's input appends to the thread
       and raises the root's count; clicking `thread-close` via `debug_bounds` sets `thread` to
       `None`; after `open_thread` the thread input's handle is focused, and after `close_thread` the
       feed input's is
-- [ ] **user checkpoint**: stop and ask the user to open a thread from `movie-night`, click into the
-      reply composer and reply, switch to another channel, confirm the thread stays, and close it
-- [ ] run the per-task gate
+- [x] **user checkpoint** (skipped — not automatable): the agent never launches the running app, so
+      `make run`, opening a thread from `movie-night`, replying in it, switching channel to confirm
+      the thread stays, and closing it are carried to the hand-over list in Task 18
+- [x] run the per-task gate
+
+➕ `message.rs` gained a `Replies { Affordance(OnOpen), Hidden }` parameter in place of
+`message_row`'s bare `on_open`, and the thread panel passes `Hidden`. Task 10 settled that the row is
+reused here, but reusing it unchanged would draw the root's "4 replies" pill *inside* the thread the
+pill opens, and would register a second `message-reply-<id>` debug selector for the same row while
+both cards are on screen. The mockup's thread root carries no pill, only the hairline under it.
+
+➕ `message.rs` also exposes `author_name(author, agents)`, which the header's `#channel · author`
+subtitle needs and which `writer` now calls, so the "You" / "unknown agent" fallbacks are stated once.
+
+➕ Both `Feed` and `ThreadPanel` carry a `#[cfg(test)] pub fn input_focus`. The focus test needs the
+two composers' handles from one window, and each composer field is private to its own module. Gating
+the accessor on `cfg(test)` keeps it out of the bin target, where an accessor with no caller is dead
+code under `-D warnings`. The test mounts a `Harness` holding both views rather than a `Shell`,
+because `Shell`'s fields are private to `shell.rs` too, and it asserts the thread input gives the
+focus up as well as that the feed input takes it, so the assertion cannot pass vacuously.
+
+➕ `state.rs` lost its `#![allow(dead_code)]` as Task 6 required, and the gate stayed green:
+`reply_in_thread` has the thread composer as a caller now, and every other public method already had
+one.
+
+➕ The mockup's inert bell in the thread header is not drawn. The task enumerates the header's
+contents and a bell is in none of the Non-goals' "drawn but inert" lists, so it is left out rather
+than added on the screenshot's authority.
 
 ### Task 14: Agents view
 

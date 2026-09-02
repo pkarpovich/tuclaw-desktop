@@ -11,6 +11,11 @@ use crate::theme;
 
 pub type OnOpen = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 
+pub enum Replies {
+    Affordance(OnOpen),
+    Hidden,
+}
+
 struct Writer {
     name: SharedString,
     initials: SharedString,
@@ -28,7 +33,7 @@ enum Badge {
     None,
 }
 
-pub fn message_row(message: &Message, agents: &[Agent], on_open: OnOpen) -> impl IntoElement {
+pub fn message_row(message: &Message, agents: &[Agent], replies: Replies) -> impl IntoElement {
     let Message {
         id,
         author,
@@ -55,10 +60,38 @@ pub fn message_row(message: &Message, agents: &[Agent], on_open: OnOpen) -> impl
         .px(px(20.))
         .py(px(8.))
         .child(avatar(&writer));
+    let Replies::Affordance(on_open) = replies else {
+        return row.child(column);
+    };
     if *reply_count == 0 {
         return row.child(column).child(hover_reply(*id, group, on_open));
     }
     row.child(column.child(replies_pill(*id, *reply_count, on_open)))
+}
+
+pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
+    let Author::Agent(author) = author else {
+        return SharedString::new_static("You");
+    };
+    let mut found = None;
+    for candidate in agents {
+        if candidate.id == author {
+            found = Some(candidate);
+            break;
+        }
+    }
+    let Some(Agent {
+        id: _,
+        name,
+        initials: _,
+        role: _,
+        status: _,
+        sort_index: _,
+    }) = found
+    else {
+        return SharedString::new_static("unknown agent");
+    };
+    SharedString::from(name.clone())
 }
 
 pub fn reply_label(count: usize) -> String {
@@ -69,9 +102,10 @@ pub fn reply_label(count: usize) -> String {
 }
 
 fn writer(author: Author, agents: &[Agent]) -> Writer {
+    let name = author_name(author, agents);
     let Author::Agent(author) = author else {
         return Writer {
-            name: SharedString::new_static("You"),
+            name,
             initials: SharedString::new_static("YO"),
             tone: Tone::User,
             badge: Badge::None,
@@ -86,7 +120,7 @@ fn writer(author: Author, agents: &[Agent]) -> Writer {
     }
     let Some(Agent {
         id: _,
-        name,
+        name: _,
         initials,
         role: _,
         status: _,
@@ -94,14 +128,14 @@ fn writer(author: Author, agents: &[Agent]) -> Writer {
     }) = found
     else {
         return Writer {
-            name: SharedString::new_static("unknown agent"),
+            name,
             initials: SharedString::new_static("··"),
             tone: Tone::Agent(0),
             badge: Badge::Agent,
         };
     };
     Writer {
-        name: SharedString::from(name.clone()),
+        name,
         initials: SharedString::from(initials.clone()),
         tone: Tone::Agent(*sort_index as usize),
         badge: Badge::Agent,
