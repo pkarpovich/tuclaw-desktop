@@ -1,4 +1,5 @@
 mod feed;
+mod input;
 mod message;
 mod shell;
 mod sidebar;
@@ -36,6 +37,7 @@ fn main() {
         }
     };
     gpui_platform::application().run(move |cx: &mut App| {
+        input::bind_keys(cx);
         let state = cx.new(|_| state);
         let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);
         cx.open_window(

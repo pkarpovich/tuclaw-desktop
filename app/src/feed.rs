@@ -8,6 +8,7 @@ use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message};
 
+use crate::input::TextInput;
 use crate::message::{OnOpen, message_row};
 use crate::state::{AppState, StateEvent};
 use crate::theme;
@@ -16,8 +17,15 @@ pub struct Feed {
     state: Entity<AppState>,
     list: ListState,
     items: Rc<Vec<Item>>,
+    input: Entity<TextInput>,
+    initial_focus: InitialFocus,
     _observation: Subscription,
     _events: Subscription,
+}
+
+enum InitialFocus {
+    Pending,
+    Taken,
 }
 
 enum Item {
@@ -63,10 +71,13 @@ impl Feed {
         });
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
+        let input = cx.new(|cx| TextInput::new("Message", "input-feed", cx));
         Feed {
             state,
             list,
             items: Rc::new(items),
+            input,
+            initial_focus: InitialFocus::Pending,
             _observation: observation,
             _events: events,
         }
@@ -111,7 +122,15 @@ impl Feed {
 }
 
 impl Render for Feed {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        match self.initial_focus {
+            InitialFocus::Pending => {
+                let focus = self.input.read(cx).focus_handle().clone();
+                focus.focus(window, cx);
+                self.initial_focus = InitialFocus::Taken;
+            }
+            InitialFocus::Taken => {}
+        }
         let state = self.state.read(cx);
         let header = header(state);
         let agents = state.agents();
@@ -124,6 +143,7 @@ impl Render for Feed {
             .min_h(px(0.))
             .child(header_element(header))
             .child(self.body())
+            .child(input_mount(self.input.clone()))
             .child(status_bar(busy, total))
     }
 }
@@ -405,6 +425,30 @@ fn empty_state() -> impl IntoElement {
                 .text_size(px(12.5))
                 .text_color(theme::text_muted())
                 .child("Say something to start this conversation."),
+        )
+}
+
+fn input_mount(input: Entity<TextInput>) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_none()
+        .px(px(20.))
+        .pt(px(6.))
+        .pb(px(12.))
+        .child(
+            div()
+                .flex()
+                .w_full()
+                .min_w(px(0.))
+                .px(px(12.))
+                .py(px(9.))
+                .rounded(px(10.))
+                .border_1()
+                .border_color(theme::border())
+                .bg(theme::field())
+                .text_size(px(13.5))
+                .line_height(px(19.))
+                .child(input),
         )
 }
 

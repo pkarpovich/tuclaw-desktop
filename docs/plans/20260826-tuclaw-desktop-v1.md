@@ -930,31 +930,59 @@ all four requirements there are mandatory, and the UTF-16 rule is the one that f
 bare input is mounted at the bottom of the feed card here so the file has a consumer; Task 12 dresses
 it into the composer.
 
-- [ ] define `TextInput` per the Text input section, holding its text, a UTF-16 caret, the marked
+- [x] define `TextInput` per the Text input section, holding its text, a UTF-16 caret, the marked
       range, and its `FocusHandle`
-- [ ] implement the eight required `EntityInputHandler` methods, with byte ↔ UTF-16 conversion at the
+- [x] implement the eight required `EntityInputHandler` methods, with byte ↔ UTF-16 conversion at the
       boundary and nowhere else, and the marked-text transitions as the facts state them
-- [ ] implement the manual `Element`: shape with `shape_text` at the given wrap width in `prepaint`,
+- [x] implement the manual `Element`: shape with `shape_text` at the given wrap width in `prepaint`,
       size to the wrapped line count with no maximum, paint the text and the caret quad in `paint`,
       and register `window.handle_input(...)` there; wrap it in a `div()` with `track_focus` and a
       mouse-down handler that focuses the handle
-- [ ] bind the keys: characters via the input handler; `backspace`, `left`, `right`, `enter`,
+- [x] bind the keys: characters via the input handler; `backspace`, `left`, `right`, `enter`,
       `shift-enter` as actions under a `key_context`; Enter emits `Submitted`, Shift+Enter inserts a
       newline
-- [ ] mount one bare `TextInput` at the bottom of the feed card and focus it when the window opens
-- [ ] write `#[gpui::test]` tests with the input focused: `simulate_input("hello")` gives text
+- [x] mount one bare `TextInput` at the bottom of the feed card and focus it when the window opens
+- [x] write `#[gpui::test]` tests with the input focused: `simulate_input("hello")` gives text
       `hello` and caret 5; `simulate_input("привет 🐢")` gives that text and a caret at its UTF-16
       length, not its byte length; backspace after the emoji removes the whole emoji; left then a
       typed character inserts before the caret; `shift-enter` leaves a `\n` in the text and emits
       nothing; `enter` emits `Submitted`; `clear` empties the text and resets the caret
-- [ ] write `#[gpui::test]` tests for IME: `replace_and_mark_text_in_range` with `"ぱ"` marks it and
+- [x] write `#[gpui::test]` tests for IME: `replace_and_mark_text_in_range` with `"ぱ"` marks it and
       `marked_text_range` reports a UTF-16 range of length 1; a second call replaces the marked text;
       `unmark_text` keeps the text and clears the range; `replace_text_in_range` over a marked input
       replaces the marked text and clears the mark
-- [ ] write `#[gpui::test]` tests for shaping: an input drawn at a narrow width with a long line
+- [x] write `#[gpui::test]` tests for shaping: an input drawn at a narrow width with a long line
       reports a height of more than one line; three `shift-enter`s make it four lines tall; clicking
       the input via `debug_bounds` (`input-feed`) focuses its handle
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ The height comes from `Window::request_measured_layout`, not from a `Style` height: the wrapped
+line count is only knowable once taffy offers a width, and the measure closure is where that width
+arrives. The element therefore shapes twice a frame — once to measure, once in `prepaint` at the final
+bounds — which gpui's line-layout cache turns into a lookup the second time. `prepaint` keeps the
+`WrappedLine`s (they are not `Clone`), `paint` moves them onto the entity, and `bounds_for_range` and
+`character_index_for_point` read them from there.
+
+➕ `TextInput::new(placeholder, selector, cx)` takes a debug selector, because the selector belongs on
+the same `div()` that owns `track_focus` and the focus-on-click handler, and Tasks 12 and 13 put two
+inputs on screen at once (`input-feed`, `input-thread`).
+
+➕ Boundaries are `char` boundaries, not grapheme clusters: the workspace carries no
+`unicode-segmentation` dependency and GPUI's own example is the only thing that pulls one in. One
+backspace removes a whole emoji, as the task requires, but not a whole ZWJ sequence.
+
+➕ `bind_keys(cx)` binds the five actions under the `TuclawInput` key context once per `App`; `main`
+calls it before the window opens and each test calls it before building its harness. Without a
+binding, `enter` and `shift-enter` would reach the input handler as a literal `\n` — GPUI's
+`with_simulated_ime` fills `key_char` for both.
+
+➕ `input.rs` carries `#![allow(dead_code)]` for the reason `state.rs` does: `text()`, `is_blank()`
+and `clear()` have no caller in the bin target until Task 12's composer. **Remove it in Task 12.**
+
+➕ The feed takes the initial focus on its first `render` (`InitialFocus::Pending` → `Taken`), since
+`Feed::new` is handed no `Window` and this task changes neither `shell.rs` nor `Shell::new`'s
+signature. `Window::focus` during a draw skips its refresh but still sets the focus, and paint runs
+after render in the same frame, so `window.handle_input` registers on that first frame.
 
 ### Task 12: Composer
 
