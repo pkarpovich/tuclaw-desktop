@@ -1,11 +1,12 @@
 use gpui::{
-    BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Render, SharedString,
-    Subscription, Window, div, prelude::*, px,
+    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Render,
+    SharedString, Subscription, Window, div, prelude::*, px,
 };
 
+use crate::agents::AgentsView;
 use crate::feed::Feed;
 use crate::sidebar::Sidebar;
-use crate::state::{AppState, Segment};
+use crate::state::{AppState, Segment, View};
 use crate::theme;
 use crate::thread::ThreadPanel;
 
@@ -14,6 +15,7 @@ pub struct Shell {
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
     thread: Entity<ThreadPanel>,
+    agents: Entity<AgentsView>,
     _observation: Subscription,
 }
 
@@ -26,12 +28,52 @@ impl Shell {
         let feed = cx.new(|cx| Feed::new(built, cx));
         let built = state.clone();
         let thread = cx.new(|cx| ThreadPanel::new(built, cx));
+        let built = state.clone();
+        let agents = cx.new(|cx| AgentsView::new(built, cx));
         Shell {
             state,
             sidebar,
             feed,
             thread,
+            agents,
             _observation: observation,
+        }
+    }
+
+    fn body(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let state = self.state.read(cx);
+        let view = state.view();
+        let open = state.thread().is_some();
+        match view {
+            View::Agents => vec![
+                card()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .overflow_hidden()
+                    .child(self.agents.clone())
+                    .into_any_element(),
+            ],
+            View::Conversation => {
+                let mut body = vec![
+                    card()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .child(self.feed.clone())
+                        .into_any_element(),
+                ];
+                if open {
+                    body.push(
+                        card()
+                            .w(px(360.))
+                            .flex_none()
+                            .overflow_hidden()
+                            .child(self.thread.clone())
+                            .into_any_element(),
+                    );
+                }
+                body
+            }
         }
     }
 
@@ -125,16 +167,7 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let thread = match self.state.read(cx).thread() {
-            Some(_) => Some(
-                card()
-                    .w(px(360.))
-                    .flex_none()
-                    .overflow_hidden()
-                    .child(self.thread.clone()),
-            ),
-            None => None,
-        };
+        let body = self.body(cx);
         div()
             .size_full()
             .flex()
@@ -160,14 +193,7 @@ impl Render for Shell {
                             .min_h(px(0.))
                             .child(self.sidebar.clone()),
                     )
-                    .child(
-                        card()
-                            .flex_1()
-                            .min_w(px(0.))
-                            .overflow_hidden()
-                            .child(self.feed.clone()),
-                    )
-                    .children(thread),
+                    .children(body),
             )
     }
 }

@@ -1,3 +1,4 @@
+mod agents;
 mod composer;
 mod feed;
 mod input;

@@ -1098,16 +1098,36 @@ than added on the screenshot's authority.
 Open `docs/design/screenshots/05-agents-and-settings.png` before starting; build the card list on the
 left of that screenshot and **not** the settings panel on its right, which is a non-goal.
 
-- [ ] extract a pure `agent_cards(agents: &[Agent]) -> Vec<AgentCard>` producing the ordered
+- [x] extract a pure `agent_cards(agents: &[Agent]) -> Vec<AgentCard>` producing the ordered
       view-model — name, initials, role, status label — in `sort_index` order
-- [ ] render one card per entry, and a summary line counting the agents and how many are busy
-- [ ] show this view in place of the feed and thread when `view == Agents`; the sidebar row (Task 8)
+- [x] render one card per entry, and a summary line counting the agents and how many are busy
+- [x] show this view in place of the feed and thread when `view == Agents`; the sidebar row (Task 8)
       and the top-bar segment (Task 7) already call `activate_segment(Agents)`, and the shell's
       observation repaints the swap
-- [ ] write tests: `agent_cards` over the seeded agents returns four entries in `sort_index` order
+- [x] write tests: `agent_cards` over the seeded agents returns four entries in `sort_index` order
       with the right busy labels; drawing the agents view does not panic; clicking `sidebar-agents`
       and then `sidebar-row-movie-night` via `debug_bounds` ends with `active_segment() == Channel`
-- [ ] run the per-task gate
+- [x] run the per-task gate
+
+➕ `AgentCard` carries a `tone: usize` beyond the four fields the task names, because the chip is
+painted with `theme::agent_chip(tone)` exactly as the sidebar and the feed's direct header do, and the
+card holds no `sort_index` to derive it from after the extraction. The status label is an enum,
+`Status { Idle, Busy(SharedString) }`, rather than a rendered string: the render matches it for the
+dot and text tones, and the ordering test asserts the busy task text directly.
+
+➕ `agent_cards` sorts by `(sort_index, id)` rather than trusting `Store::agents`' `ORDER BY`, so the
+function is correct for unsorted input the way `group_by_day` is.
+
+➕ The shell's `render` now calls `Shell::body`, which returns `Vec<AnyElement>` — one card for the
+agents view, or the feed card plus the optional thread card. The feed and the thread panel stay
+constructed while the agents view is up, so their composers keep their buffers and the feed keeps its
+`ListState` across a segment round trip.
+
+➕ Two things the screenshot draws are left out, on Task 13's precedent that a header element named by
+neither the task nor the Non-goals is not added on the screenshot's authority: the `Add agent` button,
+and the per-card channel chips (`#downloads`, `#movie-night`) — the latter is per-channel agent
+membership, an explicit non-goal. The accent border on the first card is the selected-agent state of
+the settings panel, which is also a non-goal, so every card draws the same border.
 
 ### Task 15: Failure view
 
