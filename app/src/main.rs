@@ -1,22 +1,17 @@
+mod shell;
 mod state;
+mod theme;
 
 use anyhow::{Result, bail};
-use gpui::{App, AppContext, Context, Entity, IntoElement, Render, Window, WindowOptions, div};
+use gpui::{
+    App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, point, px, size,
+};
 use time::OffsetDateTime;
 use tuclaw_core::paths::database_path;
 use tuclaw_core::store::Store;
 
+use shell::Shell;
 use state::AppState;
-
-struct Root {
-    _state: Entity<AppState>,
-}
-
-impl Render for Root {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-    }
-}
 
 fn load_state() -> Result<AppState> {
     let path = database_path()?;
@@ -39,31 +34,20 @@ fn main() {
     };
     gpui_platform::application().run(move |cx: &mut App| {
         let state = cx.new(|_| state);
-        cx.open_window(WindowOptions::default(), |_, cx| {
-            cx.new(|_| Root { _state: state })
-        })
+        let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: None,
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(14.), px(18.))),
+                }),
+                ..Default::default()
+            },
+            |_, cx| cx.new(|cx| Shell::new(state, cx)),
+        )
         .expect("failed to open window");
         cx.activate(true);
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use gpui::{AppContext, TestAppContext};
-    use time::macros::datetime;
-    use tuclaw_core::store::Store;
-
-    use super::{AppState, Root};
-
-    #[gpui::test]
-    fn the_root_holds_the_loaded_workspace(cx: &mut TestAppContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
-        let root = cx.new(|_| Root { _state: state });
-        root.read_with(cx, |_root, _cx| {});
-    }
 }
