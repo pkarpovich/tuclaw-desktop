@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use super::dto::{Agent, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId};
 use super::http::{ClientToken, HttpTransport};
+use super::mock::MockTransport;
 use super::transport::{ApiError, Connection, Transport};
 
 /// The typed `/api/v3` client: every call of the contract over one [`Transport`].
@@ -42,6 +43,11 @@ impl Client {
     /// Returns the [`ApiError`] of [`HttpTransport::new`].
     pub fn http(base_url: &str, token: ClientToken) -> Result<Client, ApiError> {
         Ok(Client::new(Arc::new(HttpTransport::new(base_url, token)?)))
+    }
+
+    /// Creates a client over the in-process mock daemon; the caller keeps `transport` to drive it.
+    pub fn mock(transport: &MockTransport) -> Client {
+        Client::new(Arc::new(transport.clone()))
     }
 
     /// Fetches the sidebar: every surface, ordered by `sort_order`.

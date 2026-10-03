@@ -6,6 +6,7 @@ mod frames;
 #[cfg(test)]
 mod golden;
 mod http;
+mod mock;
 mod run;
 pub(crate) mod runtime;
 mod transport;
@@ -14,5 +15,6 @@ pub use client::*;
 pub use dto::*;
 pub use frames::*;
 pub use http::*;
+pub use mock::*;
 pub use run::*;
 pub use transport::*;
