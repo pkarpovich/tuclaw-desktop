@@ -250,10 +250,11 @@ Non-negotiable; the gate for marking any task complete. If a rule is violated th
 
 ### Task 6: Verify acceptance criteria
 
-- [ ] every public item of `tuclaw_core::v3` and `tuclaw_core::testing` has rustdoc with an example where one makes sense; `mise exec -- cargo doc -p tuclaw-core --no-deps` is warning-free
-- [ ] `git diff --stat` shows no change under `app/` and none to `core/src/{model,store,schema,fixtures,grouping,paths}.rs`; `core/src/daemon.rs` does not exist
-- [ ] every route and frame of `docs/contracts/v3-client-contract.md` has a fixture and a decoder test; the contract file is unchanged
-- [ ] `cargo tree -p tuclaw-core` has no `gpui`; the four gates green: `mise run fmt-check`, `mise run lint`, `mise run test`, `mise run build`
+- [x] every public item of `tuclaw_core::v3` and `tuclaw_core::testing` has rustdoc with an example where one makes sense; `mise exec -- cargo doc -p tuclaw-core --no-deps` is warning-free
+- [x] `git diff --stat` shows no change under `app/` and none to `core/src/{model,store,schema,fixtures,grouping,paths}.rs`; `core/src/daemon.rs` does not exist
+- [x] every route and frame of `docs/contracts/v3-client-contract.md` has a fixture and a decoder test; the contract file is unchanged
+- [x] `cargo tree -p tuclaw-core` has no `gpui`; the four gates green: `mise run fmt-check`, `mise run lint`, `mise run test`, `mise run build`
+- ➕ as verified: every public item of `v3` and `testing` has rustdoc (`cargo rustdoc -- -W missing-docs` reports only the crate-level doc, missing since v1) and `cargo doc` is warning-free; `core/src/{model,store,schema,fixtures,grouping,paths}.rs` are unchanged against `master` and `core/src/daemon.rs` does not exist; `app/` did change on this branch, but only in two commits Pavel asked for separately (`15ac580` the app bundle and menu, `83f6876` the toolbar and sidebar), none from this plan; the contract copy changed once, mirroring tuclaw's 2026-10-03 clarifications (`input_id` may be null, typed `usage`/`context_usage`); ➕ `posted.json`, `posted_without_input.json` and `error.json` fixtures were added so every route has one
 
 ### Task 7: [Final] Update documentation
 

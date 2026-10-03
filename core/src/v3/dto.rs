@@ -658,6 +658,9 @@ mod tests {
     const MESSAGES_PAGE: &str = include_str!("../../testdata/v3/messages_page.json");
     const POST_MESSAGE: &str = include_str!("../../testdata/v3/post_message.json");
     const RUN: &str = include_str!("../../testdata/v3/run.json");
+    const POSTED: &str = include_str!("../../testdata/v3/posted.json");
+    const POSTED_WITHOUT_INPUT: &str = include_str!("../../testdata/v3/posted_without_input.json");
+    const ERROR: &str = include_str!("../../testdata/v3/error.json");
 
     #[test]
     fn surfaces_decode_with_wiring_bindings_and_live_run() {
@@ -882,5 +885,21 @@ mod tests {
         assert!(Uuid::parse_str(&first).is_ok());
         assert!(Uuid::parse_str(&second).is_ok());
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn the_posted_fixtures_decode() {
+        let posted: Posted = serde_json::from_str(POSTED).unwrap();
+        assert_eq!(posted.input_id, Some(InputId(42)));
+        let orphan: Posted = serde_json::from_str(POSTED_WITHOUT_INPUT).unwrap();
+        assert_eq!(orphan.input_id, None);
+        assert_eq!(orphan.message_id, MessageId(9194));
+    }
+
+    #[test]
+    fn the_error_fixture_decodes() {
+        let ErrorBody { error } = serde_json::from_str(ERROR).unwrap();
+        assert_eq!(error.code, "conflict");
+        assert!(error.message.ends_with("is not live"));
     }
 }
