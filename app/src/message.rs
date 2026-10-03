@@ -5,8 +5,8 @@ use tuclaw_core::model::{Agent, Author, Message, MessageId, Span};
 
 use crate::theme;
 
-struct Writer {
-    name: SharedString,
+pub struct Writer {
+    pub name: SharedString,
     initials: SharedString,
     tone: Tone,
     badge: Badge,
@@ -80,7 +80,7 @@ pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
     SharedString::from(name.clone())
 }
 
-fn writer(author: Author, agents: &[Agent]) -> Writer {
+pub fn writer(author: Author, agents: &[Agent]) -> Writer {
     let name = author_name(author, agents);
     let author = match author {
         Author::User => {
@@ -132,7 +132,7 @@ fn writer(author: Author, agents: &[Agent]) -> Writer {
     }
 }
 
-fn avatar(writer: &Writer) -> Div {
+pub fn avatar(writer: &Writer) -> Div {
     let tone = match writer.tone {
         Tone::User => theme::accent(),
         Tone::Agent(index) => theme::agent_chip(index),
@@ -172,7 +172,7 @@ fn byline(writer: &Writer, sent_at: OffsetDateTime) -> Div {
     )
 }
 
-fn agent_badge() -> Div {
+pub fn agent_badge() -> Div {
     div()
         .flex_none()
         .px(px(6.))

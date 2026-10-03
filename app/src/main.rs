@@ -4,6 +4,7 @@ mod failure;
 mod feed;
 mod input;
 mod link;
+mod live;
 mod menu;
 mod message;
 mod shell;

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+serde_json = { workspace = true }
 anyhow = { workspace = true }
 futures = "0.3.34"
 gpui.workspace = true
@@ -13,4 +14,3 @@ tuclaw-core = { path = "../core" }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
-serde_json.workspace = true

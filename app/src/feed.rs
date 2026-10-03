@@ -1,14 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Div, Entity, FontWeight, IntoElement, ListAlignment, ListState, Render,
-    SharedString, Subscription, Window, div, list, prelude::*, px,
+    AnyElement, Context, Div, Entity, FollowMode, FontWeight, IntoElement, ListAlignment,
+    ListState, Render, SharedString, Subscription, Window, div, list, prelude::*, px,
 };
 use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
 use crate::composer::Composer;
+use crate::live::{RunView, run_card, run_view};
 use crate::message::message_row;
 use crate::state::{AppState, StateEvent};
 use crate::theme;
@@ -31,11 +32,12 @@ enum Focus {
 enum Item {
     Separator(SharedString),
     Message(Message),
+    Run(RunView),
 }
 
 enum Resync {
     Reset,
-    Repaint,
+    Runs,
 }
 
 enum Header {
@@ -72,7 +74,7 @@ impl Feed {
                 feed.resync(Resync::Reset, cx);
                 feed.list.scroll_to_end();
             }
-            StateEvent::RunsChanged => feed.resync(Resync::Repaint, cx),
+            StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
             StateEvent::SendFailed(text) => {
                 let text = text.clone();
                 feed.composer
@@ -81,6 +83,7 @@ impl Feed {
         });
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
+        list.set_follow_mode(FollowMode::Tail);
         let placeholder = placeholder(state.read(cx));
         let sender = state.clone();
         let composer = cx.new(|cx| {
@@ -109,10 +112,18 @@ impl Feed {
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
         let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let before = self.items.len();
+        let first_run = first_run(&items);
         self.items = Rc::new(items);
         match resync {
             Resync::Reset => self.list.reset(self.items.len()),
-            Resync::Repaint => {}
+            Resync::Runs => {
+                if self.items.len() == before {
+                    self.list.remeasure_items(first_run..self.items.len());
+                } else {
+                    self.list.reset(self.items.len());
+                }
+            }
         }
         cx.notify();
     }
@@ -132,6 +143,7 @@ impl Feed {
                 Item::Message(message) => {
                     message_row(message, state.read(cx).agents()).into_any_element()
                 }
+                Item::Run(run) => run_card(run, state.read(cx).agents()).into_any_element(),
             }
         })
         .flex_1()
@@ -181,7 +193,25 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
             items.push(Item::Message(message));
         }
     }
+    for run in state.live_runs() {
+        items.push(Item::Run(run_view(run)));
+    }
     items
+}
+
+fn first_run(items: &[Item]) -> usize {
+    let mut first = items.len();
+    for (index, item) in items.iter().enumerate() {
+        match item {
+            Item::Run(_) => {
+                first = index;
+                break;
+            }
+            Item::Separator(_) => {}
+            Item::Message(_) => {}
+        }
+    }
+    first
 }
 
 fn header(state: &AppState) -> Header {
@@ -486,7 +516,10 @@ mod tests {
     use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Span};
     use tuclaw_core::v3::MockTransport;
 
-    use super::{Busy, Feed, Header, busy_agents, header};
+    use tuclaw_core::v3::{RunState, ToolStatus};
+
+    use super::{Busy, Feed, Header, Item, busy_agents, header};
+    use crate::live::{RunView, StepView};
     use crate::state::AppState;
     use crate::testing::{channel_named, loaded, play};
 
@@ -629,5 +662,87 @@ mod tests {
         cx.run_until_parked();
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         assert_eq!(typed(&feed, cx), "не дойдёт");
+    }
+
+    fn runs(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> Vec<RunView> {
+        feed.read_with(cx, |feed, _cx| {
+            let mut runs = Vec::new();
+            for item in feed.items.iter() {
+                match item {
+                    Item::Run(run) => runs.push(run.clone()),
+                    Item::Separator(_) => {}
+                    Item::Message(_) => {}
+                }
+            }
+            runs
+        })
+    }
+
+    #[gpui::test]
+    fn a_streaming_run_is_drawn_and_then_replaced_by_its_answer(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        mock.step();
+        cx.run_until_parked();
+        let queued = runs(&feed, cx);
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].state, RunState::Queued);
+        assert_eq!(queued[0].id, None);
+        for _ in 0..3 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        let streaming = runs(&feed, cx);
+        assert_eq!(streaming.len(), 1);
+        assert_eq!(streaming[0].state, RunState::Running);
+        assert_eq!(streaming[0].segment, "Посмотрю, ");
+        let Some(tuclaw_core::v3::RunId(id)) = streaming[0].id.clone() else {
+            panic!("a started run carries its id");
+        };
+        let selector: &'static str = format!("run-{id}").leak();
+        assert!(cx.debug_bounds(selector).is_some(), "the run card is drawn");
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len())
+        });
+        play(&mock, cx);
+        assert!(runs(&feed, cx).is_empty());
+        state.read_with(cx, |state, _cx| {
+            let last = state.messages().last().expect("the answer arrived");
+            assert_eq!(last.author, Author::Agent(AgentId(1)));
+        });
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len())
+        });
+    }
+
+    #[gpui::test]
+    fn the_live_run_of_a_surface_shows_its_steps(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        let live = runs(&feed, cx);
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].author, Author::Agent(AgentId(3)));
+        assert_eq!(
+            live[0].steps,
+            vec![
+                StepView::Thought("Проверяю новые релизы.".to_string()),
+                StepView::Tool {
+                    name: "WebFetch".to_string(),
+                    detail: "https://example.org/releases".to_string(),
+                    status: ToolStatus::Ok,
+                },
+                StepView::Status {
+                    status: "compacting".to_string(),
+                    detail: "context 91%".to_string(),
+                },
+            ]
+        );
+        assert_eq!(live[0].segment, "Нашёл три новых релиза, ");
     }
 }

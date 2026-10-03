@@ -141,6 +141,25 @@ impl AppState {
         &self.source
     }
 
+    pub fn live_runs(&self) -> Vec<&Run> {
+        let Some(selected) = self.selected else {
+            return Vec::new();
+        };
+        let surface = link::surface_id(selected);
+        let mut runs = Vec::new();
+        for run in self.runs.values() {
+            if run.surface_id == Some(surface) {
+                runs.push(run);
+            }
+        }
+        for run in &self.queued {
+            if run.surface_id == Some(surface) {
+                runs.push(run);
+            }
+        }
+        runs
+    }
+
     pub fn wired_agents(&self, channel: ChannelId) -> usize {
         let surface = link::surface_id(channel);
         let mut count = 0;

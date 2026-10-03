@@ -25,7 +25,7 @@ Two crates in one workspace.
 `core/src/testing.rs` (feature `test-support`) is `FakeDaemon`, a loopback HTTP and WebSocket server for transport tests.
 
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
-`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the text input (`input.rs`), the composer
+`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the live run card (`live.rs`), the text input (`input.rs`), the composer
 (`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
 the commit `build.rs` bakes in, Quit on Cmd+Q). Menu action handlers that open a prompt go through
 `cx.defer`: an action dispatched while a window is active runs inside that window's update, so a
@@ -75,7 +75,7 @@ fails, the pixels just stop updating.
 | `SelectionChanged` | feed | rebuild items, `ListState::reset(count)`, push the new placeholder into the composer |
 | `MessagesLoaded` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `MessageAppended` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
-| `RunsChanged` | feed | rebuild items, repaint only — no reset |
+| `RunsChanged` | feed | rebuild items; `remeasure_items` over the run rows when the count is unchanged, else `reset(count)` |
 | `SendFailed(text)` | feed | `Composer::restore(text)` |
 
 Every `match` on `StateEvent` lists all five variants, including the empty arms. No `_ =>`.
