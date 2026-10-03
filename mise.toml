@@ -36,3 +36,7 @@ run = "fish script/bundle-mac.fish --open"
 [tasks.install]
 description = "Build Tuclaw.app and copy it to /Applications"
 run = "fish script/bundle-mac.fish --install"
+
+[tasks.snapshot-world]
+description = "Turn a prod snapshot DB into the mock's world.json (outside git)"
+run = "python3 script/snapshot-world.py"

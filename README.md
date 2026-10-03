@@ -30,6 +30,10 @@ shown in UTC, not in the local zone.
 
 `tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with a bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the app runs against until the daemon ships the API. The UI is not wired to it yet; that comes as separate tasks.
 
+### Real data before the daemon serves v3
+
+Until `/api/v3` is live, the mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; when that file exists the app starts on it (the toolbar says `snapshot`), otherwise on the built-in world. `TUCLAW_MOCK_WORLD` points at another file. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run.
+
 ## Building
 
 Prerequisites: macOS, [mise](https://mise.jdx.dev) — the Rust pin is enforced through it, see

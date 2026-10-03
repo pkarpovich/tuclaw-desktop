@@ -3,6 +3,10 @@ use tuclaw_core::model::{
 };
 use tuclaw_core::v3;
 
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+
 pub fn channel(surface: &v3::Surface) -> Channel {
     let v3::SurfaceId(id) = surface.id;
     Channel {
@@ -103,27 +107,43 @@ pub fn initials(name: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
     Mock,
+    Snapshot,
     Daemon(String),
 }
 
 pub struct Config {
     pub daemon_url: Option<String>,
     pub token: Option<String>,
+    pub world: Option<PathBuf>,
 }
 
 impl Config {
     pub fn from_env() -> Config {
+        let world = match std::env::var("TUCLAW_MOCK_WORLD") {
+            Ok(path) => Some(PathBuf::from(path)),
+            Err(_) => default_world(),
+        };
         Config {
             daemon_url: std::env::var("TUCLAW_DAEMON_URL").ok(),
             token: std::env::var("TUCLAW_CLIENT_TOKEN").ok(),
+            world,
         }
     }
 
     pub fn client(self) -> Result<(v3::Client, Source), String> {
-        let Config { daemon_url, token } = self;
+        let Config {
+            daemon_url,
+            token,
+            world,
+        } = self;
         let Some(url) = daemon_url else {
-            let mock = v3::MockTransport::new(v3::Scenario::default(), v3::Pace::Realtime);
-            return Ok((v3::Client::mock(&mock), Source::Mock));
+            let Some(world) = world else {
+                let mock = v3::MockTransport::new(v3::Scenario::default(), v3::Pace::Realtime);
+                return Ok((v3::Client::mock(&mock), Source::Mock));
+            };
+            let seed = load_seed(&world)?;
+            let mock = v3::MockTransport::seeded(seed, v3::Scenario::default(), v3::Pace::Realtime);
+            return Ok((v3::Client::mock(&mock), Source::Snapshot));
         };
         let Some(token) = token else {
             return Err("TUCLAW_DAEMON_URL is set but TUCLAW_CLIENT_TOKEN is not".to_string());
@@ -132,6 +152,22 @@ impl Config {
             v3::Client::http(&url, v3::ClientToken(token)).map_err(|error| error.to_string())?;
         Ok((client, Source::Daemon(url)))
     }
+}
+
+fn default_world() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let path = PathBuf::from(home)
+        .join("Library")
+        .join("Application Support")
+        .join("tuclaw-desktop")
+        .join("world.json");
+    if path.is_file() { Some(path) } else { None }
+}
+
+pub fn load_seed(path: &Path) -> Result<v3::Seed, String> {
+    let file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    serde_json::from_reader(BufReader::new(file))
+        .map_err(|error| format!("{}: {error}", path.display()))
 }
 
 #[cfg(test)]
@@ -238,6 +274,7 @@ mod tests {
         let mock = Config {
             daemon_url: None,
             token: None,
+            world: None,
         };
         let Ok((_client, Source::Mock)) = mock.client() else {
             panic!("no daemon URL means the mock");
@@ -245,6 +282,7 @@ mod tests {
         let daemon = Config {
             daemon_url: Some("http://192.168.1.10:9090".into()),
             token: Some("t".into()),
+            world: None,
         };
         let Ok((_client, Source::Daemon(url))) = daemon.client() else {
             panic!("a URL and a token mean the daemon");
@@ -253,12 +291,47 @@ mod tests {
         let tokenless = Config {
             daemon_url: Some("http://host:9090".into()),
             token: None,
+            world: None,
         };
         assert!(tokenless.client().is_err());
         let bad = Config {
             daemon_url: Some("ftp://host".into()),
             token: Some("t".into()),
+            world: None,
         };
         assert!(bad.client().is_err());
+    }
+
+    #[test]
+    fn a_world_file_seeds_the_mock_and_a_bad_one_fails() {
+        let directory = std::env::temp_dir().join(format!("tuclaw-world-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("the temporary directory is created");
+        let world = directory.join("world.json");
+        let surfaces = include_str!("../../core/testdata/v3/surfaces.json");
+        let agents = include_str!("../../core/testdata/v3/agents.json");
+        std::fs::write(
+            &world,
+            format!(r#"{{"surfaces": {surfaces}, "agents": {agents}}}"#),
+        )
+        .expect("the world is written");
+        let seeded = Config {
+            daemon_url: None,
+            token: None,
+            world: Some(world.clone()),
+        };
+        let Ok((_client, Source::Snapshot)) = seeded.client() else {
+            panic!("a world file means the snapshot");
+        };
+        std::fs::write(&world, "not json").expect("the world is overwritten");
+        let broken = Config {
+            daemon_url: None,
+            token: None,
+            world: Some(world.clone()),
+        };
+        let Err(error) = broken.client() else {
+            panic!("a broken world fails to start");
+        };
+        assert!(error.contains("world.json"), "{error}");
+        std::fs::remove_dir_all(&directory).expect("the temporary directory is removed");
     }
 }

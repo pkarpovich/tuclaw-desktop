@@ -13,7 +13,7 @@ use std::time::Duration;
 use futures::FutureExt;
 use futures::channel::mpsc::{self, TryRecvError, UnboundedReceiver, UnboundedSender};
 use futures::future::{BoxFuture, ready};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::format_description::well_known::Rfc3339;
 use time::macros::datetime;
@@ -37,6 +37,30 @@ const RING: usize = 1000;
 const DELTA_DELAY: Duration = Duration::from_millis(50);
 const STEP_DELAY: Duration = Duration::from_millis(150);
 const IDLE_DELAY: Duration = Duration::from_millis(50);
+
+/// A world the mock starts from: the contract's REST bodies, as a daemon would answer them.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::Seed;
+///
+/// let seed: Seed = serde_json::from_str(r#"{"surfaces": [], "agents": []}"#).unwrap();
+/// assert!(seed.messages.is_empty());
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Seed {
+    /// The answer to `GET /surfaces`.
+    pub surfaces: Vec<Surface>,
+    /// The answer to `GET /agents`.
+    pub agents: Vec<Agent>,
+    /// Every message of every surface, oldest first.
+    #[serde(default)]
+    pub messages: Vec<Message>,
+    /// The runs `GET /runs/{id}` answers, finished ones included.
+    #[serde(default)]
+    pub runs: Vec<RunDetail>,
+}
 
 /// How the mock plays its queued frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,7 +199,17 @@ pub struct MockTransport {
 impl MockTransport {
     /// Creates the mock world and, with [`Pace::Realtime`], starts playing it.
     pub fn new(scenario: Scenario, pace: Pace) -> MockTransport {
-        let world = Arc::new(Mutex::new(World::new(scenario)));
+        MockTransport::start(World::new(scenario), pace)
+    }
+
+    /// Creates a mock world from a [`Seed`] instead of the built-in one, e.g. a snapshot of a real
+    /// daemon's data; posts still play the canned run.
+    pub fn seeded(seed: Seed, scenario: Scenario, pace: Pace) -> MockTransport {
+        MockTransport::start(World::from_seed(seed, scenario), pace)
+    }
+
+    fn start(world: World, pace: Pace) -> MockTransport {
+        let world = Arc::new(Mutex::new(world));
         match pace {
             Pace::Realtime => {
                 let weak = Arc::downgrade(&world);
@@ -479,6 +513,80 @@ impl World {
         world.seed_messages(base);
         world.seed_live_run();
         world
+    }
+
+    fn from_seed(seed: Seed, scenario: Scenario) -> World {
+        let Seed {
+            surfaces,
+            agents,
+            messages,
+            runs,
+        } = seed;
+        let mut next_message = 0;
+        let mut now = datetime!(2026-10-03 00:00 UTC);
+        for message in &messages {
+            let MessageId(id) = message.id;
+            next_message = next_message.max(id);
+            if message.created_at > now {
+                now = message.created_at;
+            }
+        }
+        let mut mock_runs = Vec::new();
+        for RunDetail { run, steps } in runs {
+            let RunRow {
+                id,
+                agent_id,
+                surface_id,
+                origin,
+                kind,
+                status,
+                terminal_reason,
+                error: _,
+                started_at,
+                finished_at,
+                usage: _,
+                context: _,
+            } = run;
+            let Some(surface) = surface_id else {
+                continue;
+            };
+            let finished_at = match (status, finished_at) {
+                (RunStatus::Running, _) => None,
+                (RunStatus::Ok, at) => Some(at.unwrap_or(started_at)),
+                (RunStatus::Error, at) => Some(at.unwrap_or(started_at)),
+                (RunStatus::Interrupted, at) => Some(at.unwrap_or(started_at)),
+                (RunStatus::Unknown, at) => Some(at.unwrap_or(started_at)),
+            };
+            mock_runs.push(MockRun {
+                id,
+                agent: agent_id,
+                surface,
+                origin,
+                kind,
+                status,
+                terminal_reason,
+                started_at,
+                finished_at,
+                steps,
+                segment: String::new(),
+                last_seq: Seq(0),
+            });
+        }
+        World {
+            scenario,
+            now,
+            head: 1,
+            ring: VecDeque::new(),
+            surfaces,
+            agents,
+            messages,
+            runs: mock_runs,
+            queue: VecDeque::new(),
+            subscribers: Vec::new(),
+            posted: HashMap::new(),
+            next_message,
+            next_input: 1,
+        }
     }
 
     fn seed_messages(&mut self, base: OffsetDateTime) {
@@ -1977,6 +2085,40 @@ mod tests {
         mock.fail_next_call();
         assert_eq!(block_on(client.agents()), Err(ApiError::Unavailable));
         assert!(block_on(client.agents()).is_ok());
+    }
+
+    #[test]
+    fn a_seeded_world_answers_from_its_seed() {
+        let surfaces: Vec<Surface> =
+            serde_json::from_str(include_str!("../../testdata/v3/surfaces.json")).unwrap();
+        let agents: Vec<Agent> =
+            serde_json::from_str(include_str!("../../testdata/v3/agents.json")).unwrap();
+        let page: MessagesPage =
+            serde_json::from_str(include_str!("../../testdata/v3/messages_page.json")).unwrap();
+        let detail: RunDetail =
+            serde_json::from_str(include_str!("../../testdata/v3/run.json")).unwrap();
+        let seed = Seed {
+            surfaces,
+            agents,
+            messages: page.messages,
+            runs: vec![detail.clone()],
+        };
+        let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let surfaces = block_on(client.surfaces()).expect("surfaces");
+        assert_eq!(surfaces.len(), 2);
+        assert_eq!(surfaces[0].name, "General");
+        let page = block_on(client.messages(SurfaceId(1), 50)).expect("page");
+        assert_eq!(page.messages.len(), 2);
+        assert_eq!(page.messages[1].id, MessageId(9192));
+        let run = block_on(client.run(&detail.run.id)).expect("the seeded run");
+        assert_eq!(run.steps.len(), 2);
+        assert_eq!(run.run.status, RunStatus::Ok);
+        let posted = block_on(client.post(SurfaceId(1), &post("Привет", None))).expect("posted");
+        assert_eq!(posted.message_id, MessageId(9193));
+        assert_eq!(posted.agent_id, AgentId(1));
+        let mut connection = block_on(client.connect(None)).expect("connects");
+        assert_eq!(kinds(&drain(&mut connection)), vec!["hello"]);
     }
 
     #[test]

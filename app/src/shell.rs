@@ -265,6 +265,7 @@ fn link_tone(link: &Link) -> Hsla {
 fn link_label(state: &AppState) -> SharedString {
     let source = match state.source() {
         Source::Mock => "mock",
+        Source::Snapshot => "snapshot",
         Source::Daemon(_) => "daemon",
     };
     let link = match state.link() {

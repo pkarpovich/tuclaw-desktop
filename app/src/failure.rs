@@ -21,7 +21,7 @@ pub fn start(config: Config) -> Startup {
         config
             .daemon_url
             .clone()
-            .unwrap_or_else(|| "the built-in mock".to_string()),
+            .unwrap_or_else(|| "the mock daemon".to_string()),
     );
     match config.client() {
         Ok((client, source)) => Startup::Ready(Box::new(AppState::new(client, source))),
@@ -115,6 +115,7 @@ mod tests {
         let startup = start(Config {
             daemon_url: None,
             token: None,
+            world: None,
         });
         let Startup::Ready(state) = startup else {
             panic!("the mock always starts");
@@ -127,6 +128,7 @@ mod tests {
         let startup = start(Config {
             daemon_url: Some("http://host:9090".into()),
             token: None,
+            world: None,
         });
         let Startup::Failed(FailureView { source, error }) = startup else {
             panic!("a tokenless daemon must not start");
