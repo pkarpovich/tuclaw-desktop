@@ -32,7 +32,7 @@ pub fn agent(agent: &v3::Agent, busy_on: Option<&str>) -> Agent {
         ident,
         description,
         bot_username: _,
-        model: _,
+        model,
         state: _,
         live_run: _,
         home_surface_id: _,
@@ -41,11 +41,13 @@ pub fn agent(agent: &v3::Agent, busy_on: Option<&str>) -> Agent {
         Some(surface) => AgentStatus::Busy(format!("in #{surface}")),
         None => AgentStatus::Idle,
     };
-    let role = if description.is_empty() {
-        format!("@{ident}")
-    } else {
-        description.clone()
-    };
+    let mut role = format!("@{ident}");
+    if !description.is_empty() {
+        role = format!("{description} · {role}");
+    }
+    if !model.is_empty() {
+        role = format!("{role} · {model}");
+    }
     let v3::AgentId(raw) = *id;
     Agent {
         id: AgentId(raw),
@@ -170,6 +172,14 @@ mod tests {
         assert_eq!(busy.status, AgentStatus::Busy("in #General".into()));
         assert_eq!(busy.initials, "MF");
         assert_eq!(busy.role, "@magnet_feed");
+        let described: v3::Agent = serde_json::from_str(
+            r#"{"id": 1, "name": "Jarvis", "ident": "tuclaw", "description": "The house butler", "model": "opus[1m]:medium", "state": "idle"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            agent(&described, None).role,
+            "The house butler · @tuclaw · opus[1m]:medium"
+        );
         assert_eq!(agent(&raw, None).status, AgentStatus::Idle);
     }
 

@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Point, Render,
-    SharedString, Subscription, Window, actions, div, point, prelude::*, px,
+    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, Hsla, IntoElement, Pixels, Point,
+    Render, SharedString, Subscription, Window, actions, div, point, prelude::*, px,
 };
 
 use crate::agents::AgentsView;
@@ -196,8 +196,18 @@ impl Shell {
                         div()
                             .id("link-status")
                             .debug_selector(|| "link-status".to_string())
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
                             .text_size(px(11.5))
                             .text_color(theme::text_muted())
+                            .child(
+                                div()
+                                    .w(px(6.))
+                                    .h(px(6.))
+                                    .rounded_full()
+                                    .bg(link_tone(self.state.read(cx).link())),
+                            )
                             .child(link_label(self.state.read(cx))),
                     )
                     .child(settings_affordance()),
@@ -240,6 +250,15 @@ impl Render for Shell {
             }))
             .child(self.top_bar(cx))
             .child(columns.children(body))
+    }
+}
+
+fn link_tone(link: &Link) -> Hsla {
+    match link {
+        Link::Connecting => theme::text_muted(),
+        Link::Live => theme::status_idle(),
+        Link::Reconnecting => theme::status_busy(),
+        Link::Failed(_) => theme::accent(),
     }
 }
 
@@ -311,7 +330,7 @@ mod tests {
 
     use super::{
         CONTENT_INSET, GUTTER, HAIRLINE, Shell, TOOLBAR_HEIGHT, TRAFFIC_LIGHT_SIZE, ToggleSidebar,
-        link_label, traffic_light_position,
+        link_label, link_tone, traffic_light_position,
     };
     use crate::state::{AppState, Segment};
     use crate::testing::loaded;
@@ -505,5 +524,15 @@ mod tests {
         state.read_with(cx, |state, _cx| {
             assert_eq!(state.sidebar(), SidebarVisibility::Shown)
         });
+    }
+
+    #[test]
+    fn every_link_state_has_its_own_tone() {
+        use crate::state::Link;
+        use crate::theme;
+        assert_eq!(link_tone(&Link::Live), theme::status_idle());
+        assert_eq!(link_tone(&Link::Reconnecting), theme::status_busy());
+        assert_eq!(link_tone(&Link::Failed("x".into())), theme::accent());
+        assert_eq!(link_tone(&Link::Connecting), theme::text_muted());
     }
 }
