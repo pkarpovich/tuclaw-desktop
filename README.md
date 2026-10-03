@@ -54,8 +54,8 @@ seconds.
 
 Four things about this project's toolchain are non-obvious, and each one has cost a build.
 
-**Rust 1.98.0, pinned in `mise.toml`.** The floor is 1.97: GPUI's main branch uses
-`std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.0 is verified
+**Rust 1.98.1, pinned in `mise.toml`.** The floor is 1.97: GPUI's main branch uses
+`std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.1 (zed's own `rust-toolchain.toml`) is verified
 against the pinned revision and compiles the whole dependency tree clean.
 
 **Never run a bare `cargo`.** The pin does not reach it. On the author's machine `which cargo`
@@ -88,8 +88,8 @@ GPUI is pinned to a git revision, not a crates.io version — only a stale `gpui
 `gpui_platform` is not published at all, so the pin is mandatory:
 
 ```toml
-gpui = { git = "https://github.com/zed-industries/zed", rev = "fecc3273ed32643c2ea1b04a74c8780e2c9ffaf8" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "fecc3273ed32643c2ea1b04a74c8780e2c9ffaf8", features = ["font-kit"] }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "a84689073d296dfd39987bc7dd478e43ef76d83a" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "a84689073d296dfd39987bc7dd478e43ef76d83a", features = ["font-kit"] }
 ```
 
 Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under
