@@ -62,9 +62,18 @@ if test $open = yes
     end
     pkill -f 'Tuclaw.app/Contents/MacOS/tuclaw-desktop'
     for attempt in (seq 50)
-        pgrep -qf 'Tuclaw.app/Contents/MacOS/tuclaw-desktop'; or break
+        set -l running (pgrep -f 'Tuclaw.app/Contents/MacOS/tuclaw-desktop')
+        set -l registered (lsappinfo find bundleid=dev.pkarpovich.tuclaw)
+        test -z "$running" -a -z "$registered"; and break
         sleep 0.1
     end
-    open $target; or exit 1
-    echo "opened $target"
+    for attempt in (seq 3)
+        if open $target
+            echo "opened $target"
+            exit 0
+        end
+        sleep 0.5
+    end
+    echo "could not open $target" >&2
+    exit 1
 end
