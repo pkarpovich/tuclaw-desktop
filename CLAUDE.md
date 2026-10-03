@@ -8,8 +8,7 @@ traps (the `mise run` rule above all — never run a bare `cargo`).
 
 Two crates in one workspace.
 
-`core/` is `tuclaw-core`: domain types (`model.rs`), the SQLite store (`store.rs`, `schema.rs`,
-`paths.rs`), the fixtures (`fixtures.rs`) and day grouping (`grouping.rs`).
+`core/` is `tuclaw-core`: the domain types the views render (`model.rs`), day grouping (`grouping.rs`) and the client of the daemon's `/api/v3` (`v3/`). The local SQLite store and its fixtures were removed on 2026-10-04: the app runs on the v3 client only.
 
 `core/src/v3/` is the client of the daemon's `/api/v3`, built to `docs/contracts/v3-client-contract.md` (a verbatim copy of tuclaw's contract; the two copies stay identical apart from the header):
 
@@ -26,47 +25,39 @@ Two crates in one workspace.
 `core/src/testing.rs` (feature `test-support`) is `FakeDaemon`, a loopback HTTP and WebSocket server for transport tests.
 
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
-`message.rs`, `thread.rs`, `agents.rs`, `failure.rs`), the text input (`input.rs`), the composer
+`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the text input (`input.rs`), the composer
 (`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
 the commit `build.rs` bakes in, Quit on Cmd+Q). Menu action handlers that open a prompt go through
 `cx.defer`: an action dispatched while a window is active runs inside that window's update, so a
 second `window.update` from the handler fails silently.
 
 **`core` must never depend on `gpui`.** Not directly, not transitively. Two reasons: the domain and
-the store have to be testable with no window and no GPU, and storage concerns must stay out of the
+the client have to be testable with no window and no GPU, and transport concerns must stay out of the
 render path. `cargo tree -p tuclaw-core` must not mention `gpui`. If a core type seems to need a
 `gpui` type, the conversion belongs on the app side.
 
-`schema.rs` and `fixtures.rs` are private modules, which is what keeps `rusqlite` and the fixture
-types out of `tuclaw-core`'s public API. Public items in `core` carry `///` docs (`rustdoc` skill);
-`app` items do not.
+Public items in `core` carry `///` docs (`rustdoc` skill); `app` items do not.
 
-**`failure.rs` is not only a view: it owns the startup path.** `start(now) -> Startup` resolves the
-database path, creates the directory, opens the store, seeds it and builds `AppState`, returning
-`Ready(Box<AppState>)` or `Failed(FailureView)`; `main` opens one window with either as its root, so
-a store failure still gets a window. `start_at(path, now)` is the testable half — look there, not in
-`main.rs`. `AppState::new` takes no `Context` because `cx.new` cannot return a `Result`, so the state
-is built before `cx.new(|_| state)`. `Ready` boxes its payload or clippy's `large_enum_variant` fails
-the `-D warnings` gate.
+**`failure.rs` is not only a view: it owns the startup path.** `start(Config) -> Startup` picks the source - the real daemon when `TUCLAW_DAEMON_URL` and `TUCLAW_CLIENT_TOKEN` are set, else the built-in `MockTransport` in real time - and builds `AppState`, returning `Ready(Box<AppState>)` or `Failed(FailureView)` (a URL without a token, or not `http://`); `main` opens one window with either as its root and then calls `AppState::start`, which spawns the link task. `Ready` boxes its payload or clippy's `large_enum_variant` fails the `-D warnings` gate.
+
+**`link.rs` is the seam between v3 and the views.** It maps surfaces onto `Channel`, agents onto `Agent` (busy while a live run of theirs is tracked), messages onto `Message` (`Author::System` for notices, the text as one `Span::Text` until Markdown rendering lands), and picks the source from the environment. Views never see a v3 type except the `Run`s of `AppState::live_runs`.
+
+**The link task** (`run_link` in `state.rs`) is the contract's fresh start: connect without `since`, read `hello`, then fetch surfaces, agents and the selected surface's page, then apply every frame in order through `AppState::apply`. A closed socket sets `Link::Reconnecting`, waits `Backoff::next_delay` on `cx.background_executor().timer` (tests `advance_clock` through it), and reconnects with the last seq; a `gap` refetches. Selecting a surface sends `focus` and loads its page. Posting appends an optimistic row with a negative local id and a `ClientMessageId`, reconciled by the `202` and by the echoed `message.created`; a failed post removes the row and emits `SendFailed(text)`, which the feed hands back to the composer.
 
 ## State ownership
 
-One `AppState` entity owns all mutable application state: the channel list, the selected channel and
-its messages, the open thread with its root message, which view is showing, whether the sidebar is shown, and the last channel
-visited of each kind.
+One `AppState` entity owns all mutable application state: the v3 client and the link status, the surfaces and agents, the selected channel and its messages, the live runs and the queued placeholders, the optimistic posts, which view is showing, and whether the sidebar is shown.
 
 - Views hold `Entity<AppState>` and read through it. **No view mutates another view's data, and no
-  view talks to the store directly.**
+  view talks to the client directly.**
 - Every mutation is a method on `AppState` that ends in `cx.notify()` and, where a listener has to do
   more than repaint, `cx.emit(...)`.
 - `active_segment()` is derived, not stored. Anything derivable stays derived — the feed header's
   `N agents`, the status bar's `N of M agents busy`, the sidebar's sections.
 
-**The one thing `AppState` does not own is text being typed.** Each composer creates a `TextInput`
-entity that owns its own buffer, because `EntityInputHandler` requires the element to hold the string
-and because two composers on screen at once would fight over one shared field. The composer hands the
-body to `AppState` on submit and clears the input **only if the state reports `Ok`** — a failed write
-leaves the text in place so the user can retry. The placeholder names the *selected* channel, so it
+**The one thing `AppState` does not own is text being typed.** The composer creates a `TextInput`
+entity that owns its own buffer, because `EntityInputHandler` requires the element to hold the string. The composer hands the
+body to `AppState` on submit and clears the input **only if the state reports `Ok`**; since a post completes later, a post that fails after that comes back as `StateEvent::SendFailed` and `Composer::restore` puts the text back. The placeholder names the *selected* channel, so it
 cannot be fixed at construction: the feed calls `Composer::set_placeholder` from its
 `SelectionChanged` arm rather than rebuilding the composer, which would drop focus mid-session.
 
@@ -82,10 +73,10 @@ fails, the pixels just stop updating.
 | event | listener | reaction |
 |---|---|---|
 | `SelectionChanged` | feed | rebuild items, `ListState::reset(count)`, push the new placeholder into the composer |
+| `MessagesLoaded` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `MessageAppended` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
-| `ReplyAppended` | feed, thread panel | rebuild items, repaint only — no reset |
-| `ThreadOpened` | thread panel | focus its composer's input |
-| `ThreadClosed` | feed | focus its composer's input |
+| `RunsChanged` | feed | rebuild items, repaint only — no reset |
+| `SendFailed(text)` | feed | `Composer::restore(text)` |
 
 Every `match` on `StateEvent` lists all five variants, including the empty arms. No `_ =>`.
 
@@ -115,9 +106,8 @@ keys:
 2. The element's `paint` calls `window.handle_input(&focus_handle, ElementInputHandler::new(bounds,
    entity), cx)`. Implementing `EntityInputHandler` does nothing on its own, and the handler only
    registers while the handle is focused.
-3. Focus moves are explicit: the window focuses the feed composer when it opens, `ThreadOpened` moves
-   focus to the thread composer, `ThreadClosed` returns it to the feed's. Both views take focus
-   through a `Focus { Requested, Taken }` field consumed during render, because a focus call needs a
+3. Focus moves are explicit: the feed focuses its composer when it opens, through a
+   `Focus { Requested, Taken }` field consumed during render, because a focus call needs a
    `&mut Window` that a subscription callback does not have.
 
 **Every range crossing `EntityInputHandler` is in UTF-16 code units, not byte offsets.** The element
@@ -130,9 +120,7 @@ test`.
 
 ## Two settled behaviours
 
-- **The thread is independent of the selected channel.** Switching channels leaves an open thread
-  open, so `AppState` caches the thread's root message and its channel; the panel never reads them
-  from the current selection.
+- **No threads and no direct messages until step D.** v3.0 has neither, so the thread panel, the Reply pill and the Direct segment were removed on 2026-10-04; `ChannelKind::Direct` and the sidebar's direct rows stay in the model for when the API brings them.
 - **Enter sends, Shift+Enter breaks the line.** Both are explicit `KeyBinding`s registered in
   `input::bind_keys`, not defaults.
 
@@ -184,22 +172,19 @@ From the `rust-style` skill. Not suggestions:
 
 Tests are a required deliverable of every change, not an afterthought.
 
-`core` is plain `#[test]` against in-memory SQLite, one database per test. `app` is `#[gpui::test]`
-with `TestAppContext` / `VisualTestContext`.
+`core` is plain `#[test]`, against golden JSON, `FakeDaemon` and the mock. `app` is `#[gpui::test]`
+with `TestAppContext` / `VisualTestContext`, every state built by `testing::loaded` (or `mocked` with a `Scenario`) over `MockTransport` in `Pace::Stepped`: `testing::play` pumps the client's frames and plays the queue, then `run_until_parked`.
 
 Click paths are testable in-process: `InteractiveElement::debug_selector(|| "name".into())` on a
 `div()` records its laid-out bounds under `test-support`, `VisualTestContext::debug_bounds("name")`
 returns them, and `simulate_click(bounds.center(), Modifiers::default())` clicks it. The convention is
-`"<view>-<thing>-<key>"` — `sidebar-row-movie-night`, `segment-agents`, `message-reply-<id>`,
-`thread-close`. Selectors are test-only strings and never appear in rendered output. `TextInput::new`
-takes its selector as a constructor argument, because it has to land on the same `div()` that owns
-`track_focus`, and two inputs (`input-feed`, `input-thread`) are on screen at once.
+`"<view>-<thing>-<key>"` — `sidebar-row-General`, `segment-agents`, `message-<id>`, `link-status`.
+Selectors are test-only strings and never appear in rendered output. `TextInput::new` takes its selector as a constructor argument, because it has to land on the same `div()` that owns `track_focus`.
 
 **Any `#[gpui::test]` that simulates keys calls `cx.update(input::bind_keys)` before it builds its
 harness.** The bindings live under the `TuclawInput` key context and are registered per `App`;
 without them `enter` and `shift-enter` arrive as a literal newline and the test fails as if the logic
-were wrong. Test-only accessors that reach across module privacy — `Feed::input_focus`,
-`ThreadPanel::input_focus` — are `#[cfg(test)]`-gated, because an accessor with no caller in the bin
+were wrong. Test-only accessors that reach across module privacy — `Composer::text` — are `#[cfg(test)]`-gated, because an accessor with no caller in the bin
 target is dead code under the `-D warnings` gate.
 
 A draw test proves only that rendering did not panic. It says nothing about what was drawn, so it is

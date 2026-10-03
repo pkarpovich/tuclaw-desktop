@@ -1,20 +1,9 @@
-use std::rc::Rc;
-
-use gpui::{
-    App, Div, FontWeight, IntoElement, SharedString, Stateful, Window, div, prelude::*, px,
-};
+use gpui::{Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, Span};
 
 use crate::theme;
-
-pub type OnOpen = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
-
-pub enum Replies {
-    Affordance(OnOpen),
-    Hidden,
-}
 
 struct Writer {
     name: SharedString,
@@ -26,6 +15,7 @@ struct Writer {
 enum Tone {
     User,
     Agent(usize),
+    System,
 }
 
 enum Badge {
@@ -33,17 +23,16 @@ enum Badge {
     None,
 }
 
-pub fn message_row(message: &Message, agents: &[Agent], replies: Replies) -> impl IntoElement {
+pub fn message_row(message: &Message, agents: &[Agent]) -> impl IntoElement {
     let Message {
         id,
         author,
         body,
         sent_at,
-        reply_count,
     } = message;
     let writer = writer(*author, agents);
     let MessageId(raw) = *id;
-    let group = SharedString::from(format!("message-{raw}"));
+    let selector = format!("message-{raw}");
     let column = div()
         .flex()
         .flex_col()
@@ -52,27 +41,23 @@ pub fn message_row(message: &Message, agents: &[Agent], replies: Replies) -> imp
         .gap(px(2.))
         .child(byline(&writer, *sent_at))
         .child(paragraph(body));
-    let row = div()
-        .group(group.clone())
-        .relative()
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
         .w_full()
         .flex()
         .gap(px(12.))
         .px(px(20.))
         .py(px(8.))
-        .child(avatar(&writer));
-    let Replies::Affordance(on_open) = replies else {
-        return row.child(column);
-    };
-    if *reply_count == 0 {
-        return row.child(column).child(hover_reply(*id, group, on_open));
-    }
-    row.child(column.child(replies_pill(*id, *reply_count, on_open)))
+        .child(avatar(&writer))
+        .child(column)
 }
 
 pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
-    let Author::Agent(author) = author else {
-        return SharedString::new_static("You");
+    let author = match author {
+        Author::User => return SharedString::new_static("You"),
+        Author::System => return SharedString::new_static("tuclaw"),
+        Author::Agent(author) => author,
     };
     let mut found = None;
     for candidate in agents {
@@ -95,22 +80,26 @@ pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
     SharedString::from(name.clone())
 }
 
-pub fn reply_label(count: usize) -> String {
-    if count == 1 {
-        return "1 reply".to_string();
-    }
-    format!("{count} replies")
-}
-
 fn writer(author: Author, agents: &[Agent]) -> Writer {
     let name = author_name(author, agents);
-    let Author::Agent(author) = author else {
-        return Writer {
-            name,
-            initials: SharedString::new_static("YO"),
-            tone: Tone::User,
-            badge: Badge::None,
-        };
+    let author = match author {
+        Author::User => {
+            return Writer {
+                name,
+                initials: SharedString::new_static("YO"),
+                tone: Tone::User,
+                badge: Badge::None,
+            };
+        }
+        Author::System => {
+            return Writer {
+                name,
+                initials: SharedString::new_static("TC"),
+                tone: Tone::System,
+                badge: Badge::None,
+            };
+        }
+        Author::Agent(author) => author,
     };
     let mut found = None;
     for candidate in agents {
@@ -147,6 +136,7 @@ fn avatar(writer: &Writer) -> Div {
     let tone = match writer.tone {
         Tone::User => theme::accent(),
         Tone::Agent(index) => theme::agent_chip(index),
+        Tone::System => theme::status_idle(),
     };
     div()
         .flex_none()
@@ -240,79 +230,4 @@ fn code_chip(code: String) -> Div {
         .bg(theme::sunken())
         .text_size(px(12.5))
         .child(code)
-}
-
-fn replies_pill(id: MessageId, count: usize, on_open: OnOpen) -> Stateful<Div> {
-    let MessageId(raw) = id;
-    let selector = format!("message-reply-{raw}");
-    pill()
-        .mt(px(9.))
-        .id(SharedString::from(selector.clone()))
-        .debug_selector(move || selector)
-        .on_click(move |_event, window, cx| on_open(id, window, cx))
-        .child(bubble())
-        .child(reply_label(count))
-}
-
-fn hover_reply(id: MessageId, group: SharedString, on_open: OnOpen) -> Stateful<Div> {
-    let MessageId(raw) = id;
-    let selector = format!("message-reply-{raw}");
-    pill()
-        .absolute()
-        .right(px(20.))
-        .top(px(4.))
-        .invisible()
-        .group_hover(group, |style| style.visible())
-        .id(SharedString::from(selector.clone()))
-        .debug_selector(move || selector)
-        .on_click(move |_event, window, cx| on_open(id, window, cx))
-        .child(bubble())
-        .child("Reply")
-}
-
-fn pill() -> Div {
-    div()
-        .flex()
-        .flex_none()
-        .self_start()
-        .items_center()
-        .gap(px(7.))
-        .px(px(10.))
-        .py(px(4.))
-        .rounded_full()
-        .bg(theme::raised())
-        .border_1()
-        .border_color(theme::border())
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::text_secondary())
-        .cursor_pointer()
-        .hover(|style| style.bg(theme::sunken()))
-}
-
-fn bubble() -> Div {
-    div()
-        .flex_none()
-        .w(px(12.))
-        .h(px(10.))
-        .rounded(px(3.))
-        .border_1()
-        .border_color(theme::text_muted())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::reply_label;
-
-    #[test]
-    fn one_reply_reads_in_the_singular() {
-        assert_eq!(reply_label(1), "1 reply");
-    }
-
-    #[test]
-    fn every_other_count_reads_in_the_plural() {
-        assert_eq!(reply_label(0), "0 replies");
-        assert_eq!(reply_label(2), "2 replies");
-        assert_eq!(reply_label(4), "4 replies");
-    }
 }

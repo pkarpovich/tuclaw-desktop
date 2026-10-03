@@ -5,10 +5,10 @@ use gpui::{
 
 use crate::agents::AgentsView;
 use crate::feed::Feed;
+use crate::link::Source;
 use crate::sidebar::Sidebar;
-use crate::state::{AppState, Segment, SidebarVisibility, View};
+use crate::state::{AppState, Link, Segment, SidebarVisibility, View};
 use crate::theme;
-use crate::thread::ThreadPanel;
 
 actions!(tuclaw_shell, [ToggleSidebar]);
 
@@ -32,7 +32,6 @@ pub struct Shell {
     state: Entity<AppState>,
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
-    thread: Entity<ThreadPanel>,
     agents: Entity<AgentsView>,
     _observation: Subscription,
 }
@@ -45,14 +44,11 @@ impl Shell {
         let built = state.clone();
         let feed = cx.new(|cx| Feed::new(built, cx));
         let built = state.clone();
-        let thread = cx.new(|cx| ThreadPanel::new(built, cx));
-        let built = state.clone();
         let agents = cx.new(|cx| AgentsView::new(built, cx));
         Shell {
             state,
             sidebar,
             feed,
-            thread,
             agents,
             _observation: observation,
         }
@@ -61,7 +57,6 @@ impl Shell {
     fn body(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let state = self.state.read(cx);
         let view = state.view();
-        let open = state.thread().is_some();
         match view {
             View::Agents => vec![
                 card()
@@ -73,29 +68,16 @@ impl Shell {
                     .child(self.agents.clone())
                     .into_any_element(),
             ],
-            View::Conversation => {
-                let mut body = vec![
-                    card()
-                        .id("content-card")
-                        .debug_selector(|| "content-card".to_string())
-                        .flex_1()
-                        .min_w(px(0.))
-                        .overflow_hidden()
-                        .child(self.feed.clone())
-                        .into_any_element(),
-                ];
-                if open {
-                    body.push(
-                        card()
-                            .w(px(360.))
-                            .flex_none()
-                            .overflow_hidden()
-                            .child(self.thread.clone())
-                            .into_any_element(),
-                    );
-                }
-                body
-            }
+            View::Conversation => vec![
+                card()
+                    .id("content-card")
+                    .debug_selector(|| "content-card".to_string())
+                    .flex_1()
+                    .min_w(px(0.))
+                    .overflow_hidden()
+                    .child(self.feed.clone())
+                    .into_any_element(),
+            ],
         }
     }
 
@@ -202,7 +184,6 @@ impl Shell {
                     .rounded(px(9.))
                     .bg(theme::sunken())
                     .child(self.segment(Segment::Channel, active, "Channel", "segment-channel", cx))
-                    .child(self.segment(Segment::Direct, active, "Direct", "segment-direct", cx))
                     .child(self.segment(Segment::Agents, active, "Agents", "segment-agents", cx)),
             )
             .child(div().flex_1())
@@ -213,9 +194,11 @@ impl Shell {
                     .gap(px(10.))
                     .child(
                         div()
+                            .id("link-status")
+                            .debug_selector(|| "link-status".to_string())
                             .text_size(px(11.5))
                             .text_color(theme::text_muted())
-                            .child("tuclaw · local"),
+                            .child(link_label(self.state.read(cx))),
                     )
                     .child(settings_affordance()),
             )
@@ -258,6 +241,20 @@ impl Render for Shell {
             .child(self.top_bar(cx))
             .child(columns.children(body))
     }
+}
+
+fn link_label(state: &AppState) -> SharedString {
+    let source = match state.source() {
+        Source::Mock => "mock",
+        Source::Daemon(_) => "daemon",
+    };
+    let link = match state.link() {
+        Link::Connecting => "connecting".to_string(),
+        Link::Live => "live".to_string(),
+        Link::Reconnecting => "reconnecting".to_string(),
+        Link::Failed(reason) => format!("offline: {reason}"),
+    };
+    SharedString::from(format!("tuclaw · {source} · {link}"))
 }
 
 fn card() -> Div {
@@ -308,29 +305,19 @@ fn rule(width: Pixels) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext, px};
-    use time::macros::datetime;
-    use tuclaw_core::store::Store;
+    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
 
     use crate::state::SidebarVisibility;
 
     use super::{
         CONTENT_INSET, GUTTER, HAIRLINE, Shell, TOOLBAR_HEIGHT, TRAFFIC_LIGHT_SIZE, ToggleSidebar,
-        traffic_light_position,
+        link_label, traffic_light_position,
     };
     use crate::state::{AppState, Segment};
-
-    fn seeded(cx: &mut TestAppContext) -> Entity<AppState> {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        cx.new(|_| state)
-    }
+    use crate::testing::loaded;
 
     fn shell(cx: &mut TestAppContext) -> (Entity<AppState>, &mut VisualTestContext) {
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_shell, cx) = cx.add_window_view(move |_window, cx| Shell::new(built, cx));
         (state, cx)
@@ -391,34 +378,19 @@ mod tests {
     }
 
     #[gpui::test]
-    fn the_thread_card_follows_the_open_thread(cx: &mut TestAppContext) {
+    fn there_is_no_direct_segment(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        assert!(cx.debug_bounds("segment-channel").is_some());
+        assert!(cx.debug_bounds("segment-agents").is_some());
+        assert!(cx.debug_bounds("segment-direct").is_none());
+    }
+
+    #[gpui::test]
+    fn the_toolbar_names_the_source_and_the_link(cx: &mut TestAppContext) {
         let (state, cx) = shell(cx);
-        assert!(
-            cx.debug_bounds("thread-close").is_none(),
-            "no thread card is drawn before a thread opens"
-        );
-        let root = state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for message in state.messages() {
-                if message.reply_count > 0 {
-                    found = Some(message.id);
-                    break;
-                }
-            }
-            found.expect("movie-night carries a thread root")
-        });
-        state.update(cx, |state, cx| state.open_thread(root, cx));
-        cx.run_until_parked();
-        assert!(
-            cx.debug_bounds("thread-close").is_some(),
-            "the thread card joins the feed"
-        );
-        state.update(cx, |state, cx| state.close_thread(cx));
-        cx.run_until_parked();
-        assert!(
-            cx.debug_bounds("thread-close").is_none(),
-            "the thread card leaves with the thread"
-        );
+        assert!(cx.debug_bounds("link-status").is_some());
+        let label = state.read_with(cx, |state, _cx| link_label(state));
+        assert_eq!(label.as_ref(), "tuclaw · mock · live");
     }
 
     #[gpui::test]

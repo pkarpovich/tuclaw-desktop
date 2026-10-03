@@ -82,6 +82,13 @@ impl TextInput {
         cx.notify();
     }
 
+    pub fn set_text(&mut self, text: String, cx: &mut Context<Self>) {
+        self.cursor_utf16 = text.encode_utf16().count();
+        self.text = text;
+        self.marked_utf16 = None;
+        cx.notify();
+    }
+
     pub fn focus_handle(&self) -> &FocusHandle {
         &self.focus
     }

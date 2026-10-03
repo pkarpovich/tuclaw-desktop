@@ -215,28 +215,18 @@ fn status_frame(dot: Hsla, text: Hsla, weight: FontWeight) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
+    use gpui::{Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
     use tuclaw_core::model::{Agent, AgentId, AgentStatus};
-    use tuclaw_core::store::Store;
 
     use super::{AgentCard, AgentsView, Status, agent_cards};
     use crate::input::bind_keys;
     use crate::shell::Shell;
-    use crate::state::{AppState, Segment, View};
-
-    fn seeded(cx: &mut TestAppContext) -> Entity<AppState> {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        cx.new(|_| state)
-    }
+    use crate::state::{Segment, View};
+    use crate::testing::loaded;
 
     #[gpui::test]
     fn the_cards_follow_the_sort_index(cx: &mut TestAppContext) {
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let cards = state.read_with(cx, |state, _cx| agent_cards(state.agents()));
         let mut names = Vec::new();
         let mut statuses = Vec::new();
@@ -254,20 +244,18 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                SharedString::new_static("magnet feed sync"),
-                SharedString::new_static("allspeak"),
-                SharedString::new_static("media review"),
-                SharedString::new_static("tuclaw general"),
+                SharedString::new_static("Jarvis"),
+                SharedString::new_static("Home"),
+                SharedString::new_static("Magnet Feed"),
+                SharedString::new_static("Scout"),
             ]
         );
         assert_eq!(
             statuses,
             vec![
-                Status::Busy(SharedString::new_static(
-                    "Waiting for the download to finish"
-                )),
-                Status::Busy(SharedString::new_static("Syncing subtitles for tonight")),
                 Status::Idle,
+                Status::Idle,
+                Status::Busy(SharedString::new_static("in #Magnet Feed")),
                 Status::Idle,
             ]
         );
@@ -331,7 +319,7 @@ mod tests {
 
     #[gpui::test]
     fn drawing_the_agents_view_does_not_panic(cx: &mut TestAppContext) {
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_view, cx) = cx.add_window_view(move |_window, cx| AgentsView::new(built, cx));
         state.update(cx, |state, cx| {
@@ -344,7 +332,7 @@ mod tests {
     #[gpui::test]
     fn a_channel_row_leaves_the_agents_view(cx: &mut TestAppContext) {
         cx.update(bind_keys);
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_shell, cx): (Entity<Shell>, &mut VisualTestContext) =
             cx.add_window_view(move |_window, cx| Shell::new(built, cx));
@@ -356,8 +344,8 @@ mod tests {
             assert_eq!(state.active_segment(), Segment::Agents)
         });
         let channel = cx
-            .debug_bounds("sidebar-row-movie-night")
-            .expect("the movie-night row is drawn");
+            .debug_bounds("sidebar-row-Smart Home")
+            .expect("the Smart Home row is drawn");
         cx.simulate_click(channel.center(), Modifiers::default());
         state.read_with(cx, |state, _cx| {
             assert_eq!(state.active_segment(), Segment::Channel)

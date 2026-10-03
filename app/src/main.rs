@@ -3,22 +3,24 @@ mod composer;
 mod failure;
 mod feed;
 mod input;
+mod link;
 mod menu;
 mod message;
 mod shell;
 mod sidebar;
 mod state;
+#[cfg(test)]
+mod testing;
 mod theme;
-mod thread;
 
 use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
-use time::OffsetDateTime;
 
 use failure::Startup;
+use link::Config;
 use shell::Shell;
 
 fn main() {
-    let startup = failure::start(OffsetDateTime::now_utc());
+    let startup = failure::start(Config::from_env());
     gpui_platform::application().run(move |cx: &mut App| {
         input::bind_keys(cx);
         menu::install(cx);
@@ -35,6 +37,7 @@ fn main() {
         let opened = match startup {
             Startup::Ready(state) => {
                 let state = cx.new(|_| *state);
+                state.update(cx, |state, cx| state.start(cx));
                 cx.open_window(options, |_, cx| cx.new(|cx| Shell::new(state, cx)))
                     .map(|_| ())
             }

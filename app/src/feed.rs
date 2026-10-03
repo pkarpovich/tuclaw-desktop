@@ -6,10 +6,10 @@ use gpui::{
 };
 use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
-use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message};
+use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
-use crate::composer::{Composer, ComposerKind};
-use crate::message::{OnOpen, Replies, message_row};
+use crate::composer::Composer;
+use crate::message::message_row;
 use crate::state::{AppState, StateEvent};
 use crate::theme;
 
@@ -64,15 +64,19 @@ impl Feed {
                 feed.resync(Resync::Reset, cx);
                 feed.refresh_placeholder(cx);
             }
+            StateEvent::MessagesLoaded => {
+                feed.resync(Resync::Reset, cx);
+                feed.list.scroll_to_end();
+            }
             StateEvent::MessageAppended => {
                 feed.resync(Resync::Reset, cx);
                 feed.list.scroll_to_end();
             }
-            StateEvent::ReplyAppended => feed.resync(Resync::Repaint, cx),
-            StateEvent::ThreadOpened => {}
-            StateEvent::ThreadClosed => {
-                feed.focus = Focus::Requested;
-                cx.notify();
+            StateEvent::RunsChanged => feed.resync(Resync::Repaint, cx),
+            StateEvent::SendFailed(text) => {
+                let text = text.clone();
+                feed.composer
+                    .update(cx, |composer, cx| composer.restore(text, cx));
             }
         });
         let items = items(state.read(cx), OffsetDateTime::now_utc());
@@ -81,7 +85,6 @@ impl Feed {
         let sender = state.clone();
         let composer = cx.new(|cx| {
             Composer::new(
-                ComposerKind::Feed,
                 placeholder,
                 Box::new(move |body, cx| sender.update(cx, |state, cx| state.send(body, cx))),
                 cx,
@@ -96,11 +99,6 @@ impl Feed {
             _observation: observation,
             _events: events,
         }
-    }
-
-    #[cfg(test)]
-    pub fn input_focus(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.composer.read(cx).focus_handle(cx)
     }
 
     fn refresh_placeholder(&mut self, cx: &mut Context<Self>) {
@@ -125,22 +123,15 @@ impl Feed {
         }
         let items = self.items.clone();
         let state = self.state.clone();
-        let opener = self.state.clone();
-        let on_open: OnOpen = Rc::new(move |root, _window, cx| {
-            opener.update(cx, |state, cx| state.open_thread(root, cx));
-        });
         list(self.list.clone(), move |index, _window, cx| {
             let Some(item) = items.get(index) else {
                 return div().into_any_element();
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
-                Item::Message(message) => message_row(
-                    message,
-                    state.read(cx).agents(),
-                    Replies::Affordance(on_open.clone()),
-                )
-                .into_any_element(),
+                Item::Message(message) => {
+                    message_row(message, state.read(cx).agents()).into_any_element()
+                }
             }
         })
         .flex_1()
@@ -194,7 +185,12 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
 }
 
 fn header(state: &AppState) -> Header {
-    let selected = state.selected();
+    let Some(selected) = state.selected() else {
+        return Header::Channel {
+            name: SharedString::new_static(""),
+            agents: 0,
+        };
+    };
     let mut found = None;
     for channel in state.channels() {
         if channel.id == selected {
@@ -219,7 +215,7 @@ fn header(state: &AppState) -> Header {
     match kind {
         ChannelKind::Channel => Header::Channel {
             name: SharedString::from(name.clone()),
-            agents: agent_authors(state.messages()),
+            agents: state.wired_agents(selected),
         },
         ChannelKind::Direct(agent) => direct_header(state.agents(), *agent, name),
     }
@@ -265,26 +261,6 @@ fn placeholder(state: &AppState) -> SharedString {
             role: _,
         } => SharedString::from(format!("Message {name}")),
     }
-}
-
-fn agent_authors(messages: &[Message]) -> usize {
-    let mut seen: Vec<AgentId> = Vec::new();
-    for Message {
-        id: _,
-        author,
-        body: _,
-        sent_at: _,
-        reply_count: _,
-    } in messages
-    {
-        let Author::Agent(agent) = author else {
-            continue;
-        };
-        if !seen.contains(agent) {
-            seen.push(*agent);
-        }
-    }
-    seen.len()
 }
 
 fn agent_count(agents: usize) -> String {
@@ -390,7 +366,6 @@ fn header_element(header: Header) -> impl IntoElement {
         .border_color(theme::hairline())
         .child(lead)
         .child(div().flex_1())
-        .child(chip().child(thread_glyph()))
         .child(
             chip()
                 .text_size(px(14.))
@@ -410,15 +385,6 @@ fn chip() -> Div {
         .rounded(px(8.))
         .border_1()
         .border_color(theme::border())
-}
-
-fn thread_glyph() -> impl IntoElement {
-    div()
-        .w(px(13.))
-        .h(px(11.))
-        .rounded(px(3.))
-        .border_1()
-        .border_color(theme::text_secondary())
 }
 
 fn day_separator(title: SharedString) -> impl IntoElement {
@@ -516,27 +482,13 @@ fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{
-        AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px,
-    };
-    use time::macros::datetime;
-    use tuclaw_core::model::{
-        Agent, AgentId, AgentStatus, Author, ChannelId, ChannelKind, Message, MessageId, Span,
-    };
-    use tuclaw_core::store::Store;
+    use gpui::{Entity, SharedString, TestAppContext, VisualTestContext};
+    use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Span};
+    use tuclaw_core::v3::MockTransport;
 
-    use super::{Busy, Feed, Item, agent_authors, busy_agents};
+    use super::{Busy, Feed, Header, busy_agents, header};
     use crate::state::AppState;
-
-    fn from(author: Author, id: i64) -> Message {
-        Message {
-            id: MessageId(id),
-            author,
-            body: vec![Span::Text("hi".to_string())],
-            sent_at: datetime!(2026-08-26 09:00 UTC),
-            reply_count: 0,
-        }
-    }
+    use crate::testing::{channel_named, loaded, play};
 
     fn agent(id: i64, status: AgentStatus) -> Agent {
         Agent {
@@ -549,58 +501,22 @@ mod tests {
         }
     }
 
-    fn feed(cx: &mut TestAppContext) -> (Entity<AppState>, Entity<Feed>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+    fn feed(
+        cx: &mut TestAppContext,
+    ) -> (
+        MockTransport,
+        Entity<AppState>,
+        Entity<Feed>,
+        &mut VisualTestContext,
+    ) {
+        let (mock, state) = loaded(cx);
         let built = state.clone();
         let (feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
-        (state, feed, cx)
+        (mock, state, feed, cx)
     }
 
-    fn channel_named(state: &Entity<AppState>, cx: &mut TestAppContext, name: &str) -> ChannelId {
-        state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for channel in state.channels() {
-                if channel.name == name {
-                    found = Some(channel.id);
-                    break;
-                }
-            }
-            found.expect("the fixtures carry that channel")
-        })
-    }
-
-    fn first_direct(state: &Entity<AppState>, cx: &mut TestAppContext) -> ChannelId {
-        state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for channel in state.channels() {
-                match channel.kind {
-                    ChannelKind::Channel => {}
-                    ChannelKind::Direct(_) => {
-                        found = Some(channel.id);
-                        break;
-                    }
-                }
-            }
-            found.expect("the fixtures carry a direct channel")
-        })
-    }
-
-    #[test]
-    fn the_header_counts_each_agent_once_and_skips_the_user() {
-        let messages = vec![
-            from(Author::Agent(AgentId(2)), 1),
-            from(Author::User, 2),
-            from(Author::Agent(AgentId(2)), 3),
-            from(Author::Agent(AgentId(5)), 4),
-        ];
-        assert_eq!(agent_authors(&messages), 2);
-        assert_eq!(agent_authors(&[]), 0);
-        assert_eq!(agent_authors(&[from(Author::User, 1)]), 0);
+    fn typed(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> String {
+        feed.read_with(cx, |feed, cx| feed.composer.read(cx).text(cx).to_string())
     }
 
     #[test]
@@ -631,157 +547,87 @@ mod tests {
         assert!(busy_agents(&[agent(4, AgentStatus::Idle)]).is_empty());
     }
 
-    #[gpui::test]
-    fn drawing_the_busiest_channel_does_not_panic(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 58));
-        feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.list.item_count(), feed.items.len());
-            assert_eq!(feed.items.len(), 58 + 15);
-        });
-    }
-
-    #[gpui::test]
-    fn selecting_the_empty_channel_empties_the_list(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let personal = channel_named(&state, cx, "personal");
-        state.update(cx, |state, cx| state.select(personal, cx));
-        cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.list.item_count(), 0);
-            assert!(feed.items.is_empty());
-        });
-    }
-
-    #[gpui::test]
-    fn selecting_a_direct_channel_draws_its_agent(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let direct = first_direct(&state, cx);
-        state.update(cx, |state, cx| state.select(direct, cx));
-        cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert!(!feed.items.is_empty());
-            assert_eq!(feed.list.item_count(), feed.items.len());
-        });
-    }
-
-    #[gpui::test]
-    fn the_hover_reply_sits_at_the_right_edge_of_its_row(cx: &mut TestAppContext) {
-        let (state, _feed, cx) = feed(cx);
-        let plain = state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for message in state.messages() {
-                if message.reply_count == 0 {
-                    found = Some(message.id);
-                }
-            }
-            found.expect("movie-night carries a message without replies")
-        });
-        let MessageId(raw) = plain;
-        let selector: &'static str = format!("message-reply-{raw}").leak();
-        let affordance = cx
-            .debug_bounds(selector)
-            .expect("the hover reply is laid out");
-        let width = cx.update(|window, _cx| window.viewport_size().width);
-        assert!(
-            affordance.right() > width - px(60.),
-            "the hover reply ends at {:?} in a {:?} wide feed",
-            affordance.right(),
-            width
-        );
-    }
-
-    #[gpui::test]
-    fn clicking_the_reply_affordance_opens_that_thread(cx: &mut TestAppContext) {
-        let (state, _feed, cx) = feed(cx);
-        let root = state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for message in state.messages() {
-                if message.reply_count > 0 {
-                    found = Some(message.id);
-                    break;
-                }
-            }
-            found.expect("movie-night carries a thread root")
-        });
-        let MessageId(raw) = root;
-        let selector: &'static str = format!("message-reply-{raw}").leak();
-        let affordance = cx
-            .debug_bounds(selector)
-            .expect("the replies affordance is drawn");
-        cx.simulate_click(affordance.center(), Modifiers::default());
-        state.read_with(cx, |state, _cx| {
-            let thread = state.thread().expect("the thread is open");
-            assert_eq!(thread.root.id, root);
-            assert_eq!(thread.replies.len(), 4);
-        });
-    }
-
-    #[gpui::test]
-    fn a_reply_keeps_the_list_length_and_raises_the_root_count(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let root = state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for message in state.messages() {
-                if message.reply_count > 0 {
-                    found = Some(message.id);
-                    break;
-                }
-            }
-            found.expect("movie-night carries a thread root")
-        });
-        state.update(cx, |state, cx| state.open_thread(root, cx));
-        cx.run_until_parked();
-        let before = feed.read_with(cx, |feed, _cx| feed.items.len());
-        state.update(cx, |state, cx| {
-            state
-                .reply_in_thread("me too".to_string(), cx)
-                .expect("the reply is written")
-        });
-        cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.items.len(), before);
-            assert_eq!(feed.list.item_count(), feed.items.len());
-            let mut counted = None;
-            for item in feed.items.iter() {
-                match item {
-                    Item::Message(message) => {
-                        if message.id == root {
-                            counted = Some(message.reply_count);
-                        }
-                    }
-                    Item::Separator(_) => {}
-                }
-            }
-            assert_eq!(counted, Some(5));
-        });
-    }
-
-    #[gpui::test]
-    fn sending_a_message_grows_the_list_and_resyncs_it(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let before = feed.read_with(cx, |feed, _cx| feed.items.len());
-        state.update(cx, |state, cx| {
-            state.send("on it".to_string(), cx).expect("it is written")
-        });
-        cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert!(feed.items.len() > before);
-            assert_eq!(feed.list.item_count(), feed.items.len());
-            match feed.items.last() {
-                Some(Item::Message(message)) => {
-                    assert_eq!(message.body, vec![Span::Text("on it".to_string())])
-                }
-                Some(Item::Separator(_)) => panic!("the sent message is the last item"),
-                None => panic!("the sent message is the last item"),
-            }
-        });
-    }
-
     #[test]
     fn the_agent_count_agrees_in_number() {
         assert_eq!(super::agent_count(0), "0 agents");
         assert_eq!(super::agent_count(1), "1 agent");
         assert_eq!(super::agent_count(4), "4 agents");
+    }
+
+    #[gpui::test]
+    fn the_first_surface_is_drawn_with_its_history(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len());
+            assert_eq!(feed.items.len(), 31);
+        });
+    }
+
+    #[gpui::test]
+    fn the_header_counts_the_wired_agents(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let Header::Channel { name, agents } = state.read_with(cx, |state, _cx| header(state))
+        else {
+            panic!("a surface draws a channel header");
+        };
+        assert_eq!(name.as_ref(), "General");
+        assert_eq!(agents, 2);
+    }
+
+    #[gpui::test]
+    fn selecting_another_surface_resets_the_list(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.select(home, cx));
+        cx.run_until_parked();
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.items.len(), 13);
+            assert_eq!(feed.list.item_count(), feed.items.len());
+        });
+    }
+
+    #[gpui::test]
+    fn a_sent_message_is_answered_over_the_socket(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state
+                .send("Лисички появились, что приготовить?".to_string(), cx)
+                .expect("the post is queued")
+        });
+        cx.run_until_parked();
+        play(&mock, cx);
+        state.read_with(cx, |state, _cx| {
+            let messages = state.messages();
+            assert_eq!(messages.len(), 32);
+            let question = &messages[30];
+            assert_eq!(question.author, Author::User);
+            assert!(question.id.0 > 0, "the optimistic row took the daemon's id");
+            assert_eq!(
+                question.body,
+                vec![Span::Text(
+                    "Лисички появились, что приготовить?".to_string()
+                )]
+            );
+            let answer = &messages[31];
+            assert_eq!(answer.author, Author::Agent(AgentId(1)));
+        });
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len());
+        });
+    }
+
+    #[gpui::test]
+    fn a_failed_post_hands_the_text_back(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        mock.fail_next_call();
+        state.update(cx, |state, cx| {
+            state
+                .send("не дойдёт".to_string(), cx)
+                .expect("the post is queued")
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
+        assert_eq!(typed(&feed, cx), "не дойдёт");
     }
 }

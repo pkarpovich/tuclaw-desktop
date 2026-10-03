@@ -34,7 +34,6 @@ pub struct DaySection {
 ///     author: Author::User,
 ///     body: vec![Span::Text("on it".to_string())],
 ///     sent_at: datetime!(2026-08-26 09:00 UTC),
-///     reply_count: 0,
 /// };
 /// let sections = group_by_day(&[message], offset!(UTC), datetime!(2026-08-26 21:00 UTC));
 /// assert_eq!(sections.len(), 1);
@@ -101,7 +100,6 @@ mod tests {
             author: Author::User,
             body: vec![Span::Text(format!("message {id}"))],
             sent_at,
-            reply_count: 0,
         }
     }
 

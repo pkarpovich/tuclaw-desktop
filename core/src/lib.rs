@@ -1,13 +1,7 @@
-mod fixtures;
 /// Grouping of messages into day sections.
 pub mod grouping;
-/// Domain types and the message body encoding.
+/// Domain types the views render.
 pub mod model;
-/// Filesystem locations shared by the app and its tests.
-pub mod paths;
-mod schema;
-/// The SQLite store behind the workspace.
-pub mod store;
 /// Test doubles for the daemon side of `/api/v3`.
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;

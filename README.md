@@ -4,13 +4,10 @@ A native macOS client for the tuclaw agent system, written in Rust on
 [GPUI](https://github.com/zed-industries/zed) — Zed's GPU-accelerated UI framework. It is the first
 step toward replacing Telegram as the interface to a set of AI agents.
 
-v1 shows the channels and direct messages of a single local workspace, renders one conversation
-grouped by day, lets you type and send a message, open a thread on any message and reply in it, and
-lists the agents. Data lives in SQLite, seeded once from fixtures on first launch. There is no
-network: no daemon connection, no sync, no notifications.
+The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Until the daemon ships the API it runs on the built-in mock daemon; set `TUCLAW_DAEMON_URL` (`http://host:9090`) and `TUCLAW_CLIENT_TOKEN` to talk to the real one. Threads and direct messages are not in v3.0 and are hidden until they are.
 
 The window draws its own chrome. The titlebar is transparent, the traffic lights are positioned
-inside the app's own top bar, and the feed and thread are rounded cards floating on a warm
+inside the app's own top bar, and the feed is a rounded card floating on a warm
 background. Nothing on screen is a system control.
 
 Enter sends; Shift+Enter breaks the line. Clicking the composer focuses it, and it grows with its
@@ -23,7 +20,7 @@ shown in UTC, not in the local zone.
 
 | Path | What it is |
 |---|---|
-| `core/` | `tuclaw-core`: domain types, the SQLite store, the fixtures, day grouping, and `v3`, the client of the daemon's `/api/v3`. No `gpui` dependency, so it is testable without a window. |
+| `core/` | `tuclaw-core`: the domain types the views render, day grouping, and `v3`, the client of the daemon's `/api/v3`. No `gpui` dependency, so it is testable without a window. |
 | `app/` | `tuclaw-desktop`: the binary — state, views, the text input element, the theme. |
 | `docs/design/` | The designer's mockup and five screenshots of it. Look here before touching a view. |
 | `docs/contracts/` | `v3-client-contract.md`, the wire contract with the daemon, a copy of tuclaw's. |
@@ -109,34 +106,22 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "a8468907
 Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under
 `[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
 
-`rusqlite` carries `bundled` and `time`: `time` is what makes `OffsetDateTime` bind and read back,
-and `bundled` alone does not.
-
 GPUI is pre-1.0 and the pin was taken while its platform crates were being split apart. Moving the
 pin is a real task, not a version bump.
 
 ## Data
 
-The database lives at `~/Library/Application Support/tuclaw-desktop/tuclaw.sqlite`. It is created and
-seeded from the fixtures on first launch; the seed marker is written in the same transaction as the
-fixtures, so an interrupted first run leaves either everything or nothing. Delete the file to get a
-fresh workspace on the next launch.
-
-If the store cannot be opened, the window still opens and shows a failure view naming the path and
-the error.
+Nothing is stored locally. On start the app connects to the event socket, then fetches the surfaces, the agents and the selected surface's newest page; everything after that arrives on the socket. A dropped socket reconnects with backoff and replays from the last event it applied. If the daemon URL is set without a token, or is not `http://`, the window opens on a failure view naming the URL and the error.
 
 ## Tests
 
 Two tiers, split by what they need to run.
 
-`tuclaw-core` uses plain `#[test]` — no window, no GPU. It covers domain invariants, the body
-encoding round trip, day grouping, the schema and every store method, seeding idempotence, and the
-fixture data itself. The v3 client is tested against golden JSON in `core/testdata/v3/`, against
-`FakeDaemon` for the HTTP transport, and end to end over the mock in `core/tests/v3_mock.rs`. Store tests run against a fresh in-memory database each, so they are
-order-independent and parallel-safe.
+`tuclaw-core` uses plain `#[test]` — no window, no GPU. It covers domain invariants and day grouping. The v3 client is tested against golden JSON in `core/testdata/v3/`, against
+`FakeDaemon` for the HTTP transport, and end to end over the mock in `core/tests/v3_mock.rs`.
 
-`tuclaw-desktop` uses `#[gpui::test]`, which needs `gpui` with `test-support`. It covers state
-transitions through `AppState` methods, the input element through `simulate_input` and
+`tuclaw-desktop` uses `#[gpui::test]`, which needs `gpui` with `test-support`. Every state is built over the mock daemon in stepped mode, so frames are played from the test thread. It covers state
+transitions through `AppState` methods (the fresh start, sending, live runs, reconnect and gap), the input element through `simulate_input` and
 `simulate_keystrokes`, click paths through `debug_selector` + `debug_bounds` + `simulate_click`, pure
 view-model functions, and one draw test per view.
 

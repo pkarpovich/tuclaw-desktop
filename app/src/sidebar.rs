@@ -215,7 +215,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         let Some(Section { title: _, rows }) = sections.last_mut() else {
             continue;
         };
-        let highlight = if *id == selected {
+        let highlight = if Some(*id) == selected {
             Highlight::On
         } else {
             Highlight::Off
@@ -504,20 +504,14 @@ fn gear() -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
-    use tuclaw_core::store::Store;
+    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
     use super::{Highlight, Lead, Section, Sidebar, sections};
     use crate::state::{AppState, Segment};
+    use crate::testing::loaded;
 
     fn sidebar(cx: &mut TestAppContext) -> (Entity<AppState>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_sidebar, cx) = cx.add_window_view(move |_window, cx| Sidebar::new(built, cx));
         (state, cx)
@@ -526,69 +520,55 @@ mod tests {
     #[gpui::test]
     fn drawing_the_sidebar_does_not_panic(cx: &mut TestAppContext) {
         let (state, cx) = sidebar(cx);
-        state.read_with(cx, |state, _cx| assert_eq!(state.channels().len(), 10));
+        state.read_with(cx, |state, _cx| assert_eq!(state.channels().len(), 3));
     }
 
     #[gpui::test]
-    fn the_sections_follow_the_channel_groups(cx: &mut TestAppContext) {
+    fn the_surfaces_form_one_untitled_section_in_order(cx: &mut TestAppContext) {
         let (state, cx) = sidebar(cx);
         state.read_with(cx, |state, _cx| {
             let sections = sections(state);
-            let mut titles = Vec::new();
-            let mut counts = Vec::new();
-            for Section { title, rows } in &sections {
-                titles.push(title.clone());
-                counts.push(rows.len());
-            }
-            assert_eq!(
-                titles,
-                vec![
-                    Some("🎬 Movie nights".into()),
-                    Some("🏠 Home".into()),
-                    None,
-                    Some("Direct messages".into()),
-                ]
-            );
-            assert_eq!(counts, vec![3, 2, 1, 4]);
-            let Some(Section { title: _, rows }) = sections.first() else {
-                panic!("the first section is built");
+            assert_eq!(sections.len(), 1);
+            let Some(Section { title, rows }) = sections.first() else {
+                panic!("the section is built");
             };
-            assert!(rows[0].highlight == Highlight::On);
-            assert!(rows[1].highlight == Highlight::Off);
-            let Some(Section { title: _, rows }) = sections.last() else {
-                panic!("the direct section is built");
-            };
+            assert_eq!(*title, None);
+            let mut names = Vec::new();
             for row in rows {
+                names.push(row.name.to_string());
                 match &row.lead {
+                    Lead::Hash => {}
                     Lead::Chip {
                         initials: _,
                         tone: _,
                         status: _,
-                    } => {}
-                    Lead::Hash => panic!("a direct row carries its agent's chip"),
+                    } => panic!("a surface row carries a hash"),
                 }
             }
-            assert_eq!(rows[1].unread, 2);
+            assert_eq!(names, vec!["General", "Magnet Feed", "Smart Home"]);
+            assert!(rows[0].highlight == Highlight::On);
+            assert!(rows[1].highlight == Highlight::Off);
         });
     }
 
     #[gpui::test]
-    fn clicking_a_channel_row_selects_it(cx: &mut TestAppContext) {
+    fn clicking_a_channel_row_selects_it_and_loads_its_history(cx: &mut TestAppContext) {
         let (state, cx) = sidebar(cx);
-        let personal = cx
-            .debug_bounds("sidebar-row-personal")
-            .expect("the personal row is drawn");
-        cx.simulate_click(personal.center(), Modifiers::default());
+        let home = cx
+            .debug_bounds("sidebar-row-Smart Home")
+            .expect("the Smart Home row is drawn");
+        cx.simulate_click(home.center(), Modifiers::default());
+        cx.run_until_parked();
         state.read_with(cx, |state, _cx| {
             let mut name = None;
             for channel in state.channels() {
-                if channel.id == state.selected() {
+                if Some(channel.id) == state.selected() {
                     name = Some(channel.name.clone());
                     break;
                 }
             }
-            assert_eq!(name, Some("personal".to_string()));
-            assert!(state.messages().is_empty());
+            assert_eq!(name, Some("Smart Home".to_string()));
+            assert_eq!(state.messages().len(), 12);
         });
     }
 

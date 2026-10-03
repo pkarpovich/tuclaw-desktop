@@ -1,5 +1,3 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 /// Identifies a channel.
@@ -75,6 +73,8 @@ pub enum Author {
     User,
     /// The agent with the given identifier.
     Agent(AgentId),
+    /// The daemon itself, e.g. a notice that a run failed.
+    System,
 }
 
 /// Reports whether an agent is working, and on what.
@@ -140,8 +140,6 @@ pub struct Message {
     pub body: Vec<Span>,
     /// When the message was sent.
     pub sent_at: OffsetDateTime,
-    /// How many replies the message's thread holds.
-    pub reply_count: usize,
 }
 
 /// One run of a message body: plain text, an agent mention, or inline code.
@@ -157,7 +155,7 @@ pub struct Message {
 /// ];
 /// assert_eq!(body.len(), 2);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Span {
     /// Plain text, rendered word by word.
     Text(String),
@@ -165,126 +163,4 @@ pub enum Span {
     Mention(String),
     /// Inline code, rendered as a chip.
     Code(String),
-}
-
-/// Encodes a message body as the JSON stored in the `body` column.
-///
-/// # Panics
-///
-/// Panics if `serde_json` cannot serialize the spans, which cannot happen for
-/// the string payloads [`Span`] carries.
-///
-/// # Examples
-///
-/// ```
-/// use tuclaw_core::model::{encode, Span};
-///
-/// let json = encode(&[Span::Text("on it".to_string())]);
-/// assert_eq!(json, r#"[{"Text":"on it"}]"#);
-/// ```
-pub fn encode(body: &[Span]) -> String {
-    serde_json::to_string(body).expect("spans hold only strings and always serialize")
-}
-
-/// Decodes a message body from the JSON stored in the `body` column.
-///
-/// # Errors
-///
-/// Returns an error if the input is not the JSON [`encode`] produces.
-///
-/// # Examples
-///
-/// ```
-/// use tuclaw_core::model::{decode, Span};
-///
-/// let body = decode(r#"[{"Code":"mise run dev"}]"#).unwrap();
-/// assert_eq!(body, vec![Span::Code("mise run dev".to_string())]);
-/// assert!(decode("not json").is_err());
-/// ```
-pub fn decode(json: &str) -> Result<Vec<Span>> {
-    let body = serde_json::from_str(json)?;
-    Ok(body)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Span, decode, encode};
-
-    fn round_trip(body: Vec<Span>) {
-        let json = encode(&body);
-        let decoded = decode(&json).expect("encoded body decodes");
-        assert_eq!(decoded, body);
-    }
-
-    #[test]
-    fn plain_text_round_trips() {
-        round_trip(vec![Span::Text("watched it last night".to_string())]);
-    }
-
-    #[test]
-    fn mention_mid_sentence_round_trips() {
-        round_trip(vec![
-            Span::Text("asking ".to_string()),
-            Span::Mention("allspeak".to_string()),
-            Span::Text(" for subtitles".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn inline_code_round_trips() {
-        round_trip(vec![
-            Span::Text("dropped it in ".to_string()),
-            Span::Code("~/Media/inbox".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn several_spans_in_one_body_round_trip() {
-        round_trip(vec![
-            Span::Text("hey ".to_string()),
-            Span::Mention("magnet feed sync".to_string()),
-            Span::Text(", check ".to_string()),
-            Span::Code("/tmp/list.txt".to_string()),
-            Span::Text(" and report back".to_string()),
-            Span::Mention("media review".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn empty_body_round_trips() {
-        round_trip(Vec::new());
-    }
-
-    #[test]
-    fn punctuation_and_escapes_round_trip() {
-        round_trip(vec![
-            Span::Text(r#"a [bracket] a {brace} a "quote" a \backslash"#.to_string()),
-            Span::Code(r#"{"key": "value\\"}"#.to_string()),
-        ]);
-    }
-
-    #[test]
-    fn non_ascii_round_trips() {
-        round_trip(vec![
-            Span::Text("привет 🐢 ".to_string()),
-            Span::Mention("allspeak".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn encoded_form_is_externally_tagged() {
-        let json = encode(&[
-            Span::Text("on it ".to_string()),
-            Span::Mention("allspeak".to_string()),
-        ]);
-        assert_eq!(json, r#"[{"Text":"on it "},{"Mention":"allspeak"}]"#);
-    }
-
-    #[test]
-    fn malformed_json_is_an_error() {
-        assert!(decode("").is_err());
-        assert!(decode("[{\"Text\":").is_err());
-        assert!(decode(r#"[{"Unknown":"x"}]"#).is_err());
-        assert!(decode(r#"{"Text":"x"}"#).is_err());
-    }
 }

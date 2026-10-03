@@ -7,11 +7,6 @@ use gpui::{
 use crate::input::{Submitted, TextInput};
 use crate::theme;
 
-pub enum ComposerKind {
-    Feed,
-    Thread,
-}
-
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
 
 enum Sendable {
@@ -21,7 +16,6 @@ enum Sendable {
 
 pub struct Composer {
     input: Entity<TextInput>,
-    kind: ComposerKind,
     on_submit: OnSubmit,
     _observation: Subscription,
     _submissions: Subscription,
@@ -29,23 +23,17 @@ pub struct Composer {
 
 impl Composer {
     pub fn new(
-        kind: ComposerKind,
         placeholder: impl Into<SharedString>,
         on_submit: OnSubmit,
         cx: &mut Context<Self>,
     ) -> Composer {
-        let selector = match kind {
-            ComposerKind::Feed => "input-feed",
-            ComposerKind::Thread => "input-thread",
-        };
-        let input = cx.new(|cx| TextInput::new(placeholder, selector, cx));
+        let input = cx.new(|cx| TextInput::new(placeholder, "input-feed", cx));
         let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
         let submissions = cx.subscribe(&input, |composer, _input, _event: &Submitted, cx| {
             composer.submit(cx);
         });
         Composer {
             input,
-            kind,
             on_submit,
             _observation: observation,
             _submissions: submissions,
@@ -65,6 +53,15 @@ impl Composer {
             .update(cx, |input, cx| input.set_placeholder(placeholder, cx));
     }
 
+    #[cfg(test)]
+    pub fn text<'a>(&self, cx: &'a App) -> &'a str {
+        self.input.read(cx).text()
+    }
+
+    pub fn restore(&mut self, text: String, cx: &mut Context<Self>) {
+        self.input.update(cx, |input, cx| input.set_text(text, cx));
+    }
+
     fn submit(&mut self, cx: &mut Context<Self>) {
         let input = self.input.read(cx);
         if input.is_blank() {
@@ -78,10 +75,7 @@ impl Composer {
     }
 
     fn send_button(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        let (selector, size) = match self.kind {
-            ComposerKind::Feed => ("composer-send-feed", px(32.)),
-            ComposerKind::Thread => ("composer-send-thread", px(30.)),
-        };
+        let (selector, size) = ("composer-send-feed", px(32.));
         let button = div()
             .id(selector)
             .debug_selector(move || selector.to_string())
@@ -161,54 +155,6 @@ impl Composer {
                     ),
             )
     }
-
-    fn thread_shape(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_none()
-            .flex_col()
-            .px(px(14.))
-            .pt(px(8.))
-            .pb(px(14.))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .rounded(px(12.))
-                    .bg(theme::raised())
-                    .border_1()
-                    .border_color(theme::border())
-                    .shadow(vec![
-                        BoxShadow::new(px(0.), px(2.), theme::shadow())
-                            .blur_radius(px(8.))
-                            .spread_radius(px(-4.)),
-                    ])
-                    .child(
-                        div()
-                            .flex()
-                            .px(px(13.))
-                            .pt(px(12.))
-                            .pb(px(6.))
-                            .min_w(px(0.))
-                            .text_size(px(13.5))
-                            .line_height(px(20.))
-                            .child(self.input.clone()),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(2.))
-                            .px(px(8.))
-                            .pt(px(4.))
-                            .pb(px(8.))
-                            .child(mention_icon())
-                            .child(microphone_icon())
-                            .child(div().flex_1())
-                            .child(self.send_button(sendable, cx)),
-                    ),
-            )
-    }
 }
 
 impl Render for Composer {
@@ -218,10 +164,7 @@ impl Render for Composer {
         } else {
             Sendable::Ready
         };
-        match self.kind {
-            ComposerKind::Feed => self.feed_shape(sendable, cx).into_any_element(),
-            ComposerKind::Thread => self.thread_shape(sendable, cx).into_any_element(),
-        }
+        self.feed_shape(sendable, cx)
     }
 }
 
@@ -277,25 +220,6 @@ fn eye() -> Div {
         .bg(theme::text_secondary())
 }
 
-fn microphone_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(2.))
-            .child(
-                div()
-                    .w(px(6.))
-                    .h(px(9.))
-                    .rounded(px(3.))
-                    .border_1()
-                    .border_color(theme::text_secondary()),
-            )
-            .child(div().w(px(10.)).h(px(1.)).bg(theme::text_secondary())),
-    )
-}
-
 fn format_icon() -> impl IntoElement {
     icon()
         .text_size(px(12.5))
@@ -341,34 +265,26 @@ fn talk_chip() -> impl IntoElement {
 #[cfg(test)]
 mod tests {
     use anyhow::bail;
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
+    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
     use tuclaw_core::model::Span;
-    use tuclaw_core::store::Store;
 
-    use super::{Composer, ComposerKind, OnSubmit};
+    use super::{Composer, OnSubmit};
     use crate::input::bind_keys;
     use crate::state::AppState;
+    use crate::testing::loaded;
 
     fn mount(
         cx: &mut TestAppContext,
         on_submit: OnSubmit,
     ) -> (Entity<Composer>, &mut VisualTestContext) {
         cx.update(bind_keys);
-        cx.add_window_view(move |_window, cx| {
-            Composer::new(ComposerKind::Feed, "Message #movie-night", on_submit, cx)
-        })
+        cx.add_window_view(move |_window, cx| Composer::new("Message #General", on_submit, cx))
     }
 
     fn sending(
         cx: &mut TestAppContext,
     ) -> (Entity<AppState>, Entity<Composer>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+        let (_mock, state) = loaded(cx);
         let sender = state.clone();
         let (composer, cx) = mount(
             cx,
@@ -457,5 +373,17 @@ mod tests {
             assert_eq!(last.body, vec![Span::Text("hi".to_string())]);
         });
         assert_eq!(typed(&composer, cx), "");
+    }
+
+    #[gpui::test]
+    fn restore_puts_a_failed_body_back(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        composer.update(cx, |composer, cx| {
+            composer.restore("Лисички 🍄".to_string(), cx)
+        });
+        assert_eq!(typed(&composer, cx), "Лисички 🍄");
+        focus(&composer, cx);
+        cx.simulate_input("!");
+        assert_eq!(typed(&composer, cx), "Лисички 🍄!");
     }
 }

@@ -280,6 +280,12 @@ impl MockTransport {
         }
     }
 
+    /// Makes the next REST call answer `503 unavailable`, as [`Scenario::unavailable_once`] does at
+    /// start.
+    pub fn fail_next_call(&self) {
+        self.lock().scenario.unavailable_once = true;
+    }
+
     /// Closes every open event socket, as a dropped network would.
     pub fn disconnect_all(&self) {
         self.lock().subscribers.clear();
@@ -1963,6 +1969,14 @@ mod tests {
         let client = Client::mock(&mock);
         assert_eq!(block_on(client.surfaces()), Err(ApiError::Unavailable));
         assert!(block_on(client.surfaces()).is_ok());
+    }
+
+    #[test]
+    fn fail_next_call_fails_exactly_one_call() {
+        let (mock, client) = stepped();
+        mock.fail_next_call();
+        assert_eq!(block_on(client.agents()), Err(ApiError::Unavailable));
+        assert!(block_on(client.agents()).is_ok());
     }
 
     #[test]
