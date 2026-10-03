@@ -37,7 +37,7 @@ Until `/api/v3` is live, the mock can start from a snapshot of the prod database
 ## Building
 
 Prerequisites: macOS, [mise](https://mise.jdx.dev) — the Rust pin is enforced through it, see
-Toolchain traps — and Xcode's Metal toolchain. Run `mise install` in the repository root to fetch the
+Toolchain traps. Run `mise install` in the repository root to fetch the
 version named in `mise.toml`.
 
 Everything runs through mise tasks, defined in `mise.toml`. Read the Toolchain traps below before
@@ -69,9 +69,7 @@ seconds.
 
 Four things about this project's toolchain are non-obvious, and each one has cost a build.
 
-**Rust 1.98.1, pinned in `mise.toml`.** The floor is 1.97: GPUI's main branch uses
-`std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.1 (zed's own `rust-toolchain.toml`) is verified
-against the pinned revision and compiles the whole dependency tree clean.
+**Rust 1.98.1, pinned in `mise.toml`.** The floor is 1.97: GPUI uses `std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.1 (zed's own `rust-toolchain.toml`) compiles the whole dependency tree clean.
 
 **Never run a bare `cargo`.** The pin does not reach it. On the author's machine `which cargo`
 resolves to an older install placed ahead of mise's shims by the global mise config, and a
@@ -83,35 +81,23 @@ runs inside the environment `mise.toml` declares, which is what makes the pin ef
 mise exec -- rustc --version
 ```
 
-**The entry point lives in `gpui_platform`, not `gpui`.** At the pinned revision `gpui::Application`
-has no `new()`. The app starts with `gpui_platform::application().run(|cx: &mut App| { ... })`, opens
-its window with `cx.open_window(options, |_, cx| cx.new(...))` and calls `cx.activate(true)`. Every
-published GPUI example starts with `Application::new()`, which does not compile here.
+**The entry point lives in `gpui_platform`, not `gpui`.** `gpui::Application` takes a platform, so the app starts with `gpui_platform::application().run(|cx: &mut App| { ... })`, opens its window with `cx.open_window(options, |_, cx| cx.new(...))` and calls `cx.activate(true)`.
 
-**Xcode's Metal toolchain must be installed.** `gpui_apple` compiles `shaders.metal` in a build
-script. Without the toolchain the build fails with `cannot execute tool 'metal'`. Install it with:
-
-```
-xcodebuild -downloadComponent MetalToolchain
-```
-
-It is about 690 MB.
+**No Metal toolchain is needed.** GPUI Kit turns on `runtime_shaders` in the platform crate, so the build stitches `shaders.metal` into the binary as text and Metal compiles it when the app starts, instead of running Xcode's `metal` tool in a build script.
 
 ## Dependencies
 
-GPUI is pinned to a git revision, not a crates.io version — only a stale `gpui` core is published and
-`gpui_platform` is not published at all, so the pin is mandatory:
+GPUI comes from crates.io as the weekly snapshots GPUI Kit publishes and builds on, renamed back to the crate names the code uses:
 
 ```toml
-gpui = { git = "https://github.com/zed-industries/zed", rev = "a84689073d296dfd39987bc7dd478e43ef76d83a" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "a84689073d296dfd39987bc7dd478e43ef76d83a", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "=0.3.7" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.7", features = ["font-kit"] }
+gpui-kit = { version = "=0.7.0" }
 ```
 
-Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under
-`[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
+`gpui-pre` is zed's own GPUI, published every week (0.3.7 is from 2026-09-28) together with the matching [GPUI Kit](https://gpui-kit.com) (`gpui-kit`, `gpui-base`, `gpui-component`): Markdown, inputs, lists and other components the app would otherwise write by hand. Both are pinned exactly and move together; a GPUI Kit release is a real task, not a version bump, because 0.x releases break APIs. The app moved off a git pin of zed's `main` on 2026-10-04: two `gpui` crates cannot share an app, and GPUI Kit only builds on its own snapshot.
 
-GPUI is pre-1.0 and the pin was taken while its platform crates were being split apart. Moving the
-pin is a real task, not a version bump.
+Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under `[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
 
 ## Data
 
