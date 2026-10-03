@@ -8,5 +8,8 @@ pub mod paths;
 mod schema;
 /// The SQLite store behind the workspace.
 pub mod store;
+/// Test doubles for the daemon side of `/api/v3`.
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
 /// The client of the daemon's `/api/v3`.
 pub mod v3;
