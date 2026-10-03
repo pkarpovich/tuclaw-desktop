@@ -2,12 +2,15 @@
 
 set -l min_macos 14.0
 set -l install no
+set -l open no
 for arg in $argv
     switch $arg
         case --install
             set install yes
+        case --open
+            set open yes
         case '*'
-            echo "usage: bundle-mac.fish [--install]" >&2
+            echo "usage: bundle-mac.fish [--install] [--open]" >&2
             exit 2
     end
 end
@@ -50,4 +53,18 @@ if test $install = yes
     rm -rf /Applications/Tuclaw.app
     ditto $app /Applications/Tuclaw.app; or exit 1
     echo "installed /Applications/Tuclaw.app"
+end
+
+if test $open = yes
+    set -l target $app
+    if test $install = yes
+        set target /Applications/Tuclaw.app
+    end
+    pkill -f 'Tuclaw.app/Contents/MacOS/tuclaw-desktop'
+    for attempt in (seq 50)
+        pgrep -qf 'Tuclaw.app/Contents/MacOS/tuclaw-desktop'; or break
+        sleep 0.1
+    end
+    open $target; or exit 1
+    echo "opened $target"
 end

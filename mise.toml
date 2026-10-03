@@ -29,6 +29,10 @@ run = "cargo fmt --all -- --check"
 description = "Build target/release/bundle/Tuclaw.app (ad-hoc signed)"
 run = "fish script/bundle-mac.fish"
 
+[tasks.preview]
+description = "Build Tuclaw.app and open it, quitting a running bundle first"
+run = "fish script/bundle-mac.fish --open"
+
 [tasks.install]
 description = "Build Tuclaw.app and copy it to /Applications"
 run = "fish script/bundle-mac.fish --install"
