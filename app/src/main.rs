@@ -11,9 +11,7 @@ mod state;
 mod theme;
 mod thread;
 
-use gpui::{
-    App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, point, px, size,
-};
+use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use time::OffsetDateTime;
 
 use failure::Startup;
@@ -30,7 +28,7 @@ fn main() {
             titlebar: Some(TitlebarOptions {
                 title: None,
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(14.), px(18.))),
+                traffic_light_position: Some(shell::traffic_light_position()),
             }),
             ..Default::default()
         };

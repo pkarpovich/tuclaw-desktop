@@ -1,5 +1,7 @@
 use gpui::{App, AppContext, KeyBinding, Menu, MenuItem, PromptLevel, SystemMenuType, actions};
 
+use crate::shell::ToggleSidebar;
+
 actions!(tuclaw, [About, Quit]);
 
 pub fn version_line() -> String {
@@ -9,14 +11,20 @@ pub fn version_line() -> String {
 pub fn install(cx: &mut App) {
     cx.on_action(about);
     cx.on_action(quit);
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-    cx.set_menus([Menu::new("Tuclaw").items([
-        MenuItem::action("About Tuclaw", About),
-        MenuItem::separator(),
-        MenuItem::os_submenu("Services", SystemMenuType::Services),
-        MenuItem::separator(),
-        MenuItem::action("Quit Tuclaw", Quit),
-    ])]);
+    cx.bind_keys([
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("ctrl-cmd-s", ToggleSidebar, None),
+    ]);
+    cx.set_menus([
+        Menu::new("Tuclaw").items([
+            MenuItem::action("About Tuclaw", About),
+            MenuItem::separator(),
+            MenuItem::os_submenu("Services", SystemMenuType::Services),
+            MenuItem::separator(),
+            MenuItem::action("Quit Tuclaw", Quit),
+        ]),
+        Menu::new("View").items([MenuItem::action("Toggle Sidebar", ToggleSidebar)]),
+    ]);
 }
 
 fn about(_: &About, cx: &mut App) {
@@ -98,5 +106,19 @@ mod tests {
             }
         }
         assert_eq!(quits, 1);
+    }
+
+    #[gpui::test]
+    fn toggle_sidebar_is_bound_to_ctrl_cmd_s(cx: &mut TestAppContext) {
+        cx.update(install);
+        let keystroke = gpui::Keystroke::parse("ctrl-cmd-s").unwrap();
+        let bound = cx.update(|cx| cx.all_bindings_for_input(&[keystroke]));
+        let mut toggles = 0;
+        for binding in bound {
+            if binding.action().partial_eq(&ToggleSidebar) {
+                toggles += 1;
+            }
+        }
+        assert_eq!(toggles, 1);
     }
 }

@@ -352,8 +352,10 @@ fn section_title(title: SharedString) -> impl IntoElement {
 }
 
 fn search_field() -> impl IntoElement {
-    div().flex_none().pt(px(10.)).px(px(6.)).pb(px(8.)).child(
+    div().flex_none().px(px(6.)).pb(px(8.)).child(
         div()
+            .id("sidebar-search")
+            .debug_selector(|| "sidebar-search".to_string())
             .flex()
             .items_center()
             .gap(px(8.))

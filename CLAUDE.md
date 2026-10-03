@@ -38,7 +38,7 @@ the `-D warnings` gate.
 ## State ownership
 
 One `AppState` entity owns all mutable application state: the channel list, the selected channel and
-its messages, the open thread with its root message, which view is showing, and the last channel
+its messages, the open thread with its root message, which view is showing, whether the sidebar is shown, and the last channel
 visited of each kind.
 
 - Views hold `Entity<AppState>` and read through it. **No view mutates another view's data, and no

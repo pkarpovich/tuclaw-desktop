@@ -11,6 +11,12 @@ pub enum View {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarVisibility {
+    Shown,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Segment {
     Channel,
     Direct,
@@ -41,6 +47,7 @@ pub struct AppState {
     messages: Vec<Message>,
     thread: Option<OpenThread>,
     view: View,
+    sidebar: SidebarVisibility,
     last_channel: Option<ChannelId>,
     last_direct: Option<ChannelId>,
 }
@@ -76,6 +83,7 @@ impl AppState {
             messages,
             thread: None,
             view: View::Conversation,
+            sidebar: SidebarVisibility::Shown,
             last_channel,
             last_direct,
         })
@@ -103,6 +111,18 @@ impl AppState {
 
     pub fn view(&self) -> View {
         self.view
+    }
+
+    pub fn sidebar(&self) -> SidebarVisibility {
+        self.sidebar
+    }
+
+    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        self.sidebar = match self.sidebar {
+            SidebarVisibility::Shown => SidebarVisibility::Hidden,
+            SidebarVisibility::Hidden => SidebarVisibility::Shown,
+        };
+        cx.notify();
     }
 
     pub fn select(&mut self, channel: ChannelId, cx: &mut Context<Self>) {
@@ -315,7 +335,7 @@ mod tests {
     use tuclaw_core::model::{ChannelId, ChannelKind, MessageId, Span};
     use tuclaw_core::store::Store;
 
-    use super::{AppState, Segment, StateEvent, View};
+    use super::{AppState, Segment, SidebarVisibility, StateEvent, View};
 
     fn seeded_store() -> Store {
         let store = Store::open_in_memory().expect("the schema is created");
@@ -772,6 +792,22 @@ mod tests {
         state.read_with(cx, |state, _cx| {
             let last = state.messages().last().expect("the message was appended");
             assert!(last.sent_at >= before);
+        });
+    }
+
+    #[gpui::test]
+    fn the_sidebar_starts_shown_and_toggles(cx: &mut TestAppContext) {
+        let state = seeded(cx);
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Shown)
+        });
+        state.update(cx, |state, cx| state.toggle_sidebar(cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Hidden)
+        });
+        state.update(cx, |state, cx| state.toggle_sidebar(cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Shown)
         });
     }
 }

@@ -55,6 +55,7 @@ pub fn message_row(message: &Message, agents: &[Agent], replies: Replies) -> imp
     let row = div()
         .group(group.clone())
         .relative()
+        .w_full()
         .flex()
         .gap(px(12.))
         .px(px(20.))

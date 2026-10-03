@@ -287,6 +287,13 @@ fn agent_authors(messages: &[Message]) -> usize {
     seen.len()
 }
 
+fn agent_count(agents: usize) -> String {
+    match agents {
+        1 => "1 agent".to_string(),
+        count => format!("{count} agents"),
+    }
+}
+
 fn busy_agents(agents: &[Agent]) -> Vec<Busy> {
     let mut busy = Vec::new();
     for Agent {
@@ -332,7 +339,7 @@ fn header_element(header: Header) -> impl IntoElement {
                 div()
                     .text_size(px(12.5))
                     .text_color(theme::text_muted())
-                    .child(format!("{agents} agents")),
+                    .child(agent_count(agents)),
             ),
         Header::Direct {
             initials,
@@ -509,7 +516,9 @@ fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
+    use gpui::{
+        AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px,
+    };
     use time::macros::datetime;
     use tuclaw_core::model::{
         Agent, AgentId, AgentStatus, Author, ChannelId, ChannelKind, Message, MessageId, Span,
@@ -657,6 +666,32 @@ mod tests {
     }
 
     #[gpui::test]
+    fn the_hover_reply_sits_at_the_right_edge_of_its_row(cx: &mut TestAppContext) {
+        let (state, _feed, cx) = feed(cx);
+        let plain = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.reply_count == 0 {
+                    found = Some(message.id);
+                }
+            }
+            found.expect("movie-night carries a message without replies")
+        });
+        let MessageId(raw) = plain;
+        let selector: &'static str = format!("message-reply-{raw}").leak();
+        let affordance = cx
+            .debug_bounds(selector)
+            .expect("the hover reply is laid out");
+        let width = cx.update(|window, _cx| window.viewport_size().width);
+        assert!(
+            affordance.right() > width - px(60.),
+            "the hover reply ends at {:?} in a {:?} wide feed",
+            affordance.right(),
+            width
+        );
+    }
+
+    #[gpui::test]
     fn clicking_the_reply_affordance_opens_that_thread(cx: &mut TestAppContext) {
         let (state, _feed, cx) = feed(cx);
         let root = state.read_with(cx, |state, _cx| {
@@ -741,5 +776,12 @@ mod tests {
                 None => panic!("the sent message is the last item"),
             }
         });
+    }
+
+    #[test]
+    fn the_agent_count_agrees_in_number() {
+        assert_eq!(super::agent_count(0), "0 agents");
+        assert_eq!(super::agent_count(1), "1 agent");
+        assert_eq!(super::agent_count(4), "4 agents");
     }
 }

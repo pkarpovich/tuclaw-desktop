@@ -1,14 +1,32 @@
 use gpui::{
-    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Render,
-    SharedString, Subscription, Window, div, prelude::*, px,
+    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Point, Render,
+    SharedString, Subscription, Window, actions, div, point, prelude::*, px,
 };
 
 use crate::agents::AgentsView;
 use crate::feed::Feed;
 use crate::sidebar::Sidebar;
-use crate::state::{AppState, Segment, View};
+use crate::state::{AppState, Segment, SidebarVisibility, View};
 use crate::theme;
 use crate::thread::ThreadPanel;
+
+actions!(tuclaw_shell, [ToggleSidebar]);
+
+const TOOLBAR_HEIGHT: f32 = 48.;
+const HAIRLINE: f32 = 1.;
+const GUTTER: f32 = 10.;
+const SIDEBAR_WIDTH: f32 = 250.;
+const CONTENT_INSET: f32 = 6.;
+const TRAFFIC_LIGHT_SIZE: f32 = 14.;
+const TRAFFIC_LIGHTS_WIDTH: f32 = 60.;
+const TRAFFIC_LIGHTS_GAP: f32 = 14.;
+
+pub fn traffic_light_position() -> Point<Pixels> {
+    point(
+        px(GUTTER + CONTENT_INSET),
+        px((TOOLBAR_HEIGHT - TRAFFIC_LIGHT_SIZE) / 2.),
+    )
+}
 
 pub struct Shell {
     state: Entity<AppState>,
@@ -47,6 +65,8 @@ impl Shell {
         match view {
             View::Agents => vec![
                 card()
+                    .id("content-card")
+                    .debug_selector(|| "content-card".to_string())
                     .flex_1()
                     .min_w(px(0.))
                     .overflow_hidden()
@@ -56,6 +76,8 @@ impl Shell {
             View::Conversation => {
                 let mut body = vec![
                     card()
+                        .id("content-card")
+                        .debug_selector(|| "content-card".to_string())
                         .flex_1()
                         .min_w(px(0.))
                         .overflow_hidden()
@@ -113,34 +135,69 @@ impl Shell {
         }
     }
 
+    fn sidebar_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("sidebar-toggle")
+            .debug_selector(|| "sidebar-toggle".to_string())
+            .p(px(5.))
+            .rounded(px(7.))
+            .cursor_pointer()
+            .hover(|style| style.bg(theme::sunken()))
+            .on_click(cx.listener(|shell, _event, _window, cx| {
+                shell.state.update(cx, |state, cx| state.toggle_sidebar(cx));
+            }))
+            .child(
+                div()
+                    .w(px(15.))
+                    .h(px(13.))
+                    .border_1()
+                    .rounded(px(3.5))
+                    .border_color(theme::text_secondary())
+                    .child(
+                        div()
+                            .w(px(4.5))
+                            .h_full()
+                            .border_r_1()
+                            .border_color(theme::text_secondary()),
+                    ),
+            )
+    }
+
     fn top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let active = self.state.read(cx).active_segment();
+        let sidebar = self.state.read(cx).sidebar();
+        let lights_end = GUTTER + CONTENT_INSET + TRAFFIC_LIGHTS_WIDTH + TRAFFIC_LIGHTS_GAP;
         div()
             .flex()
             .flex_none()
             .items_center()
-            .h(px(48.))
-            .px(px(14.))
+            .h(px(TOOLBAR_HEIGHT + HAIRLINE))
+            .pr(px(GUTTER + CONTENT_INSET))
             .border_b_1()
             .border_color(theme::hairline())
-            .child(div().w(px(52.)).flex_none())
-            .child(
-                div()
+            .child({
+                let controls = div()
                     .flex()
+                    .flex_none()
                     .items_center()
                     .gap(px(2.))
-                    .ml(px(8.))
+                    .pl(px(lights_end))
                     .text_color(theme::text_secondary())
-                    .child(sidebar_toggle())
+                    .child(self.sidebar_toggle(cx))
                     .child(arrow("‹", 1.0))
-                    .child(arrow("›", 0.4)),
-            )
+                    .child(arrow("›", 0.4));
+                match sidebar {
+                    SidebarVisibility::Shown => controls.w(px(GUTTER + SIDEBAR_WIDTH + GUTTER)),
+                    SidebarVisibility::Hidden => controls.pr(px(TRAFFIC_LIGHTS_GAP)),
+                }
+            })
             .child(
                 div()
+                    .id("segments")
+                    .debug_selector(|| "segments".to_string())
                     .flex()
                     .items_center()
                     .gap(px(3.))
-                    .ml(px(6.))
                     .p(px(3.))
                     .rounded(px(9.))
                     .bg(theme::sunken())
@@ -168,6 +225,26 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = self.body(cx);
+        let mut columns = div()
+            .flex()
+            .flex_1()
+            .min_h(px(0.))
+            .gap(px(GUTTER))
+            .p(px(GUTTER));
+        match self.state.read(cx).sidebar() {
+            SidebarVisibility::Shown => {
+                columns = columns.child(
+                    div()
+                        .w(px(SIDEBAR_WIDTH))
+                        .flex_none()
+                        .flex()
+                        .flex_col()
+                        .min_h(px(0.))
+                        .child(self.sidebar.clone()),
+                );
+            }
+            SidebarVisibility::Hidden => {}
+        }
         div()
             .size_full()
             .flex()
@@ -175,26 +252,11 @@ impl Render for Shell {
             .bg(theme::window())
             .text_color(theme::text_primary())
             .text_size(px(13.5))
+            .on_action(cx.listener(|shell, _: &ToggleSidebar, _window, cx| {
+                shell.state.update(cx, |state, cx| state.toggle_sidebar(cx));
+            }))
             .child(self.top_bar(cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h(px(0.))
-                    .gap(px(10.))
-                    .px(px(10.))
-                    .pb(px(10.))
-                    .child(
-                        div()
-                            .w(px(250.))
-                            .flex_none()
-                            .flex()
-                            .flex_col()
-                            .min_h(px(0.))
-                            .child(self.sidebar.clone()),
-                    )
-                    .children(body),
-            )
+            .child(columns.children(body))
     }
 }
 
@@ -212,24 +274,6 @@ fn card() -> Div {
                 .blur_radius(px(24.))
                 .spread_radius(px(-10.)),
         ])
-}
-
-fn sidebar_toggle() -> impl IntoElement {
-    div().p(px(5.)).rounded(px(7.)).child(
-        div()
-            .w(px(15.))
-            .h(px(13.))
-            .border_1()
-            .rounded(px(3.5))
-            .border_color(theme::text_secondary())
-            .child(
-                div()
-                    .w(px(4.5))
-                    .h_full()
-                    .border_r_1()
-                    .border_color(theme::text_secondary()),
-            ),
-    )
 }
 
 fn arrow(glyph: &'static str, opacity: f32) -> impl IntoElement {
@@ -264,11 +308,16 @@ fn rule(width: Pixels) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
+    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext, px};
     use time::macros::datetime;
     use tuclaw_core::store::Store;
 
-    use super::Shell;
+    use crate::state::SidebarVisibility;
+
+    use super::{
+        CONTENT_INSET, GUTTER, HAIRLINE, Shell, TOOLBAR_HEIGHT, TRAFFIC_LIGHT_SIZE, ToggleSidebar,
+        traffic_light_position,
+    };
     use crate::state::{AppState, Segment};
 
     fn seeded(cx: &mut TestAppContext) -> Entity<AppState> {
@@ -370,5 +419,119 @@ mod tests {
             cx.debug_bounds("thread-close").is_none(),
             "the thread card leaves with the thread"
         );
+    }
+
+    #[gpui::test]
+    fn the_segments_start_at_the_content_card(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        let segments = cx.debug_bounds("segments").expect("the segments are drawn");
+        let card = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        assert_eq!(segments.left(), card.left());
+    }
+
+    #[gpui::test]
+    fn the_segments_sit_in_the_middle_of_the_toolbar(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        let segments = cx.debug_bounds("segments").expect("the segments are drawn");
+        assert_eq!(segments.center().y, px(TOOLBAR_HEIGHT / 2.));
+    }
+
+    #[gpui::test]
+    fn the_content_card_and_the_search_field_share_a_top_edge(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        let card = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        let search = cx
+            .debug_bounds("sidebar-search")
+            .expect("the search field is drawn");
+        assert_eq!(card.top(), search.top());
+        assert_eq!(card.top(), px(TOOLBAR_HEIGHT + HAIRLINE + GUTTER));
+    }
+
+    #[test]
+    fn the_traffic_lights_align_with_the_sidebar_and_the_toolbar() {
+        let position = traffic_light_position();
+        assert_eq!(position.x, px(GUTTER + CONTENT_INSET));
+        assert_eq!(
+            position.y + px(TRAFFIC_LIGHT_SIZE / 2.),
+            px(TOOLBAR_HEIGHT / 2.)
+        );
+    }
+
+    #[gpui::test]
+    fn the_agents_view_card_starts_where_the_conversation_card_does(cx: &mut TestAppContext) {
+        let (_state, cx) = shell(cx);
+        let conversation = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        let agents = cx
+            .debug_bounds("segment-agents")
+            .expect("the agents segment is drawn");
+        cx.simulate_click(agents.center(), Modifiers::default());
+        cx.run_until_parked();
+        let roster = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        assert_eq!(roster.origin, conversation.origin);
+    }
+
+    #[gpui::test]
+    fn the_sidebar_toggle_hides_and_shows_the_sidebar(cx: &mut TestAppContext) {
+        let (state, cx) = shell(cx);
+        let toggle = cx
+            .debug_bounds("sidebar-toggle")
+            .expect("the toggle is drawn");
+        cx.simulate_click(toggle.center(), Modifiers::default());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Hidden)
+        });
+        assert!(cx.debug_bounds("sidebar-search").is_none());
+        let card = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        assert_eq!(card.left(), px(GUTTER));
+        let toggle = cx
+            .debug_bounds("sidebar-toggle")
+            .expect("the toggle is drawn");
+        cx.simulate_click(toggle.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("sidebar-search").is_some());
+        let card = cx
+            .debug_bounds("content-card")
+            .expect("the content card is drawn");
+        let segments = cx.debug_bounds("segments").expect("the segments are drawn");
+        assert_eq!(segments.left(), card.left());
+    }
+
+    #[gpui::test]
+    fn with_the_sidebar_hidden_the_segments_follow_the_toolbar_controls(cx: &mut TestAppContext) {
+        let (state, cx) = shell(cx);
+        state.update(cx, |state, cx| state.toggle_sidebar(cx));
+        cx.run_until_parked();
+        let toggle = cx
+            .debug_bounds("sidebar-toggle")
+            .expect("the toggle is drawn");
+        let segments = cx.debug_bounds("segments").expect("the segments are drawn");
+        assert!(toggle.left() >= px(GUTTER + CONTENT_INSET + 60.));
+        assert!(segments.left() > toggle.right());
+    }
+
+    #[gpui::test]
+    fn the_toggle_sidebar_action_flips_the_sidebar(cx: &mut TestAppContext) {
+        let (state, cx) = shell(cx);
+        cx.dispatch_action(ToggleSidebar);
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Hidden)
+        });
+        cx.dispatch_action(ToggleSidebar);
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.sidebar(), SidebarVisibility::Shown)
+        });
     }
 }
