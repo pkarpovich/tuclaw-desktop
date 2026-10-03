@@ -258,9 +258,9 @@ Non-negotiable; the gate for marking any task complete. If a rule is violated th
 
 ### Task 7: [Final] Update documentation
 
-- [ ] `CLAUDE.md`: the crate split gains `v3/` (one line per file) and `testing.rs`; a short "The v3 client" section: the async seam, the core-owned runtime and its abort-on-drop futures, the single socket task, the reducer's text model and ordering facts, the mock's two pacings and the test rule (stepped in tests, never a foreign thread)
-- [ ] `README.md`: one paragraph naming `tuclaw_core::v3` and the contract file
-- [ ] move this plan to `docs/plans/completed/`
+- [x] `CLAUDE.md`: the crate split gains `v3/` (one line per file) and `testing.rs`; a short "The v3 client" section: the async seam, the core-owned runtime and its abort-on-drop futures, the single socket task, the reducer's text model and ordering facts, the mock's two pacings and the test rule (stepped in tests, never a foreign thread)
+- [x] `README.md`: one paragraph naming `tuclaw_core::v3` and the contract file
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

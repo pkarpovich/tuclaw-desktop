@@ -23,10 +23,15 @@ shown in UTC, not in the local zone.
 
 | Path | What it is |
 |---|---|
-| `core/` | `tuclaw-core`: domain types, the SQLite store, the fixtures, day grouping. No `gpui` dependency, so it is testable without a window. |
+| `core/` | `tuclaw-core`: domain types, the SQLite store, the fixtures, day grouping, and `v3`, the client of the daemon's `/api/v3`. No `gpui` dependency, so it is testable without a window. |
 | `app/` | `tuclaw-desktop`: the binary — state, views, the text input element, the theme. |
 | `docs/design/` | The designer's mockup and five screenshots of it. Look here before touching a view. |
-| `docs/plans/completed/` | The implementation plan this repository was built from, archived complete. |
+| `docs/contracts/` | `v3-client-contract.md`, the wire contract with the daemon, a copy of tuclaw's. |
+| `docs/plans/completed/` | The implementation plans this repository was built from, archived complete. |
+
+## The daemon client
+
+`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with a bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the app runs against until the daemon ships the API. The UI is not wired to it yet; that comes as separate tasks.
 
 ## Building
 
@@ -126,7 +131,8 @@ Two tiers, split by what they need to run.
 
 `tuclaw-core` uses plain `#[test]` — no window, no GPU. It covers domain invariants, the body
 encoding round trip, day grouping, the schema and every store method, seeding idempotence, and the
-fixture data itself. Store tests run against a fresh in-memory database each, so they are
+fixture data itself. The v3 client is tested against golden JSON in `core/testdata/v3/`, against
+`FakeDaemon` for the HTTP transport, and end to end over the mock in `core/tests/v3_mock.rs`. Store tests run against a fresh in-memory database each, so they are
 order-independent and parallel-safe.
 
 `tuclaw-desktop` uses `#[gpui::test]`, which needs `gpui` with `test-support`. It covers state

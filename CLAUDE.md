@@ -11,6 +11,20 @@ Two crates in one workspace.
 `core/` is `tuclaw-core`: domain types (`model.rs`), the SQLite store (`store.rs`, `schema.rs`,
 `paths.rs`), the fixtures (`fixtures.rs`) and day grouping (`grouping.rs`).
 
+`core/src/v3/` is the client of the daemon's `/api/v3`, built to `docs/contracts/v3-client-contract.md` (a verbatim copy of tuclaw's contract; the two copies stay identical apart from the header):
+
+- `dto.rs` - the REST bodies, field for field, with `Unknown` fallbacks on every enum
+- `frames.rs` - `Frame` and `decode` for the socket, `ClientFrame` and `encode`
+- `run.rs` - the `Run` reducer that folds a run's frames
+- `transport.rs` - the `Transport` seam, `Connection`, `ApiError`, `Backoff`
+- `runtime.rs` - the core-owned one-worker tokio runtime and `spawn` with abort-on-drop
+- `http.rs` - `HttpTransport` (reqwest + tokio-tungstenite) and `ClientToken`
+- `mock.rs` - `MockTransport`, the in-process daemon with `Pace::{Realtime, Stepped}`
+- `client.rs` - `Client`, every call of the contract
+- `golden.rs` - the golden-fixture loader for tests (`core/testdata/v3/`)
+
+`core/src/testing.rs` (feature `test-support`) is `FakeDaemon`, a loopback HTTP and WebSocket server for transport tests.
+
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
 `message.rs`, `thread.rs`, `agents.rs`, `failure.rs`), the text input (`input.rs`), the composer
 (`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
@@ -121,6 +135,16 @@ test`.
   from the current selection.
 - **Enter sends, Shift+Enter breaks the line.** Both are explicit `KeyBinding`s registered in
   `input::bind_keys`, not defaults.
+
+## The v3 client
+
+**One async seam.** `Transport` has three calls, each returning a `BoxFuture<'static, _>`; `HttpTransport` and `MockTransport` implement it and `Client` owns every path and every decode, so the mock and the daemon go through the same code. `HttpTransport` runs its I/O on a one-worker tokio runtime `core` owns (zed's `reqwest_client` pattern), so its futures need no runtime in the caller, start when the call is made, and abort when dropped. `core` therefore depends on tokio but never on `gpui` or `gpui_tokio`.
+
+**One socket task.** The event socket is served by one tokio task that `select!`s over the socket, the client's frames and a heartbeat deadline; it closes the socket on silence, on a server close, on any error, or when the `Connection` is dropped, and the closing of `Connection::frames` is how a caller learns to reconnect (with `Backoff` and `Some(last_seq)`).
+
+**The reducer's text model.** `Run::segment` is the text block in progress only: `text.delta` appends, `step.text` turns it into a text step and clears it, `run.reset` drops it and the text steps. A `run.snapshot` replaces segment and steps and seeds `last_seq` from `as_of_seq`, so persisted frames at or below it are replays. The ordering facts a caller handles (a delta before its `run.started`, an `input.accepted` after it, the answer's `message.created` before `run.finished`, no answer for an interrupted run) are on `run.rs`'s module doc; `core/tests/v3_mock.rs`'s `Session` is the reference caller.
+
+**The test rule.** Tests drive `MockTransport` with `Pace::Stepped` and call `step()`/`play_all()` from the test thread. Never `Pace::Realtime` or `HttpTransport` under `#[gpui::test]`: GPUI's test scheduler forbids parking on a wake from a foreign thread, and both wake from the tokio runtime.
 
 ## The design is the spec
 
