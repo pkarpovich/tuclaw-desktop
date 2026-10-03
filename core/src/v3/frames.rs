@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use super::dto::{AgentId, InputId, Message, RunId, Seq, StepRow, SurfaceId, ToolUseId};
+use super::dto::{
+    AgentId, ContextUsage, InputId, Message, RunId, Seq, StepRow, SurfaceId, ToolUseId, Usage,
+};
 
 /// The envelope version this build speaks.
 pub const VERSION: u32 = 1;
@@ -71,7 +73,7 @@ pub struct RunSnapshot {
 }
 
 /// A persisted event of one run: the envelope's stamp around the payload.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RunEvent<T> {
     /// The event's position in the log.
     pub seq: Seq,
@@ -201,7 +203,7 @@ pub struct StatusUpdate {
 pub struct RunReset {}
 
 /// The payload of `run.finished`, the only terminal signal of a run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunFinished {
     /// Whether the run failed.
     #[serde(default)]
@@ -212,12 +214,12 @@ pub struct RunFinished {
     /// Why it ended: `success`, `interrupted`, `agent_crashed`, ...
     #[serde(default)]
     pub terminal_reason: String,
-    /// The agent's per-turn usage, as the agent edge sends it.
+    /// The run's token counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Value>,
-    /// The agent's context-window snapshot, as the agent edge sends it.
+    pub usage: Option<Usage>,
+    /// The context window after the run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_usage: Option<Value>,
+    pub context_usage: Option<ContextUsage>,
 }
 
 /// `message.created`: a message was written.
@@ -263,7 +265,7 @@ pub struct UnknownFrame {
 }
 
 /// One decoded server frame.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
     /// `hello`.
     Hello(Hello),
@@ -729,15 +731,31 @@ mod tests {
     }
 
     #[test]
-    fn run_finished_carries_reason_and_opaque_usage() {
+    fn run_finished_carries_reason_usage_and_context() {
         let Frame::RunFinished(ok) = frame("run_finished") else {
             panic!("expected run.finished");
         };
         assert!(!ok.body.is_error);
         assert_eq!(ok.body.terminal_reason, "success");
         assert_eq!(
+            ok.body.usage,
+            Some(Usage {
+                input_tokens: 12,
+                output_tokens: 412,
+                cache_read_tokens: 321_004,
+                cache_creation_tokens: 2950,
+                num_turns: 2,
+                duration_api_ms: 11_840,
+            })
+        );
+        assert_eq!(
             ok.body.context_usage,
-            Some(json!({"totalTokens": 323968, "maxTokens": 1000000}))
+            Some(ContextUsage {
+                total_tokens: 323_968,
+                max_tokens: 1_000_000,
+                percentage: 32.4,
+                model: "claude-opus-5-5[1m]".into(),
+            })
         );
 
         let Frame::RunFinished(interrupted) = frame("run_finished_interrupted") else {

@@ -104,7 +104,7 @@ One page, oldest first inside the page; without `before` it is the newest page. 
 
 - Routes exactly like a Telegram message on that surface: `addressed_agent_id` (a mention) wins, else sticky, else the lead. The user row is written with `channel` origin `desktop` and is NOT mirrored to Telegram (`mirror = agent_only`); the answer is.
 - `client_message_id` (UUID chosen by the client, required) makes the post idempotent: a retry with the same id returns the first result instead of a second message, and the id is echoed on the message (above).
-- `202 {"message_id": 9193, "input_id": 42, "agent_id": 1}`. The reply arrives on the event socket: `message.created` for the user row, then the run's events.
+- `202 {"message_id": 9193, "input_id": 42, "agent_id": 1}`. `input_id` is `null` when the message was stored but its wake could not be queued (the daemon then posts an error notice on the surface, as it does for a Telegram message); a retry with the same `client_message_id` returns the same answer. The reply arrives on the event socket: `message.created` for the user row, then the run's events.
 - While the woken agent already has a live run, the input waits behind it as today (held). Steering into the live run is decided in the C1 plan, not here; the client contract does not change either way.
 
 ### `GET /runs/{id}`
@@ -157,7 +157,7 @@ The agent's run events pass through unchanged (same names and payloads as the ag
 - `step.task {task_id, task_type, state, description?, summary?}` - background subagents / Bash
 - `step.status {status, detail}`
 - `run.reset {}` - the client drops the run's streamed text and text steps (tool steps stay)
-- `run.finished {is_error, error?, terminal_reason, usage?, context_usage?}` - `result` is not repeated here; the answer arrives as `message.created`
+- `run.finished {is_error, error?, terminal_reason, usage?, context_usage?}` - `result` is not repeated here; the answer arrives as `message.created`. `usage` is `{input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, num_turns, duration_api_ms}`; `context_usage` is `{total_tokens, max_tokens, percentage, model}` (the daemon renames the agent edge's camelCase fields)
 - `message.created {message}` - `message` exactly as in the messages page
 
 Order guarantee (B2): for a user or a2a run with a visible answer, `message.created{run_id}` comes before that run's `run.finished`; a scheduled run's answer may come after.

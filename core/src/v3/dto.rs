@@ -464,8 +464,9 @@ pub struct Post {
 pub struct Posted {
     /// The user message written.
     pub message_id: MessageId,
-    /// The input queued for the agent.
-    pub input_id: InputId,
+    /// The input queued for the agent; `None` when the message was stored but its wake could not
+    /// be queued (the daemon then posts an error notice on the surface).
+    pub input_id: Option<InputId>,
     /// The agent that will answer.
     pub agent_id: AgentId,
 }
@@ -485,6 +486,29 @@ pub struct Usage {
     /// Tokens written to the prompt cache.
     #[serde(default)]
     pub cache_creation_tokens: u64,
+    /// Model turns the run took; reported on `run.finished`.
+    #[serde(default)]
+    pub num_turns: u64,
+    /// Time spent in API calls; reported on `run.finished`.
+    #[serde(default)]
+    pub duration_api_ms: u64,
+}
+
+/// The context window after a run, as `run.finished` reports it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContextUsage {
+    /// Tokens in the window.
+    #[serde(default)]
+    pub total_tokens: u64,
+    /// The window's size.
+    #[serde(default)]
+    pub max_tokens: u64,
+    /// How full the window is, 0-100.
+    #[serde(default)]
+    pub percentage: f64,
+    /// The model measured.
+    #[serde(default)]
+    pub model: String,
 }
 
 /// The context window after a run.
@@ -824,10 +848,17 @@ mod tests {
             posted,
             Posted {
                 message_id: MessageId(9193),
-                input_id: InputId(42),
+                input_id: Some(InputId(42)),
                 agent_id: AgentId(1),
             }
         );
+    }
+
+    #[test]
+    fn a_post_whose_wake_failed_has_no_input() {
+        let posted = json!({"message_id": 9193, "input_id": null, "agent_id": 1});
+        let posted: Posted = serde_json::from_value(posted).unwrap();
+        assert_eq!(posted.input_id, None);
     }
 
     #[test]
