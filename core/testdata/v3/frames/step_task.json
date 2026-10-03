@@ -1,0 +1,1 @@
+{"v": 1, "seq": 1206, "type": "step.task", "surface_id": 1, "run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "at": "2026-10-03T15:26:04Z", "payload": {"task_id": "t1", "task_type": "local_agent", "state": "running", "description": "search the recipe site"}}

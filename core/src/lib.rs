@@ -8,3 +8,5 @@ pub mod paths;
 mod schema;
 /// The SQLite store behind the workspace.
 pub mod store;
+/// The client of the daemon's `/api/v3`.
+pub mod v3;

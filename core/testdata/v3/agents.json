@@ -1,0 +1,21 @@
+[{
+  "id": 1,
+  "name": "Jarvis",
+  "ident": "tuclaw_bot",
+  "description": "",
+  "bot_username": "tuclaw_bot",
+  "model": "opus[1m]:medium",
+  "state": "idle",
+  "live_run": null,
+  "home_surface_id": 1
+}, {
+  "id": 3,
+  "name": "Magnet Feed",
+  "ident": "magnet_feed",
+  "description": "Tracks torrent releases",
+  "bot_username": "magnet_feed_bot",
+  "model": "sonnet",
+  "state": "running",
+  "live_run": {"run_id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d", "surface_id": 4},
+  "home_surface_id": 4
+}]

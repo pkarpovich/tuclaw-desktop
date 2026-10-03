@@ -1,0 +1,20 @@
+[{
+  "id": 1,
+  "kind": "channel",
+  "name": "General",
+  "sort_order": 0,
+  "last_message_at": "2026-10-03T15:26:00Z",
+  "lead_agent_id": 1,
+  "agents": [{"agent_id": 1, "role": "lead", "listens": true}, {"agent_id": 3, "role": "mention", "listens": false}],
+  "bindings": [{"channel": "telegram", "external_id": "-1003614621196:0", "mirror": "agent_only"}],
+  "live_run": {"run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "agent_id": 1}
+}, {
+  "id": 4,
+  "kind": "channel",
+  "name": "Magnet Feed",
+  "sort_order": 1,
+  "last_message_at": null,
+  "lead_agent_id": 3,
+  "agents": [{"agent_id": 3, "role": "lead", "listens": true}],
+  "bindings": [{"channel": "telegram", "external_id": "-1003614621196:918", "mirror": "agent_only"}]
+}]

@@ -1,0 +1,1 @@
+{"v": 1, "seq": 1209, "type": "step.tool_started", "surface_id": 1, "run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "at": "2026-10-03T15:26:07Z", "payload": {"tool_use_id": "toolu_02Z", "name": "Write", "input": {"truncated": "{\"file_path\": \"/tmp/recipe.md\", \"content\": \"## Лисички"}, "parent_tool_use_id": "toolu_01A2b3C4d5E6f7G8h9"}}
