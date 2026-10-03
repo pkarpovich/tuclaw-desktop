@@ -25,7 +25,7 @@ Two crates in one workspace.
 `core/src/testing.rs` (feature `test-support`) is `FakeDaemon`, a loopback HTTP and WebSocket server for transport tests.
 
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
-`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the live run card (`live.rs`), the text input (`input.rs`), the composer
+`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the live run card (`live.rs`), Markdown (`rich.rs`: GPUI Kit's `TextView` in the app's colours, and the split of a leading `<details>` Thinking fold the prod data still carries), the text input (`input.rs`), the composer
 (`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
 the commit `build.rs` bakes in, Quit on Cmd+Q). Menu action handlers that open a prompt go through
 `cx.defer`: an action dispatched while a window is active runs inside that window's update, so a
@@ -43,6 +43,8 @@ Public items in `core` carry `///` docs (`rustdoc` skill); `app` items do not.
 **`link.rs` is the seam between v3 and the views.** It maps surfaces onto `Channel`, agents onto `Agent` (busy while a live run of theirs is tracked), messages onto `Message` (`Author::System` for notices, the text as one `Span::Text` until Markdown rendering lands), and picks the source from the environment. Views never see a v3 type except the `Run`s of `AppState::live_runs`.
 
 **The link task** (`run_link` in `state.rs`) is the contract's fresh start: connect without `since`, read `hello`, then fetch surfaces, agents and the selected surface's page, then apply every frame in order through `AppState::apply`. A closed socket sets `Link::Reconnecting`, waits `Backoff::next_delay` on `cx.background_executor().timer` (tests `advance_clock` through it), and reconnects with the last seq; a `gap` refetches. Selecting a surface sends `focus` and loads its page. Posting appends an optimistic row with a negative local id and a `ClientMessageId`, reconciled by the `202` and by the echoed `message.created`; a failed post removes the row and emits `SendFailed(text)`, which the feed hands back to the composer.
+
+**GPUI Kit is initialised before anything renders.** `main` and `testing::{mocked, seeded}` call `gpui_kit::init(cx)`, which installs the Kit theme and state `TextView` reads; a test that builds a view rendering Markdown without it panics on the missing global.
 
 ## State ownership
 
@@ -76,9 +78,10 @@ fails, the pixels just stop updating.
 | `MessagesLoaded` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `MessageAppended` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `RunsChanged` | feed | rebuild items; `remeasure_items` over the run rows when the count is unchanged, else `reset(count)` |
+| `FoldToggled` | feed | `ListState::remeasure()` - a Thinking fold opened or closed |
 | `SendFailed(text)` | feed | `Composer::restore(text)` |
 
-Every `match` on `StateEvent` lists all five variants, including the empty arms. No `_ =>`.
+Every `match` on `StateEvent` lists all six variants, including the empty arms. No `_ =>`.
 
 ## The ListState resync rule
 

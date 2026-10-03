@@ -7,6 +7,7 @@ mod link;
 mod live;
 mod menu;
 mod message;
+mod rich;
 mod shell;
 mod sidebar;
 mod state;
@@ -23,6 +24,7 @@ use shell::Shell;
 fn main() {
     let startup = failure::start(Config::from_env());
     gpui_platform::application().run(move |cx: &mut App| {
+        gpui_kit::init(cx);
         input::bind_keys(cx);
         menu::install(cx);
         let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);

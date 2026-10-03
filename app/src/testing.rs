@@ -1,14 +1,27 @@
 use gpui::{AppContext, Entity, TestAppContext};
 use tuclaw_core::model::ChannelId;
-use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario};
+use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario, Seed};
 
 use crate::link::Source;
 use crate::state::AppState;
 
 pub fn mocked(cx: &mut TestAppContext, scenario: Scenario) -> (MockTransport, Entity<AppState>) {
+    cx.update(gpui_kit::init);
     let mock = MockTransport::new(scenario, Pace::Stepped);
     let client = Client::mock(&mock);
     let state = cx.new(|_| AppState::new(client, Source::Mock));
+    state.update(cx, |state, cx| state.start(cx));
+    cx.run_until_parked();
+    mock.pump_control();
+    cx.run_until_parked();
+    (mock, state)
+}
+
+pub fn seeded(cx: &mut TestAppContext, seed: Seed) -> (MockTransport, Entity<AppState>) {
+    cx.update(gpui_kit::init);
+    let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
+    let client = Client::mock(&mock);
+    let state = cx.new(|_| AppState::new(client, Source::Snapshot));
     state.update(cx, |state, cx| state.start(cx));
     cx.run_until_parked();
     mock.pump_control();

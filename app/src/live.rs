@@ -7,6 +7,7 @@ use tuclaw_core::v3::{Run, RunId, RunState, StepKind, ToolStatus};
 
 use crate::link;
 use crate::message::{agent_badge, avatar, writer};
+use crate::rich::{self, Ink};
 use crate::theme;
 
 const DETAIL: usize = 90;
@@ -177,8 +178,12 @@ pub fn run_card(view: &RunView, agents: &[Agent], on_stop: OnStop) -> impl IntoE
                 .child(div().flex_1())
                 .children(stop_button(view, on_stop)),
         );
-    for step in &view.steps {
-        column = column.child(step_element(step));
+    let key = match &view.id {
+        Some(RunId(id)) => id.clone(),
+        None => "queued".to_string(),
+    };
+    for (index, step) in view.steps.iter().enumerate() {
+        column = column.child(step_element(&key, index, step));
     }
     if !view.segment.is_empty() || view.state == RunState::Running {
         let cursor = match view.state {
@@ -189,12 +194,11 @@ pub fn run_card(view: &RunView, agents: &[Agent], on_stop: OnStop) -> impl IntoE
             RunState::Error => "",
             RunState::Interrupted => "",
         };
-        column = column.child(
-            div()
-                .text_size(px(14.))
-                .line_height(px(21.))
-                .child(SharedString::from(format!("{}{cursor}", view.segment))),
-        );
+        column = column.child(div().text_size(px(14.5)).child(rich::markdown(
+            SharedString::from(format!("run-{key}-segment")),
+            format!("{}{cursor}", view.segment),
+            Ink::Body,
+        )));
     }
     div()
         .id(SharedString::from(selector.clone()))
@@ -258,7 +262,7 @@ fn state_chip(state: RunState) -> Div {
         .child(state_label(state))
 }
 
-fn step_element(step: &StepView) -> Div {
+fn step_element(key: &str, index: usize, step: &StepView) -> Div {
     let row = div()
         .flex()
         .items_center()
@@ -267,11 +271,11 @@ fn step_element(step: &StepView) -> Div {
         .text_size(px(12.5))
         .text_color(theme::text_secondary());
     match step {
-        StepView::Thought(text) => div()
-            .text_size(px(13.))
-            .line_height(px(19.))
-            .text_color(theme::text_muted())
-            .child(SharedString::from(text.clone())),
+        StepView::Thought(text) => div().text_size(px(13.)).child(rich::markdown(
+            SharedString::from(format!("run-{key}-thought-{index}")),
+            text.clone(),
+            Ink::Muted,
+        )),
         StepView::Tool {
             name,
             detail,

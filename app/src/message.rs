@@ -1,9 +1,19 @@
-use gpui::{Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
+use std::rc::Rc;
+
+use gpui::{App, Div, FontWeight, IntoElement, SharedString, Window, div, prelude::*, px};
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, Span};
 
+use crate::rich::{self, Ink, Parts};
 use crate::theme;
+
+pub type OnToggle = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
+
+pub enum Fold {
+    Collapsed,
+    Expanded,
+}
 
 pub struct Writer {
     pub name: SharedString,
@@ -23,7 +33,12 @@ enum Badge {
     None,
 }
 
-pub fn message_row(message: &Message, agents: &[Agent]) -> impl IntoElement {
+pub fn message_row(
+    message: &Message,
+    agents: &[Agent],
+    fold: Fold,
+    on_toggle: OnToggle,
+) -> impl IntoElement {
     let Message {
         id,
         author,
@@ -33,14 +48,24 @@ pub fn message_row(message: &Message, agents: &[Agent]) -> impl IntoElement {
     let writer = writer(*author, agents);
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
-    let column = div()
+    let Parts { thinking, answer } = rich::split_thinking(&source(body));
+    let mut column = div()
         .flex()
         .flex_col()
         .flex_1()
         .min_w(px(0.))
         .gap(px(2.))
-        .child(byline(&writer, *sent_at))
-        .child(paragraph(body));
+        .child(byline(&writer, *sent_at));
+    if let Some(thinking) = thinking {
+        column = column.child(thinking_fold(*id, thinking, fold, on_toggle));
+    }
+    if !answer.is_empty() {
+        column = column.child(div().text_size(px(14.5)).child(rich::markdown(
+            SharedString::from(format!("{selector}-md")),
+            answer,
+            Ink::Body,
+        )));
+    }
     div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
@@ -51,6 +76,60 @@ pub fn message_row(message: &Message, agents: &[Agent]) -> impl IntoElement {
         .py(px(8.))
         .child(avatar(&writer))
         .child(column)
+}
+
+pub fn source(body: &[Span]) -> String {
+    let mut text = String::new();
+    for span in body {
+        match span {
+            Span::Text(part) => text.push_str(part),
+            Span::Mention(name) => {
+                text.push('@');
+                text.push_str(name);
+            }
+            Span::Code(code) => {
+                text.push('`');
+                text.push_str(code);
+                text.push('`');
+            }
+        }
+    }
+    text
+}
+
+fn thinking_fold(id: MessageId, thinking: String, fold: Fold, on_toggle: OnToggle) -> Div {
+    let MessageId(raw) = id;
+    let selector = format!("thinking-{raw}");
+    let marker = match fold {
+        Fold::Collapsed => "▸ Thinking",
+        Fold::Expanded => "▾ Thinking",
+    };
+    let toggle = div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .flex_none()
+        .text_size(px(12.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(theme::text_muted())
+        .cursor_pointer()
+        .on_click(move |_event, window, cx| on_toggle(id, window, cx))
+        .child(marker);
+    let fold_box = div().flex().flex_col().gap(px(2.)).child(toggle);
+    match fold {
+        Fold::Collapsed => fold_box,
+        Fold::Expanded => fold_box.child(
+            div()
+                .pl(px(10.))
+                .border_l_2()
+                .border_color(theme::hairline())
+                .text_size(px(13.))
+                .child(rich::markdown(
+                    SharedString::from(format!("thinking-{raw}-md")),
+                    thinking,
+                    Ink::Muted,
+                )),
+        ),
+    }
 }
 
 pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
@@ -187,47 +266,4 @@ pub fn agent_badge() -> Div {
 fn clock(sent_at: OffsetDateTime) -> String {
     let description = format_description!("[hour repr:12 padding:none]:[minute] [period]");
     sent_at.format(&description).unwrap_or_default()
-}
-
-fn paragraph(body: &[Span]) -> Div {
-    let mut paragraph = div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .gap_x(px(4.))
-        .gap_y(px(2.))
-        .text_size(px(14.5));
-    for span in body {
-        match span {
-            Span::Text(text) => {
-                for word in text.split_whitespace() {
-                    paragraph = paragraph.child(div().child(word.to_string()));
-                }
-            }
-            Span::Mention(name) => paragraph = paragraph.child(mention(name.clone())),
-            Span::Code(code) => paragraph = paragraph.child(code_chip(code.clone())),
-        }
-    }
-    paragraph
-}
-
-fn mention(name: String) -> Div {
-    div()
-        .flex_none()
-        .px(px(5.))
-        .rounded(px(5.))
-        .bg(theme::mention_field())
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::mention_text())
-        .child(name)
-}
-
-fn code_chip(code: String) -> Div {
-    div()
-        .flex_none()
-        .px(px(6.))
-        .rounded(px(6.))
-        .bg(theme::sunken())
-        .text_size(px(12.5))
-        .child(code)
 }

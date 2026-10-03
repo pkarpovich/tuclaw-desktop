@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::{Result, bail};
 use futures::StreamExt;
@@ -47,6 +47,7 @@ pub enum StateEvent {
     MessagesLoaded,
     MessageAppended,
     RunsChanged,
+    FoldToggled,
     SendFailed(String),
 }
 
@@ -74,6 +75,7 @@ pub struct AppState {
     control: Option<UnboundedSender<ClientFrame>>,
     view: View,
     sidebar: SidebarVisibility,
+    expanded: HashSet<MessageId>,
     _link: Option<Task<()>>,
 }
 
@@ -100,6 +102,7 @@ impl AppState {
             control: None,
             view: View::Conversation,
             sidebar: SidebarVisibility::Shown,
+            expanded: HashSet::new(),
             _link: None,
         }
     }
@@ -169,6 +172,18 @@ impl AppState {
             }
         }
         count
+    }
+
+    pub fn is_expanded(&self, message: MessageId) -> bool {
+        self.expanded.contains(&message)
+    }
+
+    pub fn toggle_thinking(&mut self, message: MessageId, cx: &mut Context<Self>) {
+        if !self.expanded.remove(&message) {
+            self.expanded.insert(message);
+        }
+        cx.emit(StateEvent::FoldToggled);
+        cx.notify();
     }
 
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {

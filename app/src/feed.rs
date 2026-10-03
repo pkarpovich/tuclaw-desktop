@@ -10,7 +10,7 @@ use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Mess
 
 use crate::composer::Composer;
 use crate::live::{OnStop, RunView, run_card, run_view};
-use crate::message::message_row;
+use crate::message::{Fold, OnToggle, message_row};
 use crate::state::{AppState, StateEvent};
 use crate::theme;
 
@@ -75,6 +75,10 @@ impl Feed {
                 feed.list.scroll_to_end();
             }
             StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
+            StateEvent::FoldToggled => {
+                feed.list.remeasure();
+                cx.notify();
+            }
             StateEvent::SendFailed(text) => {
                 let text = text.clone();
                 feed.composer
@@ -134,6 +138,10 @@ impl Feed {
         }
         let items = self.items.clone();
         let state = self.state.clone();
+        let folder = self.state.clone();
+        let on_toggle: OnToggle = Rc::new(move |message, _window, cx| {
+            folder.update(cx, |state, cx| state.toggle_thinking(message, cx));
+        });
         let stopper = self.state.clone();
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
             stopper.update(cx, |state, cx| state.interrupt(run, cx));
@@ -145,7 +153,13 @@ impl Feed {
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
                 Item::Message(message) => {
-                    message_row(message, state.read(cx).agents()).into_any_element()
+                    let state = state.read(cx);
+                    let fold = if state.is_expanded(message.id) {
+                        Fold::Expanded
+                    } else {
+                        Fold::Collapsed
+                    };
+                    message_row(message, state.agents(), fold, on_toggle.clone()).into_any_element()
                 }
                 Item::Run(run) => {
                     run_card(run, state.read(cx).agents(), on_stop.clone()).into_any_element()
@@ -786,5 +800,52 @@ mod tests {
         assert_eq!(stopped[0].state, RunState::Interrupted);
         assert_eq!(stopped[0].segment, "Посмотрю, ");
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), before));
+    }
+
+    fn folded_world() -> tuclaw_core::v3::Seed {
+        let surfaces = serde_json::from_str(include_str!("../../core/testdata/v3/surfaces.json"))
+            .expect("surfaces");
+        let agents = serde_json::from_str(include_str!("../../core/testdata/v3/agents.json"))
+            .expect("agents");
+        let message = serde_json::json!({
+            "id": 7, "surface_id": 1, "kind": "answer", "author": {"kind": "agent", "agent_id": 1},
+            "text": "<details><summary>Thinking</summary>\n\n- checked the notes\n\n</details>\n\n## Готово\n\n- **лисички** со сливками\n- [рецепт](https://example.org)",
+            "created_at": "2026-10-03T15:26:13Z"
+        });
+        tuclaw_core::v3::Seed {
+            surfaces,
+            agents,
+            messages: vec![serde_json::from_value(message).expect("message")],
+            runs: Vec::new(),
+        }
+    }
+
+    #[gpui::test]
+    fn a_thinking_fold_starts_collapsed_and_toggles(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, folded_world());
+        let built = state.clone();
+        let (_feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("message-7").is_some(),
+            "the answer is drawn"
+        );
+        let toggle = cx.debug_bounds("thinking-7").expect("the fold is drawn");
+        let collapsed = cx.debug_bounds("message-7").expect("drawn").size.height;
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert!(state.is_expanded(tuclaw_core::model::MessageId(7)))
+        });
+        let expanded = cx.debug_bounds("message-7").expect("drawn").size.height;
+        assert!(expanded > collapsed, "{expanded:?} > {collapsed:?}");
+        let toggle = cx
+            .debug_bounds("thinking-7")
+            .expect("the fold is still drawn");
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert!(!state.is_expanded(tuclaw_core::model::MessageId(7)))
+        });
     }
 }
