@@ -24,3 +24,11 @@ run = "cargo fmt --all"
 [tasks.fmt-check]
 description = "Fail on unformatted code"
 run = "cargo fmt --all -- --check"
+
+[tasks.bundle]
+description = "Build target/release/bundle/Tuclaw.app (ad-hoc signed)"
+run = "fish script/bundle-mac.fish"
+
+[tasks.install]
+description = "Build Tuclaw.app and copy it to /Applications"
+run = "fish script/bundle-mac.fish --install"

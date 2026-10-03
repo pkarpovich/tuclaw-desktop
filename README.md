@@ -44,11 +44,19 @@ mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all
 mise run fmt-check   # cargo fmt --all -- --check
+mise run bundle      # target/release/bundle/Tuclaw.app, ad-hoc signed
+mise run install     # the same, copied to /Applications
 ```
 
 The four gates that must be green before any change lands: `mise run fmt-check`, `mise run lint`,
 `mise run test`, `mise run build`. A clean build takes about a minute; incremental builds are a few
 seconds.
+
+## The app bundle
+
+`mise run bundle` (`script/bundle-mac.fish`) builds the release binary and assembles `target/release/bundle/Tuclaw.app` by hand, without `cargo-bundle`: `app/resources/Info.plist` with the version from `Cargo.toml`, the commit count as the build number and the short commit as `TuclawCommit`; the icon compiled by `xcrun actool` from the Icon Composer source `app/resources/AppIcon.icon` (taken from the tuclaw-app iOS project) into `AppIcon.icns` plus `Assets.car`; an ad-hoc `codesign`. The bundle identifier is `dev.pkarpovich.tuclaw` and the minimum macOS is 14.0. `mise run install` copies it to `/Applications`.
+
+`app/build.rs` bakes the short commit into the binary as `TUCLAW_COMMIT` (overridable from the environment), and the app menu's About Tuclaw shows `version (commit)`; Cmd+Q quits. A bare `mise run dev` binary has the menu too, but no icon and the executable's name in the menu bar.
 
 ## Toolchain traps
 

@@ -3,6 +3,7 @@ mod composer;
 mod failure;
 mod feed;
 mod input;
+mod menu;
 mod message;
 mod shell;
 mod sidebar;
@@ -22,6 +23,7 @@ fn main() {
     let startup = failure::start(OffsetDateTime::now_utc());
     gpui_platform::application().run(move |cx: &mut App| {
         input::bind_keys(cx);
+        menu::install(cx);
         let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

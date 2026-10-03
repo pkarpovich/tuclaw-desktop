@@ -13,7 +13,10 @@ Two crates in one workspace.
 
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
 `message.rs`, `thread.rs`, `agents.rs`, `failure.rs`), the text input (`input.rs`), the composer
-(`composer.rs`) and the theme (`theme.rs`).
+(`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
+the commit `build.rs` bakes in, Quit on Cmd+Q). Menu action handlers that open a prompt go through
+`cx.defer`: an action dispatched while a window is active runs inside that window's update, so a
+second `window.update` from the handler fails silently.
 
 **`core` must never depend on `gpui`.** Not directly, not transitively. Two reasons: the domain and
 the store have to be testable with no window and no GPU, and storage concerns must stay out of the
