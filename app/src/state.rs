@@ -257,6 +257,20 @@ impl AppState {
         Ok(())
     }
 
+    pub fn interrupt(&mut self, run: &RunId, cx: &mut Context<Self>) {
+        let Some(live) = self.runs.get_mut(run) else {
+            return;
+        };
+        live.mark_stopping();
+        let request = self.client.interrupt(run);
+        cx.spawn(async move |_this, _cx| {
+            request.await.ok();
+        })
+        .detach();
+        cx.emit(StateEvent::RunsChanged);
+        cx.notify();
+    }
+
     fn addressed(&self, channel: ChannelId, text: &str) -> Option<v3::AgentId> {
         let ident = text.strip_prefix('@')?;
         let mut name = String::new();

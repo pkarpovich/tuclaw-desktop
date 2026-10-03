@@ -9,7 +9,7 @@ use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
 use crate::composer::Composer;
-use crate::live::{RunView, run_card, run_view};
+use crate::live::{OnStop, RunView, run_card, run_view};
 use crate::message::message_row;
 use crate::state::{AppState, StateEvent};
 use crate::theme;
@@ -134,6 +134,10 @@ impl Feed {
         }
         let items = self.items.clone();
         let state = self.state.clone();
+        let stopper = self.state.clone();
+        let on_stop: OnStop = Rc::new(move |run, _window, cx| {
+            stopper.update(cx, |state, cx| state.interrupt(run, cx));
+        });
         list(self.list.clone(), move |index, _window, cx| {
             let Some(item) = items.get(index) else {
                 return div().into_any_element();
@@ -143,7 +147,9 @@ impl Feed {
                 Item::Message(message) => {
                     message_row(message, state.read(cx).agents()).into_any_element()
                 }
-                Item::Run(run) => run_card(run, state.read(cx).agents()).into_any_element(),
+                Item::Run(run) => {
+                    run_card(run, state.read(cx).agents(), on_stop.clone()).into_any_element()
+                }
             }
         })
         .flex_1()
@@ -744,5 +750,41 @@ mod tests {
             ]
         );
         assert_eq!(live[0].segment, "Нашёл три новых релиза, ");
+    }
+
+    #[gpui::test]
+    fn stop_interrupts_the_run_and_keeps_its_text(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..4 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        let streaming = runs(&feed, cx);
+        let Some(tuclaw_core::v3::RunId(id)) = streaming[0].id.clone() else {
+            panic!("a started run carries its id");
+        };
+        let selector: &'static str = format!("run-stop-{id}").leak();
+        let stop = cx
+            .debug_bounds(selector)
+            .expect("a working run offers Stop");
+        cx.simulate_click(stop.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(runs(&feed, cx)[0].state, RunState::Stopping);
+        assert!(
+            cx.debug_bounds(selector).is_none(),
+            "Stop leaves once it is pressed"
+        );
+        let before = state.read_with(cx, |state, _cx| state.messages().len());
+        play(&mock, cx);
+        let stopped = runs(&feed, cx);
+        assert_eq!(stopped.len(), 1);
+        assert_eq!(stopped[0].state, RunState::Interrupted);
+        assert_eq!(stopped[0].segment, "Посмотрю, ");
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), before));
     }
 }

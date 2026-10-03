@@ -1,4 +1,6 @@
-use gpui::{Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
+use std::rc::Rc;
+
+use gpui::{App, Div, FontWeight, IntoElement, SharedString, Window, div, prelude::*, px};
 use serde_json::Value;
 use tuclaw_core::model::{Agent, Author};
 use tuclaw_core::v3::{Run, RunId, RunState, StepKind, ToolStatus};
@@ -145,7 +147,9 @@ pub fn state_label(state: RunState) -> &'static str {
     }
 }
 
-pub fn run_card(view: &RunView, agents: &[Agent]) -> impl IntoElement {
+pub type OnStop = Rc<dyn Fn(&RunId, &mut Window, &mut App)>;
+
+pub fn run_card(view: &RunView, agents: &[Agent], on_stop: OnStop) -> impl IntoElement {
     let writer = writer(view.author, agents);
     let selector = match &view.id {
         Some(RunId(id)) => format!("run-{id}"),
@@ -169,7 +173,9 @@ pub fn run_card(view: &RunView, agents: &[Agent]) -> impl IntoElement {
                         .child(writer.name.clone()),
                 )
                 .child(agent_badge())
-                .child(state_chip(view.state)),
+                .child(state_chip(view.state))
+                .child(div().flex_1())
+                .children(stop_button(view, on_stop)),
         );
     for step in &view.steps {
         column = column.child(step_element(step));
@@ -200,6 +206,37 @@ pub fn run_card(view: &RunView, agents: &[Agent]) -> impl IntoElement {
         .py(px(8.))
         .child(avatar(&writer))
         .child(column)
+}
+
+fn stop_button(view: &RunView, on_stop: OnStop) -> Option<impl IntoElement> {
+    let run = view.id.clone()?;
+    match view.state {
+        RunState::Running => {}
+        RunState::Queued => return None,
+        RunState::Stopping => return None,
+        RunState::Ok => return None,
+        RunState::Error => return None,
+        RunState::Interrupted => return None,
+    }
+    let RunId(raw) = &run;
+    let selector = format!("run-stop-{raw}");
+    Some(
+        div()
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector)
+            .flex_none()
+            .px(px(8.))
+            .py(px(2.))
+            .rounded(px(6.))
+            .border_1()
+            .border_color(theme::border())
+            .text_size(px(11.5))
+            .text_color(theme::text_secondary())
+            .cursor_pointer()
+            .hover(|style| style.bg(theme::sunken()))
+            .on_click(move |_event, window, cx| on_stop(&run, window, cx))
+            .child("Stop"),
+    )
 }
 
 fn state_chip(state: RunState) -> Div {

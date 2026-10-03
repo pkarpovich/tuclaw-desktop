@@ -22,5 +22,5 @@ Four steps, one commit each, gates green after each:
 
 - [x] Step 1: read - with the link task, the socket, the run state and sending already in it (the commit ordering moved: threads and Direct left in the same commit, since a separate removal would have rewritten the same tests twice; the toolbar shows the link status already)
 - [x] Step 2: live - `live.rs` draws a run card per live or queued run of the selected surface after its messages: author, state chip, thoughts, tool and task and status steps, the streaming segment with a cursor; the list follows the tail (`FollowMode::Tail`) and remeasures the run rows while they grow
-- [ ] Step 3: send
+- [x] Step 3: send - posting, the optimistic row, reconciliation, the failure path and `@ident` addressing landed with step 1; this step adds Stop on a working run card, which marks it stopping and calls interrupt; an interrupted run keeps its text and stays until the surface is reloaded
 - [ ] Step 4: agents and status
