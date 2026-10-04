@@ -323,9 +323,7 @@ impl Shell {
                     .gap(px(2.))
                     .pl(px(lights_end))
                     .text_color(theme::text_secondary())
-                    .child(self.sidebar_toggle(cx))
-                    .child(arrow(Glyph::Back, 1.0))
-                    .child(arrow(Glyph::Closed, 0.4));
+                    .child(self.sidebar_toggle(cx));
                 match sidebar {
                     SidebarVisibility::Shown => controls.w(px(GUTTER + SIDEBAR_WIDTH + GUTTER)),
                     SidebarVisibility::Hidden => controls.pr(px(TRAFFIC_LIGHTS_GAP)),
@@ -453,14 +451,6 @@ fn card() -> Div {
                 .blur_radius(px(24.))
                 .spread_radius(px(-10.)),
         ])
-}
-
-fn arrow(glyph: Glyph, opacity: f32) -> impl IntoElement {
-    div().p(px(5.)).rounded(px(7.)).opacity(opacity).child(icon(
-        glyph,
-        px(16.),
-        theme::text_secondary(),
-    ))
 }
 
 fn settings_affordance() -> impl IntoElement {
