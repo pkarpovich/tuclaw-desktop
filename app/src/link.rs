@@ -19,9 +19,24 @@ pub fn channel(surface: &v3::Surface) -> Channel {
         name: surface.name.clone(),
         group: None,
         kind: ChannelKind::Channel,
-        unread: 0,
+        unread: surface.unread as usize,
         sort_index: surface.sort_order,
     }
+}
+
+pub fn message_id(message: v3::MessageId) -> MessageId {
+    let v3::MessageId(id) = message;
+    MessageId(id)
+}
+
+pub fn v3_message_id(message: MessageId) -> v3::MessageId {
+    let MessageId(id) = message;
+    v3::MessageId(id)
+}
+
+pub fn channel_id(surface: v3::SurfaceId) -> ChannelId {
+    let v3::SurfaceId(id) = surface;
+    ChannelId(id)
 }
 
 pub fn surface_id(channel: ChannelId) -> v3::SurfaceId {

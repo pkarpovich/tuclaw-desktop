@@ -34,6 +34,7 @@ pub struct Feed {
     focus: Focus,
     _observation: Subscription,
     _events: Subscription,
+    _activation: Subscription,
 }
 
 enum Focus {
@@ -44,6 +45,7 @@ enum Focus {
 enum Item {
     Separator(SharedString),
     Message(Message, Option<FireRow>),
+    Unread,
     Fire(FireRow),
     Run(RunView),
 }
@@ -85,10 +87,12 @@ impl Feed {
                 StateEvent::MessagesLoaded => {
                     feed.resync(Resync::Reset, cx);
                     feed.list.scroll_to_end();
+                    feed.read_to_newest(cx);
                 }
                 StateEvent::MessageAppended => {
                     feed.resync(Resync::Reset, cx);
                     feed.list.scroll_to_end();
+                    feed.read_to_newest(cx);
                 }
                 StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
                 StateEvent::FoldToggled => {
@@ -114,6 +118,11 @@ impl Feed {
                 }
             },
         );
+        let watcher = state.clone();
+        let activation = cx.observe_window_activation(window, move |_feed, window, cx| {
+            let active = window.is_window_active();
+            watcher.update(cx, |state, cx| state.set_window_active(active, cx));
+        });
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
         list.set_follow_mode(FollowMode::Tail);
@@ -142,6 +151,7 @@ impl Feed {
             )
             .with_voice(state.clone(), cx)
         });
+        state.update(cx, |state, cx| state.read_to_newest(cx));
         Feed {
             state,
             list,
@@ -150,6 +160,7 @@ impl Feed {
             focus: Focus::Requested,
             _observation: observation,
             _events: events,
+            _activation: activation,
         }
     }
 
@@ -190,6 +201,10 @@ impl Feed {
             });
         }
         cx.notify();
+    }
+
+    fn read_to_newest(&mut self, cx: &mut Context<Self>) {
+        self.state.update(cx, |state, cx| state.read_to_newest(cx));
     }
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
@@ -261,6 +276,7 @@ impl Feed {
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
+                Item::Unread => unread_divider().into_any_element(),
                 Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
                 Item::Message(message, trigger) => {
                     let state = state.read(cx);
@@ -383,7 +399,15 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     timeline.sort_by_key(|(at, _item)| *at);
     let mut items: Vec<Item> = Vec::new();
     let mut day = None;
+    let mut divider = state.divider();
     for (at, item) in timeline {
+        if let (Some(cursor), Item::Message(message, _trigger)) = (divider, &item)
+            && message.id > cursor
+            && message.id > MessageId(0)
+        {
+            divider = None;
+            items.push(Item::Unread);
+        }
         let date = local::local(at).date();
         if day != Some(date) {
             day = Some(date);
@@ -418,6 +442,7 @@ fn has_message(state: &AppState, id: MessageId) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Key {
     Separator(SharedString),
+    Unread,
     Message(tuclaw_core::model::MessageId),
     Fire(tuclaw_core::v3::TaskId, i64),
     Run(Option<tuclaw_core::v3::RunId>),
@@ -426,6 +451,7 @@ enum Key {
 fn key(item: &Item) -> Key {
     match item {
         Item::Separator(title) => Key::Separator(title.clone()),
+        Item::Unread => Key::Unread,
         Item::Message(message, _trigger) => Key::Message(message.id),
         Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
         Item::Run(run) => Key::Run(run.id.clone()),
@@ -446,6 +472,7 @@ fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
                 ));
             }
             Item::Separator(_) => {}
+            Item::Unread => {}
         }
     }
     None
@@ -464,6 +491,7 @@ fn first_run(items: &[Item]) -> usize {
                 break;
             }
             Item::Separator(_) => {}
+            Item::Unread => {}
             Item::Message(_, _) => {}
             Item::Fire(_) => {}
         }
@@ -669,6 +697,28 @@ fn day_separator(title: SharedString) -> impl IntoElement {
         .child(rule())
 }
 
+fn unread_divider() -> impl IntoElement {
+    div()
+        .id("feed-unread")
+        .debug_selector(|| "feed-unread".to_string())
+        .w_full()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .px(px(20.))
+        .pt(px(10.))
+        .pb(px(6.))
+        .child(div().flex_1().h(px(1.)).bg(theme::accent().opacity(0.6)))
+        .child(
+            div()
+                .flex_none()
+                .text_size(px(11.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::accent())
+                .child("New"),
+        )
+}
+
 fn rule() -> Div {
     div().flex_1().h(px(1.)).bg(theme::hairline())
 }
@@ -828,6 +878,57 @@ mod tests {
         state.read_with(cx, |state, _cx| assert!(state.pictures().is_empty()));
         let picture: &'static str = Box::leak(format!("message-{raw}-md-picture").into_boxed_str());
         assert!(cx.debug_bounds(picture).is_none());
+    }
+
+    fn unread_of(state: &Entity<AppState>, cx: &mut VisualTestContext, name: &str) -> usize {
+        state.read_with(cx, |state, _cx| {
+            let mut unread = None;
+            for channel in state.channels() {
+                if channel.name == name {
+                    unread = Some(channel.unread);
+                }
+            }
+            unread.expect("the channel exists")
+        })
+    }
+
+    #[gpui::test]
+    fn a_message_elsewhere_counts_until_its_channel_is_opened(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(3),
+            tuclaw_core::v3::AgentId(2),
+            "The lights are on.",
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        assert_eq!(unread_of(&state, cx, "Smart Home"), 1);
+        assert!(cx.debug_bounds("feed-unread").is_none());
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.select(home, cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("feed-unread").is_some());
+        assert_eq!(unread_of(&state, cx, "Smart Home"), 0);
+        let client = tuclaw_core::v3::Client::mock(&mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let mut served = None;
+        for surface in surfaces {
+            if surface.name == "Smart Home" {
+                served = Some(surface.unread);
+            }
+        }
+        assert_eq!(served, Some(0));
+    }
+
+    #[gpui::test]
+    fn an_inactive_window_keeps_new_messages_unread_until_it_is_back(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        posted_by_jarvis(&mock, &state, cx, "While you were away.");
+        assert_eq!(unread_of(&state, cx, "General"), 1);
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        assert_eq!(unread_of(&state, cx, "General"), 0);
     }
 
     #[gpui::test]
@@ -1006,6 +1107,7 @@ mod tests {
                     Item::Message(_, Some(_)) => triggered += 1,
                     Item::Message(_, None) => {}
                     Item::Separator(_) => {}
+                    Item::Unread => {}
                     Item::Run(_) => {}
                 }
             }
@@ -1089,6 +1191,7 @@ mod tests {
                 match item {
                     Item::Run(run) => runs.push(run.clone()),
                     Item::Separator(_) => {}
+                    Item::Unread => {}
                     Item::Message(_, _) => {}
                     Item::Fire(_) => {}
                 }

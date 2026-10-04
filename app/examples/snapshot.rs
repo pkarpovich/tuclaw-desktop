@@ -21,6 +21,7 @@ fn main() {
     let automations = std::env::args().any(|arg| arg == "--automations");
     let recording = std::env::args().any(|arg| arg == "--recording");
     let picture = std::env::args().any(|arg| arg == "--picture");
+    let unread = std::env::args().any(|arg| arg == "--unread");
     let mut settings = None;
     let mut task = None;
     for arg in std::env::args() {
@@ -74,6 +75,22 @@ fn main() {
         eprintln!("no channel named {channel}");
         std::process::exit(1);
     };
+    if unread {
+        let target = tuclaw_desktop::link::surface_id(selected);
+        for text in [
+            "Two new releases are out tonight.",
+            "Both are queued; the first finishes in 20 minutes.",
+        ] {
+            mock.agent_posts(target, tuclaw_core::v3::AgentId(3), text);
+        }
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(3),
+            tuclaw_core::v3::AgentId(2),
+            "The living room lights are off.",
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+    }
     cx.update(|cx| state.update(cx, |state, cx| state.select(selected, cx)));
     cx.run_until_parked();
     if open_logs {
@@ -193,6 +210,8 @@ fn main() {
     std::fs::create_dir_all(&directory).expect("the directory exists");
     let name = if automations || task.is_some() {
         "Automations".to_string()
+    } else if unread {
+        format!("{}-unread", channel.replace(' ', "-"))
     } else if picture {
         format!("{}-picture", channel.replace(' ', "-"))
     } else if recording {

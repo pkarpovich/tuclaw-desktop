@@ -166,6 +166,9 @@ pub struct AppState {
     recorder: Box<dyn Recorder>,
     pictures: Shelf,
     viewer: Option<Viewed>,
+    cursors: HashMap<ChannelId, MessageId>,
+    divider: Option<MessageId>,
+    window_active: bool,
     recording: Recording,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
@@ -221,6 +224,9 @@ impl AppState {
             recorder: Box::new(NoRecorder),
             pictures: Shelf::new(),
             viewer: None,
+            cursors: HashMap::new(),
+            divider: None,
+            window_active: true,
             recording: Recording::Idle,
             playback: None,
             _playback: None,
@@ -243,6 +249,142 @@ impl AppState {
 
     pub fn set_recorder(&mut self, recorder: Box<dyn Recorder>) {
         self.recorder = recorder;
+    }
+
+    pub fn divider(&self) -> Option<MessageId> {
+        self.divider
+    }
+
+    fn divider_for(&self, channel: ChannelId) -> Option<MessageId> {
+        let mut unread = false;
+        for candidate in &self.channels {
+            if candidate.id == channel && candidate.unread > 0 {
+                unread = true;
+            }
+        }
+        if !unread {
+            return None;
+        }
+        Some(self.cursors.get(&channel).copied().unwrap_or(MessageId(0)))
+    }
+
+    fn count_unread(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
+        let counted = match message.author.kind {
+            v3::AuthorKind::User => false,
+            v3::AuthorKind::Agent => true,
+            v3::AuthorKind::System => true,
+            v3::AuthorKind::Unknown => true,
+        };
+        if !counted {
+            return;
+        }
+        let channel = link::channel_id(message.surface_id);
+        let id = link::message_id(message.id);
+        if self
+            .cursors
+            .get(&channel)
+            .is_some_and(|cursor| id <= *cursor)
+        {
+            return;
+        }
+        for candidate in &mut self.channels {
+            if candidate.id == channel {
+                candidate.unread += 1;
+            }
+        }
+        cx.notify();
+    }
+
+    fn surface_read(&mut self, read: &v3::SurfaceRead, cx: &mut Context<Self>) {
+        let v3::SurfaceRead {
+            seq: _,
+            surface_id,
+            last_read_message_id,
+            unread,
+        } = read;
+        self.apply_read(
+            link::channel_id(*surface_id),
+            v3::ReadAnswer {
+                last_read_message_id: *last_read_message_id,
+                unread: *unread,
+            },
+        );
+        cx.notify();
+    }
+
+    fn apply_read(&mut self, channel: ChannelId, answer: v3::ReadAnswer) {
+        let v3::ReadAnswer {
+            last_read_message_id,
+            unread,
+        } = answer;
+        let cursor = link::message_id(last_read_message_id);
+        let moved = match self.cursors.get(&channel) {
+            Some(known) => cursor >= *known,
+            None => true,
+        };
+        if !moved {
+            return;
+        }
+        self.cursors.insert(channel, cursor);
+        for candidate in &mut self.channels {
+            if candidate.id == channel {
+                candidate.unread = unread as usize;
+            }
+        }
+    }
+
+    pub fn set_window_active(&mut self, active: bool, cx: &mut Context<Self>) {
+        self.window_active = active;
+        if active {
+            self.read_to_newest(cx);
+        }
+    }
+
+    pub fn read_to_newest(&mut self, cx: &mut Context<Self>) {
+        if !self.window_active {
+            return;
+        }
+        let Some(channel) = self.selected else {
+            return;
+        };
+        let mut newest = None;
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 && newest.is_none_or(|known: MessageId| message.id > known) {
+                newest = Some(message.id);
+            }
+        }
+        let Some(newest) = newest else {
+            return;
+        };
+        if self
+            .cursors
+            .get(&channel)
+            .is_some_and(|cursor| *cursor >= newest)
+        {
+            return;
+        }
+        self.cursors.insert(channel, newest);
+        for candidate in &mut self.channels {
+            if candidate.id == channel {
+                candidate.unread = 0;
+            }
+        }
+        let request = self
+            .client
+            .mark_read(link::surface_id(channel), link::v3_message_id(newest));
+        cx.spawn(async move |this, cx| {
+            let Ok(answer) = request.await else {
+                return;
+            };
+            this.update(cx, |state, cx| {
+                state.apply_read(channel, answer);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
     }
 
     pub fn viewer(&self) -> Option<&Viewed> {
@@ -1599,6 +1741,7 @@ impl AppState {
         }
         self.view = View::Conversation;
         if self.selected != Some(channel) {
+            self.divider = self.divider_for(channel);
             self.selected = Some(channel);
             self.halt();
             self.inspector = None;
@@ -1915,6 +2058,10 @@ impl AppState {
         let mut channels = Vec::new();
         for surface in &surfaces {
             channels.push(link::channel(surface));
+            if let Some(cursor) = surface.last_read_message_id {
+                self.cursors
+                    .insert(link::channel_id(surface.id), link::message_id(cursor));
+            }
         }
         self.channels = channels;
         self.surfaces = surfaces;
@@ -1926,6 +2073,9 @@ impl AppState {
             None => self.channels.first().map(|channel| channel.id),
         };
         if let Some(selected) = selected {
+            if self.selected != Some(selected) {
+                self.divider = self.divider_for(selected);
+            }
             self.selected = Some(selected);
             self.send_focus();
             self.load_page(selected, cx);
@@ -2072,6 +2222,10 @@ impl AppState {
                 self.task_fired(fired, cx);
                 false
             }
+            Frame::SurfaceRead(read) => {
+                self.surface_read(read, cx);
+                false
+            }
             Frame::StepText(_) => self.apply_to_run(&frame),
             Frame::ToolStarted(_) => self.apply_to_run(&frame),
             Frame::ToolFinished(_) => self.apply_to_run(&frame),
@@ -2135,10 +2289,11 @@ impl AppState {
             self.refresh_agents();
             cx.emit(StateEvent::RunsChanged);
         }
-        let Some(selected) = self.selected else {
-            return;
-        };
-        if message.surface_id != link::surface_id(selected) {
+        let shown = self.selected == Some(link::channel_id(message.surface_id));
+        if !(shown && self.window_active) {
+            self.count_unread(message, cx);
+        }
+        if !shown {
             return;
         }
         let mapped = link::message(message);
@@ -2287,6 +2442,7 @@ fn is_gap(frame: &Frame) -> bool {
         Frame::RunFinished(_) => false,
         Frame::MessageCreated(_) => false,
         Frame::TaskFired(_) => false,
+        Frame::SurfaceRead(_) => false,
         Frame::TextDelta(_) => false,
         Frame::InputAccepted(_) => false,
         Frame::Unknown(_) => false,

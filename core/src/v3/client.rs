@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use super::dto::{
     Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MePatch,
-    MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId, Task, TaskId,
-    TaskRun, VoicePost, WiringChange,
+    MessageId, MessagesPage, Post, Posted, ReadAnswer, RunDetail, RunId, Seq, Surface, SurfaceId,
+    Task, TaskId, TaskRun, VoicePost, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -143,6 +143,25 @@ impl Client {
                 client_message_id,
             },
         });
+        async move { body(request.await?) }
+    }
+
+    /// Marks a surface read up to `message`; the cursor only ever moves forward.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Invalid`] when the message is not on the surface.
+    pub fn mark_read(
+        &self,
+        surface: SurfaceId,
+        message: MessageId,
+    ) -> impl Future<Output = Result<ReadAnswer, ApiError>> + Send + 'static {
+        let SurfaceId(surface) = surface;
+        let MessageId(message) = message;
+        let request = self.transport.post(
+            &format!("/surfaces/{surface}/read"),
+            Some(serde_json::json!({ "message_id": message })),
+        );
         async move { body(request.await?) }
     }
 

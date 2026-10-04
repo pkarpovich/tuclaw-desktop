@@ -7,7 +7,9 @@
   "lead_agent_id": 1,
   "agents": [{"agent_id": 1, "role": "lead", "listens": true}, {"agent_id": 3, "role": "mention", "listens": false}],
   "bindings": [{"channel": "telegram", "external_id": "-1003614621196:0", "mirror": "agent_only"}],
-  "live_run": {"run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "agent_id": 1}
+  "live_run": {"run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "agent_id": 1},
+  "last_read_message_id": 9191,
+  "unread": 1
 }, {
   "id": 4,
   "kind": "channel",
@@ -16,5 +18,7 @@
   "last_message_at": null,
   "lead_agent_id": 3,
   "agents": [{"agent_id": 3, "role": "lead", "listens": true}],
-  "bindings": [{"channel": "telegram", "external_id": "-1003614621196:918", "mirror": "agent_only"}]
+  "bindings": [{"channel": "telegram", "external_id": "-1003614621196:918", "mirror": "agent_only"}],
+  "last_read_message_id": null,
+  "unread": 0
 }]

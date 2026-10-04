@@ -282,6 +282,25 @@ struct FiredPayload {
     error: Option<String>,
 }
 
+/// `surface.read`: the read cursor of a surface moved, or was confirmed where it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceRead {
+    /// The event's position in the log.
+    pub seq: Seq,
+    /// The surface that was read.
+    pub surface_id: SurfaceId,
+    /// The newest message read on it.
+    pub last_read_message_id: MessageId,
+    /// The messages still unread on it after the move.
+    pub unread: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReadPayload {
+    last_read_message_id: MessageId,
+    unread: u32,
+}
+
 /// `text.delta`: streamed text of a run on a focused surface, never replayed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextDelta {
@@ -342,6 +361,8 @@ pub enum Frame {
     MessageCreated(MessageCreated),
     /// `task.fired`.
     TaskFired(TaskFired),
+    /// `surface.read`.
+    SurfaceRead(SurfaceRead),
     /// `text.delta`.
     TextDelta(TextDelta),
     /// `input.accepted`.
@@ -376,6 +397,7 @@ impl Frame {
             Frame::RunFinished(event) => Some(event.seq),
             Frame::MessageCreated(created) => Some(created.seq),
             Frame::TaskFired(fired) => Some(fired.seq),
+            Frame::SurfaceRead(read) => Some(read.seq),
             Frame::TextDelta(_) => None,
             Frame::InputAccepted(_) => None,
             Frame::Unknown(unknown) => unknown.seq,
@@ -407,6 +429,7 @@ impl Frame {
             Frame::RunFinished(event) => Some(&event.run_id),
             Frame::MessageCreated(created) => created.message.run_id.as_ref(),
             Frame::TaskFired(fired) => fired.mark.run_id.as_ref(),
+            Frame::SurfaceRead(_) => None,
             Frame::TextDelta(delta) => Some(&delta.run_id),
             Frame::InputAccepted(_) => None,
             Frame::Unknown(_) => None,
@@ -566,6 +589,24 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
                 message,
             })
         }
+        "surface.read" => {
+            let ReadPayload {
+                last_read_message_id,
+                unread,
+            } = envelope.payload()?;
+            let Some(surface_id) = envelope.surface_id else {
+                return Err(DecodeError::Missing {
+                    type_name: "surface.read".to_string(),
+                    field: "surface_id",
+                });
+            };
+            Frame::SurfaceRead(SurfaceRead {
+                seq: envelope.seq()?,
+                surface_id,
+                last_read_message_id,
+                unread,
+            })
+        }
         "task.fired" => {
             let FiredPayload {
                 task_id,
@@ -645,6 +686,23 @@ mod tests {
     use super::*;
     use crate::v3::dto::{ClientMessageId, MessageKind, RowKind, RunStatus};
     use crate::v3::golden::fixture;
+
+    #[test]
+    fn surface_read_carries_the_cursor_and_the_count() {
+        let Frame::SurfaceRead(read) = crate::v3::golden::frame("surface_read") else {
+            panic!("surface.read decodes");
+        };
+        assert_eq!(
+            read,
+            SurfaceRead {
+                seq: Seq(1300),
+                surface_id: SurfaceId(1),
+                last_read_message_id: MessageId(9192),
+                unread: 0,
+            }
+        );
+        assert_eq!(Frame::SurfaceRead(read).run_id(), None);
+    }
 
     #[test]
     fn task_fired_carries_the_mark_with_the_envelope_time() {

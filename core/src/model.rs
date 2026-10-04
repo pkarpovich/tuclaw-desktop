@@ -24,8 +24,9 @@ pub struct ChannelId(pub i64);
 ///
 /// let MessageId(raw) = MessageId(42);
 /// assert_eq!(raw, 42);
+/// assert!(MessageId(41) < MessageId(42));
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MessageId(pub i64);
 
 /// Identifies an agent.

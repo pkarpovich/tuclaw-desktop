@@ -326,6 +326,21 @@ pub struct Surface {
     /// The run stamped with this surface, while one is live.
     #[serde(default)]
     pub live_run: Option<SurfaceRun>,
+    /// The newest message read on it; `None` before anything was read.
+    #[serde(default)]
+    pub last_read_message_id: Option<MessageId>,
+    /// The messages after the read cursor not written by the user.
+    #[serde(default)]
+    pub unread: u32,
+}
+
+/// The answer to marking a surface read: where its cursor now is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadAnswer {
+    /// The newest message read on the surface.
+    pub last_read_message_id: MessageId,
+    /// The messages still unread on it.
+    pub unread: u32,
 }
 
 /// Whether an agent is running a turn.
@@ -1185,7 +1200,21 @@ mod tests {
             agents,
             bindings,
             live_run,
+            last_read_message_id,
+            unread,
         } = &surfaces[0];
+        assert_eq!(*last_read_message_id, Some(MessageId(9191)));
+        assert_eq!(*unread, 1);
+        assert_eq!(surfaces[1].last_read_message_id, None);
+        let answer: ReadAnswer =
+            serde_json::from_str(include_str!("../../testdata/v3/read_answer.json")).unwrap();
+        assert_eq!(
+            answer,
+            ReadAnswer {
+                last_read_message_id: MessageId(9192),
+                unread: 0,
+            }
+        );
         assert_eq!(*id, SurfaceId(1));
         assert_eq!(*kind, SurfaceKind::Channel);
         assert_eq!(name, "General");
