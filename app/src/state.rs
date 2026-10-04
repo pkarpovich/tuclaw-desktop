@@ -1,19 +1,22 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
 
 use anyhow::{Result, bail};
 use futures::StreamExt;
 use futures::channel::mpsc::UnboundedSender;
 use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
-use tuclaw_core::model::{Agent, Author, Channel, ChannelId, Message, MessageId, Span};
+use tuclaw_core::model::{Agent, Author, Channel, ChannelId, Message, MessageId, Span, Voice};
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
     RunState, Seq, TextDelta,
 };
 
+use crate::audio::{self, Pcm, Speaker};
 use crate::link::{self, Source};
 
 const PAGE: u32 = 50;
+const TICK: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -51,6 +54,19 @@ pub enum StateEvent {
     SendFailed(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Player {
+    Stopped,
+    Loading,
+    Playing { position: Duration, total: Duration },
+    Failed(String),
+}
+
+struct Playback {
+    message: MessageId,
+    player: Player,
+}
+
 struct Pending {
     client_message_id: ClientMessageId,
     local: MessageId,
@@ -76,13 +92,16 @@ pub struct AppState {
     view: View,
     sidebar: SidebarVisibility,
     expanded: HashSet<MessageId>,
+    speaker: Box<dyn Speaker>,
+    playback: Option<Playback>,
+    _playback: Option<Task<()>>,
     _link: Option<Task<()>>,
 }
 
 impl EventEmitter<StateEvent> for AppState {}
 
 impl AppState {
-    pub fn new(client: v3::Client, source: Source) -> AppState {
+    pub fn new(client: v3::Client, source: Source, speaker: Box<dyn Speaker>) -> AppState {
         AppState {
             client,
             source,
@@ -103,6 +122,9 @@ impl AppState {
             view: View::Conversation,
             sidebar: SidebarVisibility::Shown,
             expanded: HashSet::new(),
+            speaker,
+            playback: None,
+            _playback: None,
             _link: None,
         }
     }
@@ -186,6 +208,135 @@ impl AppState {
         cx.notify();
     }
 
+    pub fn player(&self, message: MessageId) -> Player {
+        match &self.playback {
+            Some(playback) if playback.message == message => playback.player.clone(),
+            Some(_) => Player::Stopped,
+            None => Player::Stopped,
+        }
+    }
+
+    pub fn toggle_voice(&mut self, message: MessageId, cx: &mut Context<Self>) {
+        match self.player(message) {
+            Player::Loading => return,
+            Player::Playing {
+                position: _,
+                total: _,
+            } => {
+                self.halt();
+                cx.notify();
+                return;
+            }
+            Player::Stopped => {}
+            Player::Failed(_) => {}
+        }
+        let Some(Voice {
+            recording,
+            mime,
+            duration: _,
+        }) = self.voice_of(message)
+        else {
+            return;
+        };
+        self.halt();
+        self.playback = Some(Playback {
+            message,
+            player: Player::Loading,
+        });
+        let request = self.client.attachment(link::recording_id(recording));
+        self._playback = Some(cx.spawn(async move |this, cx| {
+            let pcm = match request.await {
+                Ok(bytes) => {
+                    cx.background_executor()
+                        .spawn(async move { audio::decode(&mime, bytes) })
+                        .await
+                }
+                Err(error) => Err(error.to_string()),
+            };
+            let Ok(true) = this.update(cx, |state, cx| state.decoded(message, pcm, cx)) else {
+                return;
+            };
+            loop {
+                cx.background_executor().timer(TICK).await;
+                let Ok(true) = this.update(cx, |state, cx| state.tick(message, cx)) else {
+                    return;
+                };
+            }
+        }));
+        cx.notify();
+    }
+
+    fn voice_of(&self, message: MessageId) -> Option<Voice> {
+        for candidate in &self.messages {
+            if candidate.id == message {
+                return candidate.voice.clone();
+            }
+        }
+        None
+    }
+
+    fn halt(&mut self) {
+        self.speaker.stop();
+        self.playback = None;
+        self._playback = None;
+    }
+
+    fn decoded(
+        &mut self,
+        message: MessageId,
+        pcm: Result<Pcm, String>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(playback) = &mut self.playback else {
+            return false;
+        };
+        if playback.message != message || playback.player != Player::Loading {
+            return false;
+        }
+        let started = match pcm {
+            Ok(pcm) => {
+                let total = pcm.duration();
+                self.speaker.start(pcm).map(|()| total)
+            }
+            Err(reason) => Err(reason),
+        };
+        let playing = match started {
+            Ok(total) => {
+                playback.player = Player::Playing {
+                    position: Duration::ZERO,
+                    total,
+                };
+                true
+            }
+            Err(reason) => {
+                playback.player = Player::Failed(reason);
+                false
+            }
+        };
+        cx.notify();
+        playing
+    }
+
+    fn tick(&mut self, message: MessageId, cx: &mut Context<Self>) -> bool {
+        let Some(playback) = &mut self.playback else {
+            return false;
+        };
+        if playback.message != message {
+            return false;
+        }
+        if self.speaker.finished() {
+            self.speaker.stop();
+            self.playback = None;
+            cx.notify();
+            return false;
+        }
+        if let Player::Playing { position, total: _ } = &mut playback.player {
+            *position = self.speaker.position();
+        }
+        cx.notify();
+        true
+    }
+
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.sidebar = match self.sidebar {
             SidebarVisibility::Shown => SidebarVisibility::Hidden,
@@ -207,6 +358,7 @@ impl AppState {
         self.view = View::Conversation;
         if self.selected != Some(channel) {
             self.selected = Some(channel);
+            self.halt();
             self.messages.clear();
             self.pending.clear();
             self.forget_finished_runs();
@@ -248,6 +400,7 @@ impl AppState {
             author: Author::User,
             body: vec![Span::Text(text.clone())],
             sent_at: OffsetDateTime::now_utc(),
+            voice: None,
         });
         self.pending.push(Pending {
             client_message_id: client_message_id.clone(),
@@ -749,8 +902,14 @@ mod tests {
     use tuclaw_core::model::{AgentId, AgentStatus, ChannelId};
     use tuclaw_core::v3::{AgentId as WireAgent, Scenario};
 
-    use super::{Link, Segment, SidebarVisibility, View};
-    use crate::testing::{channel_named, loaded, mocked, play};
+    use std::time::Duration;
+
+    use gpui::Entity;
+    use tuclaw_core::model::MessageId;
+    use tuclaw_core::v3::MockTransport;
+
+    use super::{AppState, Link, Player, Segment, SidebarVisibility, TICK, View};
+    use crate::testing::{FakeSpeaker, channel_named, loaded, mocked, play, speaking};
 
     #[gpui::test]
     fn the_fresh_start_loads_the_directory_and_the_first_surface(cx: &mut TestAppContext) {
@@ -920,5 +1079,114 @@ mod tests {
         state.read_with(cx, |state, _cx| {
             assert_eq!(state.sidebar(), SidebarVisibility::Hidden)
         });
+    }
+
+    fn on_magnet_feed(
+        cx: &mut TestAppContext,
+    ) -> (MockTransport, Entity<AppState>, FakeSpeaker, MessageId) {
+        let (mock, state, speaker) = speaking(cx, Scenario::default());
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        let spoken = state.read_with(cx, |state, _cx| {
+            let mut spoken = None;
+            for message in state.messages() {
+                if message.voice.is_some() {
+                    spoken = Some(message.id);
+                }
+            }
+            spoken.expect("the mock world carries a voice message on Magnet Feed")
+        });
+        (mock, state, speaker, spoken)
+    }
+
+    fn player(state: &Entity<AppState>, cx: &mut TestAppContext, message: MessageId) -> Player {
+        state.read_with(cx, |state, _cx| state.player(message))
+    }
+
+    #[gpui::test]
+    fn a_voice_message_plays_its_recording_and_stops_on_a_second_press(cx: &mut TestAppContext) {
+        let (_mock, state, speaker, spoken) = on_magnet_feed(cx);
+        assert_eq!(player(&state, cx, spoken), Player::Stopped);
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        assert_eq!(player(&state, cx, spoken), Player::Loading);
+        cx.run_until_parked();
+        let Player::Playing { position, total } = player(&state, cx, spoken) else {
+            panic!("the decoded recording plays");
+        };
+        assert_eq!(position, Duration::ZERO);
+        assert!((total.as_secs_f64() - 3.0).abs() < 0.05, "{total:?}");
+        assert_eq!(speaker.0.borrow().started.len(), 1);
+        speaker.0.borrow_mut().position = Duration::from_secs(1);
+        cx.executor().advance_clock(TICK);
+        cx.run_until_parked();
+        let Player::Playing { position, total: _ } = player(&state, cx, spoken) else {
+            panic!("still playing");
+        };
+        assert_eq!(position, Duration::from_secs(1));
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        assert_eq!(player(&state, cx, spoken), Player::Stopped);
+        assert!(!speaker.0.borrow().playing);
+    }
+
+    #[gpui::test]
+    fn a_finished_recording_returns_to_stopped(cx: &mut TestAppContext) {
+        let (_mock, state, speaker, spoken) = on_magnet_feed(cx);
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        cx.run_until_parked();
+        speaker.0.borrow_mut().playing = false;
+        cx.executor().advance_clock(TICK);
+        cx.run_until_parked();
+        assert_eq!(player(&state, cx, spoken), Player::Stopped);
+    }
+
+    #[gpui::test]
+    fn a_failed_fetch_or_a_missing_output_shows_why(cx: &mut TestAppContext) {
+        let (mock, state, speaker, spoken) = on_magnet_feed(cx);
+        mock.fail_next_call();
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        cx.run_until_parked();
+        let Player::Failed(_) = player(&state, cx, spoken) else {
+            panic!("an unavailable daemon fails the playback");
+        };
+        speaker.0.borrow_mut().refuse = Some("no audio output".into());
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        cx.run_until_parked();
+        assert_eq!(
+            player(&state, cx, spoken),
+            Player::Failed("no audio output".into())
+        );
+        speaker.0.borrow_mut().refuse = None;
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        cx.run_until_parked();
+        let Player::Playing {
+            position: _,
+            total: _,
+        } = player(&state, cx, spoken)
+        else {
+            panic!("a retry after a failure plays");
+        };
+    }
+
+    #[gpui::test]
+    fn switching_channels_stops_the_recording(cx: &mut TestAppContext) {
+        let (_mock, state, speaker, spoken) = on_magnet_feed(cx);
+        state.update(cx, |state, cx| state.toggle_voice(spoken, cx));
+        cx.run_until_parked();
+        assert!(speaker.0.borrow().playing);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.select(general, cx));
+        assert!(!speaker.0.borrow().playing);
+        assert_eq!(player(&state, cx, spoken), Player::Stopped);
+    }
+
+    #[gpui::test]
+    fn a_message_without_a_recording_plays_nothing(cx: &mut TestAppContext) {
+        let (_mock, state, speaker) = speaking(cx, Scenario::default());
+        let silent = state.read_with(cx, |state, _cx| state.messages()[0].id);
+        state.update(cx, |state, cx| state.toggle_voice(silent, cx));
+        cx.run_until_parked();
+        assert_eq!(player(&state, cx, silent), Player::Stopped);
+        assert!(speaker.0.borrow().started.is_empty());
     }
 }

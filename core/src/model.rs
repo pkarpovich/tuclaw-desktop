@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use time::OffsetDateTime;
 
 /// Identifies a channel.
@@ -140,6 +142,46 @@ pub struct Message {
     pub body: Vec<Span>,
     /// When the message was sent.
     pub sent_at: OffsetDateTime,
+    /// The original recording, when the message was spoken.
+    pub voice: Option<Voice>,
+}
+
+/// Identifies a recording the daemon keeps.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::RecordingId;
+///
+/// let RecordingId(raw) = RecordingId(7);
+/// assert_eq!(raw, 7);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RecordingId(pub i64);
+
+/// The original recording of a spoken message.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use tuclaw_core::model::{RecordingId, Voice};
+///
+/// let voice = Voice {
+///     recording: RecordingId(1),
+///     mime: "audio/ogg".to_string(),
+///     duration: Some(Duration::from_millis(3006)),
+/// };
+/// assert_eq!(voice.duration, Some(Duration::from_millis(3006)));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Voice {
+    /// The recording to fetch.
+    pub recording: RecordingId,
+    /// Its media type, e.g. `audio/ogg` or `audio/mp4`.
+    pub mime: String,
+    /// Its length, when the daemon knows it.
+    pub duration: Option<Duration>,
 }
 
 /// One run of a message body: plain text, an agent mention, or inline code.

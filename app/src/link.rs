@@ -1,11 +1,15 @@
 use tuclaw_core::model::{
-    Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId, Span,
+    Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId,
+    RecordingId, Span, Voice,
 };
 use tuclaw_core::v3;
 
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+const VOICE_HEADER: &str = "[Voice message";
 
 pub fn channel(surface: &v3::Surface) -> Channel {
     let v3::SurfaceId(id) = surface.id;
@@ -72,12 +76,58 @@ pub fn message(message: &v3::Message) -> Message {
         (v3::AuthorKind::System, _) => Author::System,
         (v3::AuthorKind::Unknown, _) => Author::System,
     };
+    let voice = voice(&message.attachments);
+    let text = match voice {
+        Some(_) => transcript(&message.text),
+        None => message.text.as_str(),
+    };
     Message {
         id: MessageId(id),
         author,
-        body: vec![Span::Text(message.text.clone())],
+        body: vec![Span::Text(text.to_string())],
         sent_at: message.created_at,
+        voice,
     }
+}
+
+fn voice(attachments: &[v3::Attachment]) -> Option<Voice> {
+    for attachment in attachments {
+        let v3::Attachment {
+            id: v3::AttachmentId(id),
+            kind,
+            mime,
+            size_bytes: _,
+            duration_ms,
+        } = attachment;
+        match kind {
+            v3::AttachmentKind::Voice => {
+                return Some(Voice {
+                    recording: RecordingId(*id),
+                    mime: mime.clone(),
+                    duration: duration_ms.map(Duration::from_millis),
+                });
+            }
+            v3::AttachmentKind::Unknown => {}
+        }
+    }
+    None
+}
+
+fn transcript(text: &str) -> &str {
+    let Some((header, rest)) = text.split_once('\n') else {
+        return text;
+    };
+    let header = header.trim();
+    if header.starts_with(VOICE_HEADER) && header.ends_with(']') {
+        rest.trim_start()
+    } else {
+        text
+    }
+}
+
+pub fn recording_id(recording: RecordingId) -> v3::AttachmentId {
+    let RecordingId(raw) = recording;
+    v3::AttachmentId(raw)
 }
 
 pub fn initials(name: &str) -> String {
@@ -260,6 +310,58 @@ mod tests {
         let mapped = message(&make(v3::AuthorKind::User, None));
         assert_eq!(mapped.body, vec![Span::Text("hi".into())]);
         assert_eq!(mapped.sent_at, at);
+        assert_eq!(mapped.voice, None);
+    }
+
+    fn spoken(text: &str, attachments: &str) -> v3::Message {
+        serde_json::from_str(&format!(
+            r#"{{"id": 9, "surface_id": 1, "kind": "user", "author": {{"kind": "user"}},
+                "text": {text:?}, "created_at": "2026-10-03T15:26:00Z", "attachments": {attachments}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_voice_attachment_becomes_the_recording_and_drops_the_header() {
+        let mapped = message(&spoken(
+            "[Voice message]\nПоставь кроваво-красный везде.",
+            r#"[{"id": 8, "kind": "voice", "mime": "audio/mp4", "size_bytes": 31257, "duration_ms": 3920}]"#,
+        ));
+        assert_eq!(
+            mapped.voice,
+            Some(Voice {
+                recording: RecordingId(8),
+                mime: "audio/mp4".into(),
+                duration: Some(Duration::from_millis(3920)),
+            })
+        );
+        assert_eq!(
+            mapped.body,
+            vec![Span::Text("Поставь кроваво-красный везде.".into())]
+        );
+        let forwarded = message(&spoken(
+            "[Voice message from Vlad, 2026-10-03]\nПривет",
+            r#"[{"id": 2, "kind": "voice"}]"#,
+        ));
+        assert_eq!(forwarded.body, vec![Span::Text("Привет".into())]);
+        assert_eq!(forwarded.voice.map(|voice| voice.duration), Some(None));
+    }
+
+    #[test]
+    fn text_without_a_voice_attachment_keeps_its_header() {
+        let plain = message(&spoken("[Voice message]\nтекст", "[]"));
+        assert_eq!(plain.voice, None);
+        assert_eq!(
+            plain.body,
+            vec![Span::Text("[Voice message]\nтекст".into())]
+        );
+        let other = message(&spoken(
+            "[Voice message]\nтекст",
+            r#"[{"id": 3, "kind": "photo"}]"#,
+        ));
+        assert_eq!(other.voice, None);
+        let unheaded = message(&spoken("just words", r#"[{"id": 4, "kind": "voice"}]"#));
+        assert_eq!(unheaded.body, vec![Span::Text("just words".into())]);
     }
 
     #[test]

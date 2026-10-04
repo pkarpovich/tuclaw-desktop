@@ -1,27 +1,82 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
+
 use gpui::{AppContext, Entity, TestAppContext};
 use tuclaw_core::model::ChannelId;
 use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario, Seed};
 
+use crate::audio::{Pcm, Speaker};
 use crate::link::Source;
 use crate::state::AppState;
 
+#[derive(Default)]
+pub struct Sound {
+    pub started: Vec<Pcm>,
+    pub stops: usize,
+    pub playing: bool,
+    pub position: Duration,
+    pub refuse: Option<String>,
+}
+
+#[derive(Clone, Default)]
+pub struct FakeSpeaker(pub Rc<RefCell<Sound>>);
+
+impl Speaker for FakeSpeaker {
+    fn start(&mut self, pcm: Pcm) -> Result<(), String> {
+        let mut sound = self.0.borrow_mut();
+        if let Some(reason) = sound.refuse.clone() {
+            return Err(reason);
+        }
+        sound.started.push(pcm);
+        sound.playing = true;
+        sound.position = Duration::ZERO;
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        let mut sound = self.0.borrow_mut();
+        sound.stops += 1;
+        sound.playing = false;
+    }
+
+    fn position(&self) -> Duration {
+        self.0.borrow().position
+    }
+
+    fn finished(&self) -> bool {
+        !self.0.borrow().playing
+    }
+}
+
 pub fn mocked(cx: &mut TestAppContext, scenario: Scenario) -> (MockTransport, Entity<AppState>) {
+    let (mock, state, _speaker) = speaking(cx, scenario);
+    (mock, state)
+}
+
+pub fn speaking(
+    cx: &mut TestAppContext,
+    scenario: Scenario,
+) -> (MockTransport, Entity<AppState>, FakeSpeaker) {
     cx.update(gpui_kit::init);
     let mock = MockTransport::new(scenario, Pace::Stepped);
     let client = Client::mock(&mock);
-    let state = cx.new(|_| AppState::new(client, Source::Mock));
+    let speaker = FakeSpeaker::default();
+    let boxed = Box::new(speaker.clone());
+    let state = cx.new(|_| AppState::new(client, Source::Mock, boxed));
     state.update(cx, |state, cx| state.start(cx));
     cx.run_until_parked();
     mock.pump_control();
     cx.run_until_parked();
-    (mock, state)
+    (mock, state, speaker)
 }
 
 pub fn seeded(cx: &mut TestAppContext, seed: Seed) -> (MockTransport, Entity<AppState>) {
     cx.update(gpui_kit::init);
     let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
     let client = Client::mock(&mock);
-    let state = cx.new(|_| AppState::new(client, Source::Snapshot));
+    let state =
+        cx.new(|_| AppState::new(client, Source::Snapshot, Box::new(FakeSpeaker::default())));
     state.update(cx, |state, cx| state.start(cx));
     cx.run_until_parked();
     mock.pump_control();

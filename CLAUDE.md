@@ -25,7 +25,7 @@ Two crates in one workspace.
 `core/src/testing.rs` (feature `test-support`) is `FakeDaemon`, a loopback HTTP and WebSocket server for transport tests.
 
 `app/` is `tuclaw-desktop`: the binary — `state.rs`, the views (`shell.rs`, `sidebar.rs`, `feed.rs`,
-`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the live run card (`live.rs`), Markdown (`rich.rs`: GPUI Kit's `TextView` in the app's colours, and the split of a leading `<details>` Thinking fold the prod data still carries), the text input (`input.rs`), the composer
+`message.rs`, `agents.rs`, `failure.rs`), the link between v3 and the views (`link.rs`), the live run card (`live.rs`), voice playback (`audio.rs`: `decode` turns an Ogg Opus recording into PCM with `opus-pure` and an m4a, mp3 or wav one with rodio's symphonia decoders, and `Speaker` is the output seam, `RodioSpeaker` in the app and `testing::FakeSpeaker` in tests), Markdown (`rich.rs`: GPUI Kit's `TextView` in the app's colours, and the split of a leading `<details>` Thinking fold the prod data still carries), the text input (`input.rs`), the composer
 (`composer.rs`), the theme (`theme.rs`) and the app menu (`menu.rs`: About with the version and
 the commit `build.rs` bakes in, Quit on Cmd+Q). Menu action handlers that open a prompt go through
 `cx.defer`: an action dispatched while a window is active runs inside that window's update, so a
@@ -40,7 +40,7 @@ Public items in `core` carry `///` docs (`rustdoc` skill); `app` items do not.
 
 **`failure.rs` is not only a view: it owns the startup path.** `start(Config) -> Startup` picks the source - the real daemon when `TUCLAW_DAEMON_URL` and `TUCLAW_CLIENT_TOKEN` are set, else the built-in `MockTransport` in real time - and builds `AppState`, returning `Ready(Box<AppState>)` or `Failed(FailureView)` (a URL without a token, or not `http://`); `main` opens one window with either as its root and then calls `AppState::start`, which spawns the link task. `Ready` boxes its payload or clippy's `large_enum_variant` fails the `-D warnings` gate.
 
-**`link.rs` is the seam between v3 and the views.** It maps surfaces onto `Channel`, agents onto `Agent` (busy while a live run of theirs is tracked), messages onto `Message` (`Author::System` for notices, the text as one `Span::Text` until Markdown rendering lands), and picks the source from the environment. Views never see a v3 type except the `Run`s of `AppState::live_runs`.
+**`link.rs` is the seam between v3 and the views.** It maps surfaces onto `Channel`, agents onto `Agent` (busy while a live run of theirs is tracked), messages onto `Message` (`Author::System` for notices, the text as one `Span::Text`; the first `voice` attachment becomes `Message::voice` and drops the `[Voice message...]` header line from the transcript), and picks the source from the environment. Views never see a v3 type except the `Run`s of `AppState::live_runs`.
 
 **The link task** (`run_link` in `state.rs`) is the contract's fresh start: connect without `since`, read `hello`, then fetch surfaces, agents and the selected surface's page, then apply every frame in order through `AppState::apply`. A closed socket sets `Link::Reconnecting`, waits `Backoff::next_delay` on `cx.background_executor().timer` (tests `advance_clock` through it), and reconnects with the last seq; a `gap` refetches. Selecting a surface sends `focus` and loads its page. Posting appends an optimistic row with a negative local id and a `ClientMessageId`, reconciled by the `202` and by the echoed `message.created`; a failed post removes the row and emits `SendFailed(text)`, which the feed hands back to the composer.
 
@@ -48,7 +48,7 @@ Public items in `core` carry `///` docs (`rustdoc` skill); `app` items do not.
 
 ## State ownership
 
-One `AppState` entity owns all mutable application state: the v3 client and the link status, the surfaces and agents, the selected channel and its messages, the live runs and the queued placeholders, the optimistic posts, which view is showing, and whether the sidebar is shown.
+One `AppState` entity owns all mutable application state: the v3 client and the link status, the surfaces and agents, the selected channel and its messages, the live runs and the queued placeholders, the optimistic posts, which view is showing, whether the sidebar is shown, and the voice playback (`toggle_voice` fetches the recording with `Client::attachment`, decodes it on the background executor, hands it to the injected `Speaker` and polls its position every 200 ms until it finishes; one recording plays at a time, a second press or a channel switch stops it).
 
 - Views hold `Entity<AppState>` and read through it. **No view mutates another view's data, and no
   view talks to the client directly.**
@@ -129,7 +129,7 @@ test`.
 
 ## The v3 client
 
-**One async seam.** `Transport` has three calls, each returning a `BoxFuture<'static, _>`; `HttpTransport` and `MockTransport` implement it and `Client` owns every path and every decode, so the mock and the daemon go through the same code. `HttpTransport` runs its I/O on a one-worker tokio runtime `core` owns (zed's `reqwest_client` pattern), so its futures need no runtime in the caller, start when the call is made, and abort when dropped. `core` therefore depends on tokio but never on `gpui` or `gpui_tokio`.
+**One async seam.** `Transport` has four calls (`get`, `post`, `fetch` for raw bytes, `connect`), each returning a `BoxFuture<'static, _>`; `HttpTransport` and `MockTransport` implement it and `Client` owns every path and every decode, so the mock and the daemon go through the same code. `HttpTransport` runs its I/O on a one-worker tokio runtime `core` owns (zed's `reqwest_client` pattern), so its futures need no runtime in the caller, start when the call is made, and abort when dropped. `core` therefore depends on tokio but never on `gpui` or `gpui_tokio`.
 
 **One socket task.** The event socket is served by one tokio task that `select!`s over the socket, the client's frames and a heartbeat deadline; it closes the socket on silence, on a server close, on any error, or when the `Connection` is dropped, and the closing of `Connection::frames` is how a caller learns to reconnect (with `Backoff` and `Some(last_seq)`).
 
@@ -144,7 +144,7 @@ renders of it. **Open the relevant screenshot before touching a view.**
 `docs/design/README.md` states which parts are in scope and which are not.
 
 The full list of non-goals lives in `docs/plans/completed/20260826-tuclaw-desktop-v1.md`, the plan
-this repository was built from. The short version: no networking, no voice, no attachments or
+this repository was built from. The short version (networking and the voice player have since landed): no other attachments or
 pickers, no structured message cards, no working search, no message editing or reactions, no dark
 mode, no selection or mouse caret placement inside the text input (clicking it focuses it, nothing
 more), no height cap or internal scrolling on the composer, and no local time — grouping and the

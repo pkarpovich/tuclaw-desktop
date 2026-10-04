@@ -32,7 +32,7 @@ shown in UTC, not in the local zone.
 
 ### Real data before the daemon serves v3
 
-Until `/api/v3` is live, the mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; when that file exists the app starts on it (the toolbar says `snapshot`), otherwise on the built-in world. `TUCLAW_MOCK_WORLD` points at another file. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run.
+Until `/api/v3` is live, the mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; when that file exists the app starts on it (the toolbar says `snapshot`), otherwise on the built-in world. `TUCLAW_MOCK_WORLD` points at another file. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run. Voice recordings come along when `attachments/` sits next to `world.json`: `attachments.json` lists `{id, message_id, kind, mime, size_bytes, duration_ms}` per recording and `<id>.<ext>` holds its bytes, shaped like the v3.1 draft's `attachments` field and `GET /api/v3/attachments/{id}`.
 
 ## Building
 
@@ -96,6 +96,8 @@ gpui-kit = { version = "=0.7.0" }
 ```
 
 `gpui-pre` is zed's own GPUI, published every week (0.3.7 is from 2026-09-28) together with the matching [GPUI Kit](https://gpui-kit.com) (`gpui-kit`, `gpui-base`, `gpui-component`): Markdown, inputs, lists and other components the app would otherwise write by hand. Both are pinned exactly and move together; a GPUI Kit release is a real task, not a version bump, because 0.x releases break APIs. The app moved off a git pin of zed's `main` on 2026-10-04: two `gpui` crates cannot share an app, and GPUI Kit only builds on its own snapshot.
+
+Voice messages play through [rodio](https://crates.io/crates/rodio) (`playback` and `mp4` only: the cpal output and symphonia's AAC/ISO-MP4 decoders for the Watch's m4a recordings) and [opus-pure](https://crates.io/crates/opus-pure), a pure-Rust Ogg Opus decoder for Telegram's recordings, since symphonia has no Opus. Both decode in memory; nothing touches disk.
 
 Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under `[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
 

@@ -10,7 +10,7 @@ use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Mess
 
 use crate::composer::Composer;
 use crate::live::{OnStop, RunView, run_card, run_view};
-use crate::message::{Fold, OnToggle, message_row};
+use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
 use crate::state::{AppState, StateEvent};
 use crate::theme;
 
@@ -142,6 +142,11 @@ impl Feed {
         let on_toggle: OnToggle = Rc::new(move |message, _window, cx| {
             folder.update(cx, |state, cx| state.toggle_thinking(message, cx));
         });
+        let player = self.state.clone();
+        let on_play: OnPlay = Rc::new(move |message, _window, cx| {
+            player.update(cx, |state, cx| state.toggle_voice(message, cx));
+        });
+        let actions = Actions { on_toggle, on_play };
         let stopper = self.state.clone();
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
             stopper.update(cx, |state, cx| state.interrupt(run, cx));
@@ -159,7 +164,11 @@ impl Feed {
                     } else {
                         Fold::Collapsed
                     };
-                    message_row(message, state.agents(), fold, on_toggle.clone()).into_any_element()
+                    let look = Look {
+                        fold,
+                        player: state.player(message.id),
+                    };
+                    message_row(message, state.agents(), look, &actions).into_any_element()
                 }
                 Item::Run(run) => {
                     run_card(run, state.read(cx).agents(), on_stop.clone()).into_any_element()
@@ -848,5 +857,48 @@ mod tests {
         state.read_with(cx, |state, _cx| {
             assert!(!state.is_expanded(tuclaw_core::model::MessageId(7)))
         });
+    }
+
+    fn spoken_world() -> tuclaw_core::v3::Seed {
+        let mut world = folded_world();
+        let message = serde_json::json!({
+            "id": 8, "surface_id": 1, "kind": "user", "author": {"kind": "user"},
+            "text": "[Voice message]\nПоставь кроваво-красный везде.",
+            "created_at": "2026-10-03T15:27:00Z",
+            "attachments": [{"id": 5, "kind": "voice", "mime": "audio/mp4", "size_bytes": 1, "duration_ms": 2000}]
+        });
+        world
+            .messages
+            .push(serde_json::from_value(message).expect("message"));
+        world.media.push(tuclaw_core::v3::SeedMedia {
+            id: tuclaw_core::v3::AttachmentId(5),
+            path: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../core/testdata/v3/media/tone.m4a"),
+        });
+        world
+    }
+
+    #[gpui::test]
+    fn the_play_button_plays_the_original_recording(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, spoken_world());
+        let built = state.clone();
+        let (_feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        cx.run_until_parked();
+        let button = cx
+            .debug_bounds("voice-8")
+            .expect("the play button is drawn");
+        cx.simulate_click(button.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        let player = state.read_with(cx, |state, _cx| {
+            state.player(tuclaw_core::model::MessageId(8))
+        });
+        let crate::state::Player::Playing { position: _, total } = player else {
+            panic!("the click plays the recording, got {player:?}");
+        };
+        assert!((total.as_secs_f64() - 2.0).abs() < 0.1, "{total:?}");
+        assert!(
+            cx.debug_bounds("voice-7").is_none(),
+            "a message without a recording has no player"
+        );
     }
 }

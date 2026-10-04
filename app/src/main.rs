@@ -1,4 +1,5 @@
 mod agents;
+mod audio;
 mod composer;
 mod failure;
 mod feed;
