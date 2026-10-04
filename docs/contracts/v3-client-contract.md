@@ -239,7 +239,7 @@ Agreed 2026-10-04 with the desktop (Pavel's asks: his own profile, the mini-app'
      "created_at": "2026-09-20T10:00:00Z"}
     ```
 
-    `id` is a string, the one exception to the integer ids: agents name tasks by it. `schedule.type` is `once`, `cron`, `interval`, `poll_until` or `event`. `agent_id` is the task's session's agent, `null` when that session is gone. `surface_id` is `null` when the task has no surface. `condition` is the pre-check command or `null`. `status` is `active`, `paused`, `completed` or `cancelled`. `last_outcome` is the newest attempt's `ran`, `failed` or `skipped`, or `null` before the first.
+    `id` is a string, the one exception to the integer ids: agents name tasks by it. `schedule.type` is `once`, `cron`, `interval`, `poll_until` or `event`. `agent_id` is the task's session's agent, `null` when that session is gone. `surface_id` is `null` when the task has no surface. `condition` is the pre-check command or `null`. `status` is `active`, `paused`, `completed` or `cancelled`. `last_run_at` and `last_outcome` are the newest attempt's time and outcome (`ran`, `failed` or `skipped`), both `null` before the first; a condition skip is an attempt, so a polled task reads "skipped 20:00".
   - `GET /tasks/{id}` is one task.
   - `GET /tasks/{id}/runs?limit=20` (at most 200) lists its attempts, newest first: `[{"at", "outcome": "ran"|"failed"|"skipped", "duration_ms", "error"?}]`. An attempt is one try; a fire that failed and was re-run is two attempts.
   - `POST /tasks/{id}/pause` and `POST /tasks/{id}/resume` answer `200` with the task. Pausing a task that is not active, or resuming one that is not paused, is `409 conflict`.
