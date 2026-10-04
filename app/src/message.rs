@@ -2,17 +2,20 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    App, Div, FontWeight, IntoElement, SharedString, Window, div, prelude::*, px, relative,
+    App, BoxShadow, Div, FontWeight, HighlightStyle, IntoElement, SharedString, Stateful,
+    StyledText, Window, div, point, prelude::*, px, relative,
 };
 use time::OffsetDateTime;
 use time::macros::format_description;
-use tuclaw_core::model::{Agent, Author, Message, MessageId, Span, Voice};
+use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
 use crate::rich::{self, Ink, Parts};
 use crate::state::Player;
 use crate::theme;
 
 const REASON: usize = 80;
+const BARS: usize = 22;
+const TRANSCRIPT: &str = "Transcript";
 
 pub type OnToggle = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
@@ -20,6 +23,11 @@ pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub struct Look {
     pub fold: Fold,
     pub player: Player,
+}
+
+struct Controls {
+    player: Player,
+    on_play: OnPlay,
 }
 
 pub struct Actions {
@@ -68,15 +76,24 @@ pub fn message_row(
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
     let Parts { thinking, answer } = rich::split_thinking(&source(body));
+    let mut line = byline(&writer, *sent_at);
+    if voice.is_some() {
+        line = line.child(voice_tag());
+    }
     let mut column = div()
         .flex()
         .flex_col()
         .flex_1()
         .min_w(px(0.))
         .gap(px(2.))
-        .child(byline(&writer, *sent_at));
+        .child(line);
     if let Some(voice) = voice {
-        column = column.child(voice_row(*id, voice, player, actions.on_play.clone()));
+        let controls = Controls {
+            player,
+            on_play: actions.on_play.clone(),
+        };
+        column = column.child(voice_card(*id, voice, answer, controls));
+        return row(selector, &writer, column);
     }
     if let Some(thinking) = thinking {
         column = column.child(thinking_fold(
@@ -93,6 +110,10 @@ pub fn message_row(
             Ink::Body,
         )));
     }
+    row(selector, &writer, column)
+}
+
+fn row(selector: String, writer: &Writer, column: Div) -> Stateful<Div> {
     div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
@@ -101,7 +122,7 @@ pub fn message_row(
         .gap(px(12.))
         .px(px(20.))
         .py(px(8.))
-        .child(avatar(&writer))
+        .child(avatar(writer))
         .child(column)
 }
 
@@ -124,15 +145,16 @@ pub fn source(body: &[Span]) -> String {
     text
 }
 
-fn voice_row(id: MessageId, voice: &Voice, player: Player, on_play: OnPlay) -> Div {
+fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Controls) -> Div {
+    let Controls { player, on_play } = controls;
     let MessageId(raw) = id;
     let selector = format!("voice-{raw}");
     let known = voice.duration.unwrap_or(Duration::ZERO);
     let (glyph, elapsed, total, failure) = match player {
-        Player::Stopped => ("▶", Duration::ZERO, known, None),
-        Player::Loading => ("…", Duration::ZERO, known, None),
-        Player::Playing { position, total } => ("■", position, total, None),
-        Player::Failed(reason) => ("▶", Duration::ZERO, known, Some(reason)),
+        Player::Stopped => ("▶", None, known, None),
+        Player::Loading => ("…", None, known, None),
+        Player::Playing { position, total } => ("■", Some(position), total, None),
+        Player::Failed(reason) => ("▶", None, known, Some(reason)),
     };
     let button = div()
         .id(SharedString::from(selector.clone()))
@@ -141,44 +163,118 @@ fn voice_row(id: MessageId, voice: &Voice, player: Player, on_play: OnPlay) -> D
         .flex()
         .items_center()
         .justify_center()
-        .w(px(28.))
-        .h(px(28.))
+        .w(px(30.))
+        .h(px(30.))
         .rounded_full()
         .bg(theme::accent())
+        .shadow(vec![BoxShadow {
+            color: theme::shadow(),
+            offset: point(px(0.), px(2.)),
+            blur_radius: px(6.),
+            spread_radius: px(-2.),
+            inset: false,
+        }])
         .text_size(px(11.))
         .text_color(theme::chip_text())
         .cursor_pointer()
         .on_click(move |_event, window, cx| on_play(id, window, cx))
         .child(glyph);
-    let bar = div()
-        .flex_none()
-        .w(px(180.))
-        .h(px(4.))
-        .rounded(px(2.))
-        .bg(theme::sunken())
-        .child(
-            div()
-                .h_full()
-                .w(relative(progress(elapsed, total)))
-                .rounded(px(2.))
-                .bg(theme::accent()),
-        );
-    let label = match failure {
-        Some(reason) => div()
+    let label = match (failure, elapsed) {
+        (Some(reason), _) => div()
             .text_color(theme::accent())
             .child(format!("can't play: {}", clamp_reason(&reason))),
-        None => div()
-            .text_color(theme::text_muted())
+        (None, Some(elapsed)) => div()
+            .text_color(theme::text_label())
             .child(timing(elapsed, total)),
+        (None, None) => div().text_color(theme::text_label()).child(minutes(total)),
     };
-    div()
+    let top = div()
         .flex()
         .items_center()
-        .gap(px(10.))
-        .py(px(4.))
+        .gap(px(12.))
+        .px(px(13.))
+        .py(px(11.))
         .child(button)
-        .child(bar)
-        .child(label.text_size(px(11.5)))
+        .child(waveform(
+            voice.recording,
+            progress(elapsed.unwrap_or(Duration::ZERO), total),
+        ))
+        .child(label.flex_none().text_size(px(12.)));
+    let card = div()
+        .max_w(px(540.))
+        .flex()
+        .flex_col()
+        .rounded(px(14.))
+        .bg(theme::voice_card())
+        .border_1()
+        .border_color(theme::hairline())
+        .overflow_hidden()
+        .child(top);
+    if transcript.is_empty() {
+        return card;
+    }
+    card.child(
+        div()
+            .px(px(13.))
+            .pt(px(9.))
+            .pb(px(11.))
+            .border_t_1()
+            .border_color(theme::hairline())
+            .text_size(px(13.))
+            .line_height(relative(1.45))
+            .text_color(theme::ink_soft())
+            .child(transcript_text(transcript)),
+    )
+}
+
+fn transcript_text(transcript: String) -> StyledText {
+    let text = format!("{TRANSCRIPT}  {transcript}");
+    let label = HighlightStyle {
+        color: Some(theme::text_muted()),
+        ..HighlightStyle::default()
+    };
+    StyledText::new(text).with_highlights(vec![(0..TRANSCRIPT.len(), label)])
+}
+
+fn waveform(recording: RecordingId, played: f32) -> Div {
+    let lit = (played * BARS as f32).round() as usize;
+    let mut bars = div().flex_1().flex().items_center().gap(px(2.5)).h(px(26.));
+    for (index, height) in bar_heights(recording).into_iter().enumerate() {
+        let tone = if index < lit {
+            theme::ink_soft()
+        } else {
+            theme::wave_rest()
+        };
+        bars = bars.child(
+            div()
+                .flex_none()
+                .w(px(3.))
+                .h(px(height))
+                .rounded(px(2.))
+                .bg(tone),
+        );
+    }
+    bars
+}
+
+fn bar_heights(recording: RecordingId) -> Vec<f32> {
+    let RecordingId(raw) = recording;
+    let mut seed = (raw as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+    let mut heights = Vec::new();
+    for _ in 0..BARS {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        heights.push(6.0 + (seed % 21) as f32);
+    }
+    heights
+}
+
+fn voice_tag() -> Div {
+    div()
+        .text_size(px(11.5))
+        .text_color(theme::text_muted())
+        .child("voice")
 }
 
 fn progress(elapsed: Duration, total: Duration) -> f32 {
@@ -412,6 +508,17 @@ mod tests {
             progress(Duration::from_secs(12), Duration::from_secs(10)),
             1.0
         );
+    }
+
+    #[test]
+    fn the_waveform_is_stable_per_recording_and_fits_the_row() {
+        let first = bar_heights(RecordingId(5));
+        assert_eq!(first, bar_heights(RecordingId(5)));
+        assert_ne!(first, bar_heights(RecordingId(6)));
+        assert_eq!(first.len(), BARS);
+        for height in first {
+            assert!((6.0..=26.0).contains(&height), "{height}");
+        }
     }
 
     #[test]

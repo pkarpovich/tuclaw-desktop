@@ -48,7 +48,7 @@ Public items in `core` carry `///` docs (`rustdoc` skill); `app` items do not.
 
 ## State ownership
 
-One `AppState` entity owns all mutable application state: the v3 client and the link status, the surfaces and agents, the selected channel and its messages, the live runs and the queued placeholders, the optimistic posts, which view is showing, whether the sidebar is shown, and the voice playback (`toggle_voice` fetches the recording with `Client::attachment`, decodes it on the background executor, hands it to the injected `Speaker` and polls its position every 200 ms until it finishes; one recording plays at a time, a second press or a channel switch stops it).
+One `AppState` entity owns all mutable application state: the v3 client and the link status, the surfaces and agents, the selected channel and its messages, the live runs and the queued placeholders, the optimistic posts, which view is showing, whether the sidebar is shown, and the voice playback (`toggle_voice` fetches the recording with `Client::attachment`, decodes it on the background executor, hands it to the injected `Speaker` and polls its position every 200 ms until it finishes; one recording plays at a time, a second press or a channel switch stops it; `message.rs` draws it as the mockup's voice card - play button, 22-bar waveform lit by progress, time, and the transcript inside the card - and the bars are a stable per-recording pattern, not the recording's peaks, which nothing computes before playback).
 
 - Views hold `Entity<AppState>` and read through it. **No view mutates another view's data, and no
   view talks to the client directly.**
