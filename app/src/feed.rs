@@ -6,7 +6,7 @@ use gpui::{
     ListOffset, ListScrollEvent, ListState, Render, SharedString, Subscription, Window, div, list,
     prelude::*, px,
 };
-use time::{OffsetDateTime, UtcOffset};
+use time::OffsetDateTime;
 use tuclaw_core::grouping::day_title;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message, MessageId};
 use tuclaw_core::v3;
@@ -17,6 +17,7 @@ use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
+use crate::local;
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
 use crate::people::People;
 use crate::runlog::{self, OnDisclose};
@@ -330,7 +331,7 @@ impl Render for Feed {
 }
 
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
-    let today = now.to_offset(UtcOffset::UTC).date();
+    let today = local::local(now).date();
     let mut triggers: HashMap<MessageId, FireRow> = HashMap::new();
     let mut loose = Vec::new();
     for mark in state.fires() {
@@ -363,7 +364,7 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     let mut items: Vec<Item> = Vec::new();
     let mut day = None;
     for (at, item) in timeline {
-        let date = at.to_offset(UtcOffset::UTC).date();
+        let date = local::local(at).date();
         if day != Some(date) {
             day = Some(date);
             items.push(Item::Separator(SharedString::from(day_title(date, today))));

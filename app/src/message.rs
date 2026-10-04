@@ -8,7 +8,6 @@ use gpui::{
     relative, size,
 };
 use time::OffsetDateTime;
-use time::macros::format_description;
 use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
 
 use gpui_kit::base::Avatar;
@@ -18,6 +17,7 @@ use crate::card::{CardActions, with_card};
 use crate::control::{self, AvatarSize, Face, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::link;
+use crate::local::clock;
 use crate::people::People;
 use crate::rich::{self, Ink, Parts};
 use crate::runlog::{self, OnDisclose, Pane};
@@ -585,11 +585,6 @@ pub fn agent_badge() -> Div {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::text_secondary())
         .child("AGENT")
-}
-
-fn clock(sent_at: OffsetDateTime) -> String {
-    let description = format_description!("[hour repr:12 padding:none]:[minute] [period]");
-    sent_at.format(&description).unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -13,6 +13,7 @@ pub mod icon;
 pub mod inspector;
 pub mod link;
 pub mod live;
+pub mod local;
 pub mod menu;
 pub mod message;
 pub mod people;

@@ -2,11 +2,11 @@ use std::rc::Rc;
 
 use gpui::{App, Div, FontWeight, Hsla, SharedString, Window, div, prelude::*, px};
 use time::OffsetDateTime;
-use time::macros::format_description;
 use tuclaw_core::v3::{FireMark, Outcome, Schedule, ScheduleKind, Task, TaskId};
 
 use crate::control::row_button;
 use crate::icon::{Glyph, icon};
+use crate::local::clock;
 use crate::theme;
 
 const LABEL_LIMIT: usize = 60;
@@ -82,11 +82,6 @@ pub fn label_of(task: &TaskId, tasks: &[Task]) -> String {
     let mut clipped: String = line.chars().take(LABEL_LIMIT).collect();
     clipped.push('…');
     clipped
-}
-
-pub fn clock(at: OffsetDateTime) -> String {
-    let description = format_description!("[hour repr:12 padding:none]:[minute] [period]");
-    at.format(&description).unwrap_or_default()
 }
 
 pub fn outcome_text(row: &FireRow) -> String {
@@ -181,6 +176,7 @@ mod tests {
     use tuclaw_core::v3::{FireMark, Outcome, TaskId};
 
     use super::{FireRow, label_of, outcome_text};
+    use crate::local::clock;
 
     fn row(task: &str, outcome: Outcome, minute: u8) -> FireRow {
         let at = datetime!(2026-10-04 09:00 UTC) + time::Duration::minutes(i64::from(minute));
@@ -205,7 +201,10 @@ mod tests {
         assert!(first.absorbs(&second));
         first.absorb(second);
         assert_eq!(first.count, 2);
-        assert_eq!(outcome_text(&first), "skipped 2× since 9:00 AM");
+        assert_eq!(
+            outcome_text(&first),
+            format!("skipped 2× since {}", clock(first.first))
+        );
         assert!(!first.absorbs(&row("b", Outcome::Skipped, 30)));
         assert!(!first.absorbs(&row("a", Outcome::Ran, 30)));
         assert!(!row("a", Outcome::Ran, 0).absorbs(&row("a", Outcome::Ran, 1)));

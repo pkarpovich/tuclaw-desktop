@@ -5,10 +5,11 @@ use gpui::{
 use time::OffsetDateTime;
 use tuclaw_core::v3::{Outcome, Pause, Task, TaskId, TaskRun, TaskStatus};
 
-use crate::automation::{clock, outcome_tone, schedule_text};
+use crate::automation::{outcome_tone, schedule_text};
 use crate::control::{AvatarSize, Face, avatar, button, row_button};
 use crate::icon::{Glyph, icon};
 use crate::link;
+use crate::local::{self, clock};
 use crate::people::People;
 use crate::state::AppState;
 use crate::theme;
@@ -562,14 +563,13 @@ fn outcome_word(outcome: Outcome) -> &'static str {
 }
 
 fn when(at: OffsetDateTime) -> String {
-    let today = OffsetDateTime::now_utc().date();
-    if at.date() == today {
+    if local::local(at).date() == local::today() {
         return clock(at);
     }
     let description = time::macros::format_description!("[month repr:short] [day padding:none]");
     format!(
         "{} {}",
-        at.format(&description).unwrap_or_default(),
+        local::local(at).format(&description).unwrap_or_default(),
         clock(at)
     )
 }
