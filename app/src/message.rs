@@ -2,20 +2,21 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    App, BoxShadow, Div, FontWeight, HighlightStyle, IntoElement, SharedString, Stateful,
-    StyledText, Window, div, point, prelude::*, px, relative,
+    App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, IntoElement, Pixels, SharedString,
+    Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px, relative, size,
 };
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
-use crate::audio::{PEAKS, Peaks};
+use crate::audio::{PEAKS, Peaks, Waveform};
 use crate::rich::{self, Ink, Parts};
 use crate::state::Player;
 use crate::theme;
 
 const REASON: usize = 80;
-const BARS: usize = 22;
+const BAR_WIDTH: f32 = 3.0;
+const BAR_GAP: f32 = 2.5;
 const MIN_BAR: f32 = 4.0;
 const MAX_BAR: f32 = 26.0;
 const TRANSCRIPT: &str = "Transcript";
@@ -26,12 +27,12 @@ pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub struct Look {
     pub fold: Fold,
     pub player: Player,
-    pub peaks: Option<Peaks>,
+    pub waveform: Option<Waveform>,
 }
 
 struct Controls {
     player: Player,
-    peaks: Option<Peaks>,
+    waveform: Option<Waveform>,
     on_play: OnPlay,
 }
 
@@ -79,7 +80,7 @@ pub fn message_row(
     let Look {
         fold,
         player,
-        peaks,
+        waveform,
     } = look;
     let writer = writer(*author, agents);
     let MessageId(raw) = *id;
@@ -99,7 +100,7 @@ pub fn message_row(
     if let Some(voice) = voice {
         let controls = Controls {
             player,
-            peaks,
+            waveform,
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
@@ -158,12 +159,14 @@ pub fn source(body: &[Span]) -> String {
 fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Controls) -> Div {
     let Controls {
         player,
-        peaks,
+        waveform,
         on_play,
     } = controls;
     let MessageId(raw) = id;
     let selector = format!("voice-{raw}");
-    let known = voice.duration.unwrap_or(Duration::ZERO);
+    let measured = waveform.map(|waveform| waveform.duration);
+    let known = voice.duration.or(measured).unwrap_or(Duration::ZERO);
+    let peaks = waveform.map(|waveform| waveform.peaks);
     let (glyph, elapsed, total, failure) = match player {
         Player::Stopped => ("▶", None, known, None),
         Player::Loading => ("…", None, known, None),
@@ -210,13 +213,14 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         .px(px(13.))
         .py(px(11.))
         .child(button)
-        .child(waveform(
-            bar_heights(voice.recording, peaks),
+        .child(wave_bars(
+            voice.recording,
+            peaks,
             progress(elapsed.unwrap_or(Duration::ZERO), total),
         ))
         .child(label.flex_none().text_size(px(12.)));
     let card = div()
-        .max_w(px(540.))
+        .w_full()
         .flex()
         .flex_col()
         .rounded(px(14.))
@@ -256,67 +260,90 @@ fn transcript_text(transcript: String) -> StyledText {
     StyledText::new(text).with_highlights(vec![(0..TRANSCRIPT.len(), label)])
 }
 
-fn waveform(heights: Vec<f32>, played: f32) -> Div {
-    let lit = (played * BARS as f32).round() as usize;
-    let mut bars = div().flex_1().flex().items_center().gap(px(2.5)).h(px(26.));
-    for (index, height) in heights.into_iter().enumerate() {
-        let tone = if index < lit {
-            theme::ink_soft()
-        } else {
-            theme::wave_rest()
-        };
-        bars = bars.child(
-            div()
-                .flex_none()
-                .w(px(3.))
-                .h(px(height))
-                .rounded(px(2.))
-                .bg(tone),
-        );
-    }
-    bars
-}
-
-fn bar_heights(recording: RecordingId, peaks: Option<Peaks>) -> Vec<f32> {
-    match peaks {
-        Some(peaks) => measured_heights(peaks),
-        None => placeholder_heights(recording),
-    }
-}
-
-fn measured_heights(peaks: Peaks) -> Vec<f32> {
-    let Peaks(levels) = peaks;
-    let mut groups = Vec::new();
-    for bar in 0..BARS {
-        let start = bar * PEAKS / BARS;
-        let end = ((bar + 1) * PEAKS / BARS).max(start + 1);
-        let mut level = 0u8;
-        for value in &levels[start..end] {
-            level = level.max(*value);
+fn wave_bars(recording: RecordingId, peaks: Option<Peaks>, played: f32) -> Div {
+    let paint = move |bounds: Bounds<Pixels>, (): (), window: &mut Window, _cx: &mut App| {
+        let count = bar_count(bounds.size.width / px(1.));
+        let lit = (played * count as f32).round() as usize;
+        for (index, height) in bar_heights(recording, peaks, count).into_iter().enumerate() {
+            let tone = if index < lit {
+                theme::ink_soft()
+            } else {
+                theme::wave_rest()
+            };
+            let bar = Bounds {
+                origin: point(
+                    bounds.origin.x + px(index as f32 * (BAR_WIDTH + BAR_GAP)),
+                    bounds.origin.y + (bounds.size.height - px(height)) / 2.,
+                ),
+                size: size(px(BAR_WIDTH), px(height)),
+            };
+            window.paint_quad(fill(bar, tone).corner_radii(px(BAR_WIDTH / 2.)));
         }
-        groups.push(level);
+    };
+    div()
+        .flex_1()
+        .min_w(px(0.))
+        .h(px(MAX_BAR))
+        .child(canvas(|_bounds, _window, _cx| (), paint).size_full())
+}
+
+fn bar_count(width: f32) -> usize {
+    (((width + BAR_GAP) / (BAR_WIDTH + BAR_GAP)).floor() as usize).max(1)
+}
+
+fn bar_heights(recording: RecordingId, peaks: Option<Peaks>, count: usize) -> Vec<f32> {
+    match peaks {
+        Some(peaks) => measured_heights(peaks, count),
+        None => placeholder_heights(recording, count),
     }
+}
+
+fn measured_heights(peaks: Peaks, count: usize) -> Vec<f32> {
+    let Peaks(levels) = peaks;
     let mut loudest = 0u8;
-    for level in &groups {
-        loudest = loudest.max(*level);
+    for level in levels {
+        loudest = loudest.max(level);
     }
     let mut heights = Vec::new();
-    for level in groups {
+    for bar in 0..count {
+        let level = if count > PEAKS {
+            interpolated(&levels, bar, count)
+        } else {
+            grouped(&levels, bar, count)
+        };
         let share = if loudest == 0 {
             0.0
         } else {
-            f32::from(level) / f32::from(loudest)
+            level / f32::from(loudest)
         };
         heights.push(MIN_BAR + (MAX_BAR - MIN_BAR) * share);
     }
     heights
 }
 
-fn placeholder_heights(recording: RecordingId) -> Vec<f32> {
+fn grouped(levels: &[u8; PEAKS], bar: usize, count: usize) -> f32 {
+    let start = bar * PEAKS / count;
+    let end = ((bar + 1) * PEAKS / count).max(start + 1);
+    let mut level = 0u8;
+    for value in &levels[start..end] {
+        level = level.max(*value);
+    }
+    f32::from(level)
+}
+
+fn interpolated(levels: &[u8; PEAKS], bar: usize, count: usize) -> f32 {
+    let position = bar as f32 * (PEAKS - 1) as f32 / (count - 1) as f32;
+    let below = position.floor() as usize;
+    let above = (below + 1).min(PEAKS - 1);
+    let weight = position - below as f32;
+    f32::from(levels[below]) * (1.0 - weight) + f32::from(levels[above]) * weight
+}
+
+fn placeholder_heights(recording: RecordingId, count: usize) -> Vec<f32> {
     let RecordingId(raw) = recording;
     let mut seed = (raw as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
     let mut heights = Vec::new();
-    for _ in 0..BARS {
+    for _ in 0..count {
         seed ^= seed << 13;
         seed ^= seed >> 7;
         seed ^= seed << 17;
@@ -567,26 +594,40 @@ mod tests {
 
     #[test]
     fn the_waveform_is_stable_per_recording_and_fits_the_row() {
-        let first = bar_heights(RecordingId(5), None);
-        assert_eq!(first, bar_heights(RecordingId(5), None));
-        assert_ne!(first, bar_heights(RecordingId(6), None));
-        assert_eq!(first.len(), BARS);
+        let first = bar_heights(RecordingId(5), None, 22);
+        assert_eq!(first, bar_heights(RecordingId(5), None, 22));
+        assert_ne!(first, bar_heights(RecordingId(6), None, 22));
+        assert_eq!(first.len(), 22);
         for height in first {
-            assert!((6.0..=26.0).contains(&height), "{height}");
+            assert!((MIN_BAR..=MAX_BAR).contains(&height), "{height}");
         }
     }
 
     #[test]
-    fn measured_peaks_scale_to_the_loudest_bar() {
+    fn the_bar_count_follows_the_width() {
+        assert_eq!(bar_count(0.0), 1);
+        assert_eq!(bar_count(3.0), 1);
+        assert_eq!(bar_count(8.5), 2);
+        assert_eq!(bar_count(118.5), 22);
+        assert_eq!(bar_count(800.0), 145);
+    }
+
+    #[test]
+    fn measured_peaks_scale_to_the_loudest_bar_at_any_count() {
         let mut levels = [0u8; PEAKS];
         levels[0] = 40;
         levels[PEAKS - 1] = 80;
-        let heights = bar_heights(RecordingId(1), Some(Peaks(levels)));
-        assert_eq!(heights.len(), BARS);
-        assert_eq!(heights[BARS - 1], MAX_BAR);
-        assert_eq!(heights[0], MIN_BAR + (MAX_BAR - MIN_BAR) / 2.0);
-        assert_eq!(heights[BARS / 2], MIN_BAR);
-        let silent = bar_heights(RecordingId(1), Some(Peaks([0; PEAKS])));
+        for count in [22, PEAKS, 145] {
+            let heights = bar_heights(RecordingId(1), Some(Peaks(levels)), count);
+            assert_eq!(heights.len(), count);
+            assert_eq!(heights[count - 1], MAX_BAR);
+            assert_eq!(heights[0], MIN_BAR + (MAX_BAR - MIN_BAR) / 2.0);
+            assert_eq!(heights[count / 2], MIN_BAR);
+            for height in &heights {
+                assert!((MIN_BAR..=MAX_BAR).contains(height), "{height}");
+            }
+        }
+        let silent = bar_heights(RecordingId(1), Some(Peaks([0; PEAKS])), 145);
         for height in silent {
             assert_eq!(height, MIN_BAR);
         }

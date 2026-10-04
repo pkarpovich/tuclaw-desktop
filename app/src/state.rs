@@ -14,7 +14,7 @@ use tuclaw_core::v3::{
     RunState, Seq, TextDelta,
 };
 
-use crate::audio::{self, Pcm, PeakCache, Peaks, Speaker};
+use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 
 const PAGE: u32 = 50;
@@ -113,7 +113,7 @@ pub struct AppState {
     speaker: Box<dyn Speaker>,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
-    waveforms: HashMap<RecordingId, Peaks>,
+    waveforms: HashMap<RecordingId, Waveform>,
     unreadable: HashSet<RecordingId>,
     peak_cache: Option<PeakCache>,
     filling: Filling,
@@ -163,7 +163,7 @@ impl AppState {
         self
     }
 
-    pub fn peaks(&self, recording: RecordingId) -> Option<Peaks> {
+    pub fn waveform(&self, recording: RecordingId) -> Option<Waveform> {
         self.waveforms.get(&recording).copied()
     }
 
@@ -211,12 +211,12 @@ impl AppState {
     fn waveform_ready(
         &mut self,
         recording: RecordingId,
-        peaks: Option<Peaks>,
+        waveform: Option<Waveform>,
         cx: &mut Context<Self>,
     ) -> Option<Voice> {
-        match peaks {
-            Some(peaks) => {
-                self.waveforms.insert(recording, peaks);
+        match waveform {
+            Some(waveform) => {
+                self.waveforms.insert(recording, waveform);
             }
             None => {
                 self.unreadable.insert(recording);
@@ -994,7 +994,7 @@ async fn waveform_for(
     cache: Option<PeakCache>,
     voice: Voice,
     cx: &mut AsyncApp,
-) -> Option<Peaks> {
+) -> Option<Waveform> {
     let Voice {
         recording,
         mime,
@@ -1003,25 +1003,25 @@ async fn waveform_for(
     let RecordingId(raw) = recording;
     let executor = cx.background_executor().clone();
     if let Some(cache) = cache.clone()
-        && let Some(peaks) = executor.spawn(async move { cache.read(raw) }).await
+        && let Some(waveform) = executor.spawn(async move { cache.read(raw) }).await
     {
-        return Some(peaks);
+        return Some(waveform);
     }
     let bytes = client
         .attachment(link::recording_id(recording))
         .await
         .ok()?;
-    let peaks = executor
-        .spawn(async move { audio::decode(&mime, bytes).map(|pcm| audio::peaks(&pcm)) })
+    let waveform = executor
+        .spawn(async move { audio::decode(&mime, bytes).map(|pcm| audio::waveform(&pcm)) })
         .await
         .ok()?;
     if let Some(cache) = cache {
         executor
-            .spawn(async move { cache.write(raw, &peaks) })
+            .spawn(async move { cache.write(raw, &waveform) })
             .await
             .ok();
     }
-    Some(peaks)
+    Some(waveform)
 }
 
 fn jitter() -> f64 {
@@ -1433,10 +1433,18 @@ mod tests {
     fn a_loaded_voice_message_gets_its_measured_waveform(cx: &mut TestAppContext) {
         let (_mock, state, _speaker, _spoken) = on_magnet_feed(cx);
         let recording = voice_recording(&state, cx);
-        let peaks = state.read_with(cx, |state, _cx| state.peaks(recording));
-        let Some(crate::audio::Peaks(levels)) = peaks else {
+        let waveform = state.read_with(cx, |state, _cx| state.waveform(recording));
+        let Some(crate::audio::Waveform {
+            peaks: crate::audio::Peaks(levels),
+            duration,
+        }) = waveform
+        else {
             panic!("the waveform is computed from the fetched recording");
         };
+        assert!(
+            (duration.as_secs_f64() - 3.0).abs() < 0.05,
+            "the duration is measured from the decoded recording: {duration:?}"
+        );
         let mut loudest = 0;
         for level in levels {
             loudest = loudest.max(level);
@@ -1462,17 +1470,21 @@ mod tests {
             .expect("the computed waveform is cached on disk");
         let mut levels = [7u8; crate::audio::PEAKS];
         levels[0] = 200;
+        let planted = crate::audio::Waveform {
+            peaks: crate::audio::Peaks(levels),
+            duration: std::time::Duration::from_secs(42),
+        };
         cache
-            .write(raw, &crate::audio::Peaks(levels))
+            .write(raw, &planted)
             .expect("the cache is overwritten");
-        assert_ne!(stored, crate::audio::Peaks(levels));
+        assert_ne!(stored, planted);
         let (_mock, again, _speaker) =
             crate::testing::speaking_with(cx, Scenario::default(), Some(cache));
         let magnet = channel_named(&again, cx, "Magnet Feed");
         again.update(cx, |state, cx| state.select(magnet, cx));
         cx.run_until_parked();
-        let peaks = again.read_with(cx, |state, _cx| state.peaks(recording));
-        assert_eq!(peaks, Some(crate::audio::Peaks(levels)));
+        let waveform = again.read_with(cx, |state, _cx| state.waveform(recording));
+        assert_eq!(waveform, Some(planted));
         std::fs::remove_dir_all(directory).ok();
     }
 
