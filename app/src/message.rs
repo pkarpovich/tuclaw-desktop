@@ -1,19 +1,23 @@
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, IntoElement, Pixels, SharedString,
-    Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px, relative, size,
+    App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, IntoElement, Pixels,
+    SharedString, Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px, relative,
+    size,
 };
 use time::OffsetDateTime;
 use time::macros::format_description;
-use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
+use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
 
 use gpui_kit::base::Avatar;
 
 use crate::audio::{PEAKS, Peaks, Waveform};
-use crate::control::{self, AvatarSize, button, row_button};
+use crate::control::{self, AvatarSize, Face, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
+use crate::link;
+use crate::people::People;
 use crate::rich::{self, Ink, Parts};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
@@ -58,6 +62,7 @@ pub struct Writer {
     initials: SharedString,
     tone: Tone,
     badge: Badge,
+    picture: Option<Arc<Image>>,
 }
 
 enum Tone {
@@ -73,7 +78,7 @@ enum Badge {
 
 pub fn message_row(
     message: &Message,
-    agents: &[Agent],
+    people: &People,
     look: Look,
     actions: &Actions,
 ) -> impl IntoElement {
@@ -91,7 +96,7 @@ pub fn message_row(
         waveform,
         run: pane,
     } = look;
-    let writer = writer(*author, agents);
+    let writer = writer(*author, people);
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
     let Parts { thinking, answer } = rich::split_thinking(&source(body));
@@ -440,42 +445,39 @@ fn thinking_fold(id: MessageId, thinking: String, fold: Fold, on_toggle: OnToggl
     }
 }
 
-pub fn author_name(author: Author, agents: &[Agent]) -> SharedString {
+fn author_name(author: Author, people: &People) -> SharedString {
     let author = match author {
-        Author::User => return SharedString::new_static("You"),
+        Author::User => return SharedString::from(people.me.name.clone()),
         Author::System => return SharedString::new_static("tuclaw"),
         Author::Agent(author) => author,
     };
+    let Some(agent) = find_agent(people.agents, author) else {
+        return SharedString::new_static("unknown agent");
+    };
+    SharedString::from(agent.name.clone())
+}
+
+fn find_agent(agents: &[Agent], id: AgentId) -> Option<&Agent> {
     let mut found = None;
     for candidate in agents {
-        if candidate.id == author {
+        if candidate.id == id {
             found = Some(candidate);
             break;
         }
     }
-    let Some(Agent {
-        id: _,
-        name,
-        initials: _,
-        role: _,
-        status: _,
-        sort_index: _,
-    }) = found
-    else {
-        return SharedString::new_static("unknown agent");
-    };
-    SharedString::from(name.clone())
+    found
 }
 
-pub fn writer(author: Author, agents: &[Agent]) -> Writer {
-    let name = author_name(author, agents);
+pub fn writer(author: Author, people: &People) -> Writer {
+    let name = author_name(author, people);
     let author = match author {
         Author::User => {
             return Writer {
+                initials: SharedString::from(link::initials(&people.me.name)),
                 name,
-                initials: SharedString::new_static("YO"),
                 tone: Tone::User,
                 badge: Badge::None,
+                picture: people.picture(people.me.picture.as_ref()),
             };
         }
         Author::System => {
@@ -484,17 +486,11 @@ pub fn writer(author: Author, agents: &[Agent]) -> Writer {
                 initials: SharedString::new_static("TC"),
                 tone: Tone::System,
                 badge: Badge::None,
+                picture: None,
             };
         }
         Author::Agent(author) => author,
     };
-    let mut found = None;
-    for candidate in agents {
-        if candidate.id == author {
-            found = Some(candidate);
-            break;
-        }
-    }
     let Some(Agent {
         id: _,
         name: _,
@@ -502,13 +498,15 @@ pub fn writer(author: Author, agents: &[Agent]) -> Writer {
         role: _,
         status: _,
         sort_index,
-    }) = found
+        picture,
+    }) = find_agent(people.agents, author)
     else {
         return Writer {
             name,
             initials: SharedString::new_static("··"),
             tone: Tone::Agent(0),
             badge: Badge::Agent,
+            picture: None,
         };
     };
     Writer {
@@ -516,16 +514,24 @@ pub fn writer(author: Author, agents: &[Agent]) -> Writer {
         initials: SharedString::from(initials.clone()),
         tone: Tone::Agent(*sort_index as usize),
         badge: Badge::Agent,
+        picture: people.picture(picture.as_ref()),
     }
 }
 
 pub fn avatar(writer: &Writer) -> Avatar {
-    let tone = match writer.tone {
+    let color = match writer.tone {
         Tone::User => theme::accent(),
         Tone::Agent(index) => theme::agent_chip(index),
         Tone::System => theme::status_idle(),
     };
-    control::avatar(writer.initials.clone(), tone, AvatarSize::Message)
+    control::avatar(
+        Face {
+            initials: writer.initials.clone(),
+            color,
+            picture: writer.picture.clone(),
+        },
+        AvatarSize::Message,
+    )
 }
 
 fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Div {

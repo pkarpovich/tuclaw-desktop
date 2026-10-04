@@ -122,7 +122,7 @@ impl Shell {
                 inspector,
                 message,
                 log,
-                agents: state.agents(),
+                people: state.people(),
                 is_open: &|disclosure, by_default| state.is_open(disclosure, by_default),
             },
             InspectorActions {

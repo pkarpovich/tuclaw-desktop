@@ -5,8 +5,10 @@ use gpui::{
 use gpui_kit::base::Button;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
-use crate::control::{AvatarSize, avatar, row_button};
+use crate::control::{AvatarSize, Face, avatar, row_button};
 use crate::icon::{Glyph, icon};
+use crate::link;
+use crate::people::{Me, People};
 use crate::state::{AppState, Segment, View};
 use crate::theme;
 
@@ -38,11 +40,7 @@ enum Highlight {
 
 enum Lead {
     Hash,
-    Chip {
-        initials: SharedString,
-        tone: usize,
-        status: Status,
-    },
+    Chip { face: Face, status: Status },
 }
 
 enum Status {
@@ -147,6 +145,7 @@ impl Render for Sidebar {
             View::Conversation => Highlight::Off,
         };
         let sections = sections(state);
+        let footer = footer(&state.people());
         let mut rows = div()
             .id("sidebar-rows")
             .flex()
@@ -173,7 +172,7 @@ impl Render for Sidebar {
             .min_h(px(0.))
             .child(search_field())
             .child(rows)
-            .child(footer())
+            .child(footer)
     }
 }
 
@@ -182,7 +181,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         View::Conversation => state.selected(),
         View::Agents => None,
     };
-    let agents = state.agents();
+    let people = state.people();
     let mut sections: Vec<Section> = Vec::new();
     for Channel {
         id,
@@ -199,7 +198,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         };
         let lead = match kind {
             ChannelKind::Channel => Lead::Hash,
-            ChannelKind::Direct(agent) => lead_of(agents, *agent),
+            ChannelKind::Direct(agent) => lead_of(&people, *agent),
         };
         let continues = match sections.last() {
             Some(Section {
@@ -233,9 +232,9 @@ fn sections(state: &AppState) -> Vec<Section> {
     sections
 }
 
-fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
+fn lead_of(people: &People, agent: AgentId) -> Lead {
     let mut found = None;
-    for candidate in agents {
+    for candidate in people.agents {
         if candidate.id == agent {
             found = Some(candidate);
             break;
@@ -248,6 +247,7 @@ fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
         role: _,
         status,
         sort_index,
+        picture,
     }) = found
     else {
         return Lead::Hash;
@@ -257,8 +257,11 @@ fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
         AgentStatus::Busy(_) => Status::Busy,
     };
     Lead::Chip {
-        initials: SharedString::from(initials.clone()),
-        tone: *sort_index as usize,
+        face: Face {
+            initials: SharedString::from(initials.clone()),
+            color: theme::agent_chip(*sort_index as usize),
+            picture: people.picture(picture.as_ref()),
+        },
         status,
     }
 }
@@ -280,14 +283,10 @@ fn lead_element(lead: Lead) -> Div {
             .flex()
             .justify_center()
             .child(icon(Glyph::Channel, px(14.), theme::text_label())),
-        Lead::Chip {
-            initials,
-            tone,
-            status,
-        } => div()
+        Lead::Chip { face, status } => div()
             .relative()
             .flex_none()
-            .child(avatar(initials, theme::agent_chip(tone), AvatarSize::Row))
+            .child(avatar(face, AvatarSize::Row))
             .child(status_dot(status)),
     }
 }
@@ -370,7 +369,13 @@ fn search_field() -> impl IntoElement {
     )
 }
 
-fn footer() -> impl IntoElement {
+fn footer(people: &People) -> Div {
+    let Me { name, picture } = people.me;
+    let face = Face {
+        initials: SharedString::from(link::initials(name)),
+        color: theme::accent(),
+        picture: people.picture(picture.as_ref()),
+    };
     div()
         .flex()
         .flex_none()
@@ -383,7 +388,7 @@ fn footer() -> impl IntoElement {
             div()
                 .relative()
                 .flex_none()
-                .child(avatar("YO", theme::accent(), AvatarSize::Account))
+                .child(avatar(face, AvatarSize::Account))
                 .child(status_dot(Status::Idle)),
         )
         .child(
@@ -394,7 +399,7 @@ fn footer() -> impl IntoElement {
                     div()
                         .text_size(px(13.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("You"),
+                        .child(SharedString::from(name.clone())),
                 )
                 .child(
                     div()
@@ -451,11 +456,7 @@ mod tests {
                 names.push(row.name.to_string());
                 match &row.lead {
                     Lead::Hash => {}
-                    Lead::Chip {
-                        initials: _,
-                        tone: _,
-                        status: _,
-                    } => panic!("a surface row carries a hash"),
+                    Lead::Chip { face: _, status: _ } => panic!("a surface row carries a hash"),
                 }
             }
             assert_eq!(names, vec!["General", "Magnet Feed", "Smart Home"]);

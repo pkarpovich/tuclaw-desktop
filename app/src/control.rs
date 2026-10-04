@@ -1,5 +1,9 @@
-use gpui::{FontWeight, Hsla, InteractiveElement, ParentElement, SharedString, Styled, phi, px};
-use gpui_kit::base::{Avatar, AvatarFallback, Button, Toggle, ToggleGroup};
+use std::sync::Arc;
+
+use gpui::{
+    FontWeight, Hsla, Image, InteractiveElement, ParentElement, SharedString, Styled, phi, px,
+};
+use gpui_kit::base::{Avatar, AvatarFallback, AvatarImage, Button, Toggle, ToggleGroup};
 
 use crate::theme;
 
@@ -43,27 +47,42 @@ pub enum AvatarSize {
     Message,
 }
 
-pub fn avatar(initials: impl Into<SharedString>, color: Hsla, size: AvatarSize) -> Avatar {
+pub struct Face {
+    pub initials: SharedString,
+    pub color: Hsla,
+    pub picture: Option<Arc<Image>>,
+}
+
+pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
+    let Face {
+        initials,
+        color,
+        picture,
+    } = face;
     let (side, radius, text) = match size {
         AvatarSize::Row => (24., 7., 9.5),
         AvatarSize::Header => (26., 8., 10.),
         AvatarSize::Account => (30., 9., 11.),
         AvatarSize::Message => (34., 10., 11.),
     };
-    Avatar::new()
+    let avatar = Avatar::new()
         .flex_none()
         .size(px(side))
         .rounded(px(radius))
-        .bg(color)
-        .fallback(
-            AvatarFallback::new()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(text))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::chip_text())
-                .child(initials.into()),
-        )
+        .overflow_hidden()
+        .bg(color);
+    if let Some(picture) = picture {
+        return avatar.image(AvatarImage::new(picture).size_full().rounded(px(radius)));
+    }
+    avatar.fallback(
+        AvatarFallback::new()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(text))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(theme::chip_text())
+            .child(initials),
+    )
 }

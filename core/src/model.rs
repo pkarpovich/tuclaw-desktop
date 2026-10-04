@@ -112,7 +112,22 @@ pub struct Agent {
     pub status: AgentStatus,
     /// The position of the agent in the rendered order, ascending.
     pub sort_index: i64,
+    /// Its avatar, when it has one; otherwise its initials are drawn.
+    pub picture: Option<Picture>,
 }
+
+/// Where an avatar picture is fetched from; a changed picture has a new address.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::Picture;
+///
+/// let Picture(url) = Picture("/api/v3/agents/7/avatar?v=ab12".into());
+/// assert!(url.ends_with("v=ab12"));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Picture(pub String);
 
 /// A conversation in the sidebar, either a channel or a direct message.
 #[derive(Debug, Clone, PartialEq, Eq)]

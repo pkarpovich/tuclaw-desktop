@@ -7,7 +7,7 @@ use futures::channel::mpsc::UnboundedSender;
 use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
 use tuclaw_core::model::{
-    Agent, Author, Channel, ChannelId, Message, MessageId, RecordingId, Span, Voice,
+    Agent, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span, Voice,
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
@@ -16,6 +16,7 @@ use tuclaw_core::v3::{
 
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
+use crate::people::{self, Gallery, Me, People};
 use crate::runlog::{self, Disclosure, RunLog};
 
 const PAGE: u32 = 50;
@@ -136,6 +137,9 @@ pub struct AppState {
     peak_cache: Option<PeakCache>,
     filling: Filling,
     _waveforms: Option<Task<()>>,
+    me: Me,
+    gallery: Gallery,
+    requested: HashSet<Picture>,
     _link: Option<Task<()>>,
 }
 
@@ -175,6 +179,9 @@ impl AppState {
             peak_cache: None,
             filling: Filling::Idle,
             _waveforms: None,
+            me: Me::default(),
+            gallery: Gallery::new(),
+            requested: HashSet::new(),
             _link: None,
         }
     }
@@ -258,6 +265,57 @@ impl AppState {
 
     pub fn agents(&self) -> &[Agent] {
         &self.agents
+    }
+
+    pub fn people(&self) -> People<'_> {
+        People {
+            agents: &self.agents,
+            me: &self.me,
+            gallery: &self.gallery,
+        }
+    }
+
+    fn me_loaded(&mut self, me: v3::Me, cx: &mut Context<Self>) {
+        let v3::Me { name, avatar_url } = me;
+        self.me = Me {
+            name,
+            picture: link::picture(avatar_url.as_ref()),
+        };
+        self.fill_pictures(cx);
+        cx.notify();
+    }
+
+    fn fill_pictures(&mut self, cx: &mut Context<Self>) {
+        let mut wanted = Vec::new();
+        for agent in &self.agents {
+            if let Some(picture) = &agent.picture {
+                wanted.push(picture.clone());
+            }
+        }
+        if let Some(picture) = &self.me.picture {
+            wanted.push(picture.clone());
+        }
+        for picture in wanted {
+            if !self.requested.insert(picture.clone()) {
+                continue;
+            }
+            let request = self.client.avatar(&link::avatar_url(&picture));
+            cx.spawn(async move |this, cx| {
+                let image = match request.await {
+                    Ok(bytes) => people::decode(bytes),
+                    Err(_) => None,
+                };
+                let Some(image) = image else {
+                    return;
+                };
+                this.update(cx, |state, cx| {
+                    state.gallery.insert(picture, image);
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
     }
 
     pub fn channels(&self) -> &[Channel] {
@@ -878,6 +936,7 @@ impl AppState {
         self.surfaces = surfaces;
         self.directory = agents;
         self.refresh_agents();
+        self.fill_pictures(cx);
         let selected = match self.selected {
             Some(selected) => Some(selected),
             None => self.channels.first().map(|channel| channel.id),
@@ -1188,6 +1247,9 @@ async fn fetch_directory(
         (Ok(_), Err(error)) => this.update(cx, |state, cx| state.failed(error.to_string(), cx)),
         (Err(error), Err(_)) => this.update(cx, |state, cx| state.failed(error.to_string(), cx)),
     };
+    if let Ok(me) = client.me().await {
+        this.update(cx, |state, cx| state.me_loaded(me, cx)).ok();
+    }
     loaded.is_ok()
 }
 
@@ -1279,6 +1341,22 @@ mod tests {
 
     use super::{AppState, Link, Player, Segment, SidebarVisibility, TICK, View};
     use crate::testing::{FakeSpeaker, channel_named, loaded, mocked, play, speaking};
+
+    #[gpui::test]
+    fn the_start_loads_me_and_every_avatar(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let people = state.people();
+            assert_eq!(people.me.name, "You");
+            assert!(people.picture(people.me.picture.as_ref()).is_some());
+            let mut drawn = Vec::new();
+            for agent in people.agents {
+                drawn.push(people.picture(agent.picture.as_ref()).is_some());
+            }
+            assert_eq!(drawn, vec![true, false, false, false]);
+        });
+    }
 
     #[gpui::test]
     fn the_fresh_start_loads_the_directory_and_the_first_surface(cx: &mut TestAppContext) {

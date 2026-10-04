@@ -135,6 +135,66 @@ impl ClientMessageId {
 #[serde(transparent)]
 pub struct AttachmentId(pub i64);
 
+/// Where an avatar's bytes live: a versioned path under the daemon's base URL, fetched with the
+/// same token as every v3 call; a new picture is a new URL.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::AvatarUrl;
+///
+/// let url: AvatarUrl = serde_json::from_str(r#""/api/v3/agents/7/avatar?v=ab12""#).unwrap();
+/// assert_eq!(url, AvatarUrl("/api/v3/agents/7/avatar?v=ab12".into()));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AvatarUrl(pub String);
+
+/// The image formats an avatar can be stored in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ImageKind {
+    /// `image/png`.
+    Png,
+    /// `image/jpeg`.
+    Jpeg,
+    /// `image/webp`.
+    Webp,
+}
+
+impl ImageKind {
+    /// Returns the MIME type sent as the upload's `Content-Type`.
+    pub fn mime(self) -> &'static str {
+        match self {
+            ImageKind::Png => "image/png",
+            ImageKind::Jpeg => "image/jpeg",
+            ImageKind::Webp => "image/webp",
+        }
+    }
+
+    /// Recognizes an image by its leading bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tuclaw_core::v3::ImageKind;
+    ///
+    /// assert_eq!(ImageKind::sniff(b"\x89PNG\r\n\x1a\n...."), Some(ImageKind::Png));
+    /// assert_eq!(ImageKind::sniff(b"GIF89a"), None);
+    /// ```
+    pub fn sniff(bytes: &[u8]) -> Option<ImageKind> {
+        if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Some(ImageKind::Png);
+        }
+        if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+            return Some(ImageKind::Jpeg);
+        }
+        if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+            return Some(ImageKind::Webp);
+        }
+        None
+    }
+}
+
 /// Positions a persisted event in the daemon's event log.
 ///
 /// # Examples
@@ -327,6 +387,42 @@ pub struct Agent {
     /// The surface its session lives on.
     #[serde(default)]
     pub home_surface_id: Option<SurfaceId>,
+    /// Its avatar; `None` draws its initials.
+    #[serde(default)]
+    pub avatar_url: Option<AvatarUrl>,
+}
+
+/// The person using the client, as `GET /me` answers.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::Me;
+///
+/// let me: Me = serde_json::from_str(r#"{"name": "You", "avatar_url": null}"#).unwrap();
+/// assert!(me.avatar_url.is_none());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Me {
+    /// The display name; "You" when the daemon knows none.
+    pub name: String,
+    /// The avatar; `None` draws the initials.
+    #[serde(default)]
+    pub avatar_url: Option<AvatarUrl>,
+}
+
+/// The answer to an avatar upload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AvatarSet {
+    /// Where the stored picture is served from now.
+    pub avatar_url: AvatarUrl,
+}
+
+/// The body of `PATCH /me`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rename {
+    /// The new display name.
+    pub name: String,
 }
 
 /// The kind of a message.
@@ -727,6 +823,36 @@ mod tests {
     const POSTED: &str = include_str!("../../testdata/v3/posted.json");
     const POSTED_WITHOUT_INPUT: &str = include_str!("../../testdata/v3/posted_without_input.json");
     const ERROR: &str = include_str!("../../testdata/v3/error.json");
+    const ME: &str = include_str!("../../testdata/v3/me.json");
+    const AVATAR_SET: &str = include_str!("../../testdata/v3/avatar_set.json");
+
+    #[test]
+    fn me_and_an_avatar_answer_decode() {
+        let Me { name, avatar_url } = serde_json::from_str(ME).unwrap();
+        assert_eq!(name, "Pavel");
+        assert_eq!(
+            avatar_url,
+            Some(AvatarUrl("/api/v3/me/avatar?v=AgADq2wx".into()))
+        );
+        let AvatarSet { avatar_url } = serde_json::from_str(AVATAR_SET).unwrap();
+        assert_eq!(
+            avatar_url,
+            AvatarUrl("/api/v3/agents/1/avatar?v=AQADcVty".into())
+        );
+    }
+
+    #[test]
+    fn images_are_recognized_by_their_leading_bytes() {
+        let mut webp = b"RIFF\0\0\0\0WEBPVP8 ".to_vec();
+        webp.extend_from_slice(&[0; 4]);
+        assert_eq!(ImageKind::sniff(&webp), Some(ImageKind::Webp));
+        assert_eq!(
+            ImageKind::sniff(&[0xff, 0xd8, 0xff, 0xe0]),
+            Some(ImageKind::Jpeg)
+        );
+        assert_eq!(ImageKind::sniff(b"RIFF\0\0\0\0WAVE"), None);
+        assert_eq!(ImageKind::Webp.mime(), "image/webp");
+    }
 
     #[test]
     fn surfaces_decode_with_wiring_bindings_and_live_run() {
@@ -790,6 +916,11 @@ mod tests {
         assert_eq!(agents[0].live_run, None);
         assert_eq!(agents[0].bot_username.as_deref(), Some("tuclaw_bot"));
         assert_eq!(agents[0].home_surface_id, Some(SurfaceId(1)));
+        assert_eq!(
+            agents[0].avatar_url,
+            Some(AvatarUrl("/api/v3/agents/1/avatar?v=AQADbVsx".into()))
+        );
+        assert_eq!(agents[1].avatar_url, None);
         assert_eq!(agents[1].state, AgentState::Running);
         assert_eq!(
             agents[1].live_run,

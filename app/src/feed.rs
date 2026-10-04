@@ -10,10 +10,11 @@ use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
 use crate::composer::Composer;
-use crate::control::{AvatarSize, avatar};
+use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
+use crate::people::People;
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
 
@@ -52,8 +53,7 @@ enum Header {
         agents: usize,
     },
     Direct {
-        initials: SharedString,
-        tone: usize,
+        face: Face,
         name: SharedString,
         role: SharedString,
     },
@@ -258,7 +258,7 @@ impl Feed {
                         waveform,
                         run,
                     };
-                    message_row(message, state.agents(), look, &actions).into_any_element()
+                    message_row(message, &state.people(), look, &actions).into_any_element()
                 }
                 Item::Run(run) => {
                     let state = state.read(cx);
@@ -271,7 +271,7 @@ impl Feed {
                         on_stop: on_stop.clone(),
                         on_disclose: actions.on_disclose.clone(),
                     };
-                    run_card(run, state.agents(), look).into_any_element()
+                    run_card(run, &state.people(), look).into_any_element()
                 }
             }
         })
@@ -406,13 +406,13 @@ fn header(state: &AppState) -> Header {
             name: SharedString::from(name.clone()),
             agents: state.wired_agents(selected),
         },
-        ChannelKind::Direct(agent) => direct_header(state.agents(), *agent, name),
+        ChannelKind::Direct(agent) => direct_header(&state.people(), *agent, name),
     }
 }
 
-fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
+fn direct_header(people: &People, agent: AgentId, channel: &str) -> Header {
     let mut found = None;
-    for candidate in agents {
+    for candidate in people.agents {
         if candidate.id == agent {
             found = Some(candidate);
             break;
@@ -425,6 +425,7 @@ fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
         role,
         status: _,
         sort_index,
+        picture,
     }) = found
     else {
         return Header::Channel {
@@ -433,8 +434,11 @@ fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
         };
     };
     Header::Direct {
-        initials: SharedString::from(initials.clone()),
-        tone: *sort_index as usize,
+        face: Face {
+            initials: SharedString::from(initials.clone()),
+            color: theme::agent_chip(*sort_index as usize),
+            picture: people.picture(picture.as_ref()),
+        },
         name: SharedString::from(name.clone()),
         role: SharedString::from(role.clone()),
     }
@@ -444,8 +448,7 @@ fn placeholder(state: &AppState) -> SharedString {
     match header(state) {
         Header::Channel { name, agents: _ } => SharedString::from(format!("Message #{name}")),
         Header::Direct {
-            initials: _,
-            tone: _,
+            face: _,
             name,
             role: _,
         } => SharedString::from(format!("Message {name}")),
@@ -468,6 +471,7 @@ fn busy_agents(agents: &[Agent]) -> Vec<Busy> {
         role: _,
         status,
         sort_index: _,
+        picture: _,
     } in agents
     {
         let AgentStatus::Busy(task) = status else {
@@ -501,21 +505,12 @@ fn header_element(header: Header) -> impl IntoElement {
                     .text_color(theme::text_muted())
                     .child(agent_count(agents)),
             ),
-        Header::Direct {
-            initials,
-            tone,
-            name,
-            role,
-        } => div()
+        Header::Direct { face, name, role } => div()
             .flex()
             .items_center()
             .gap(px(10.))
             .min_w(px(0.))
-            .child(avatar(
-                initials,
-                theme::agent_chip(tone),
-                AvatarSize::Header,
-            ))
+            .child(avatar(face, AvatarSize::Header))
             .child(
                 div()
                     .text_size(px(15.))
@@ -671,6 +666,7 @@ mod tests {
             role: "role".to_string(),
             status,
             sort_index: id,
+            picture: None,
         }
     }
 
@@ -945,6 +941,7 @@ mod tests {
             messages: vec![serde_json::from_value(message).expect("message")],
             runs: Vec::new(),
             media: Vec::new(),
+            me: None,
         }
     }
 

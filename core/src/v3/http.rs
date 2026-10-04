@@ -3,6 +3,7 @@ use std::time::Duration;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use futures::future::BoxFuture;
 use futures::{SinkExt, StreamExt};
+use reqwest::header::CONTENT_TYPE;
 use reqwest::{RequestBuilder, Response};
 use serde_json::Value;
 use tokio::net::TcpStream;
@@ -17,7 +18,7 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use super::dto::Seq;
 use super::frames::{ClientFrame, Frame, decode, encode};
 use super::runtime::{handle, spawn};
-use super::transport::{ApiError, Connection, Transport};
+use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -149,6 +150,26 @@ impl Transport for HttpTransport {
         )
     }
 
+    fn send(&self, request: Request) -> BoxFuture<'static, Result<Value, ApiError>> {
+        let Request { method, path, body } = request;
+        let url = format!("{}{path}", self.api);
+        let builder = match method {
+            Method::Put => self.client.put(url),
+            Method::Patch => self.client.patch(url),
+            Method::Delete => self.client.delete(url),
+        };
+        let builder = match body {
+            Body::Empty => builder,
+            Body::Json(json) => builder.json(&json),
+            Body::Image { kind, bytes } => builder.header(CONTENT_TYPE, kind.mime()).body(bytes),
+        };
+        let builder = self.authorized(builder);
+        spawn(
+            &self.handle,
+            async move { answer(builder.send().await).await },
+        )
+    }
+
     fn connect(&self, since: Option<Seq>) -> BoxFuture<'static, Result<Connection, ApiError>> {
         let url = match since {
             Some(Seq(since)) => format!("{}?since={since}", self.events),
@@ -272,9 +293,10 @@ mod tests {
 
     use super::*;
     use crate::testing::{Events, FakeDaemon, Reply};
-    use crate::v3::client::Client;
+    use crate::v3::client::{AvatarOwner, Client};
     use crate::v3::dto::{
-        AgentId, ClientMessageId, InputId, MessageId, Post, Posted, RunId, SurfaceId,
+        AgentId, AvatarUrl, ClientMessageId, ImageKind, InputId, MessageId, Post, Posted, RunId,
+        SurfaceId,
     };
     use crate::v3::frames::Frame;
 
@@ -326,6 +348,75 @@ mod tests {
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].target, "/api/v3/surfaces");
         assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn me_and_an_avatar_are_read_with_the_token() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "GET",
+            "/api/v3/me",
+            json_reply(200, include_str!("../../testdata/v3/me.json")),
+        );
+        daemon.route("GET", "/api/v3/me/avatar", json_reply(200, "{}"));
+        let me = within(client(&daemon).me()).expect("me loads");
+        let Some(url) = me.avatar_url else {
+            panic!("the fixture carries an avatar");
+        };
+        within(client(&daemon).avatar(&url)).expect("the avatar loads");
+        let requests = daemon.requests();
+        assert_eq!(requests[1].target, "/api/v3/me/avatar?v=AgADq2wx");
+        assert_eq!(requests[1].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn an_avatar_outside_the_api_is_refused_without_a_request() {
+        let daemon = FakeDaemon::start();
+        let outside = AvatarUrl("https://example.org/face.png".into());
+        let fetched = within(client(&daemon).avatar(&outside));
+        assert!(matches!(fetched, Err(ApiError::Decode(_))));
+        assert!(daemon.requests().is_empty());
+    }
+
+    #[test]
+    fn an_avatar_upload_is_a_raw_put_with_its_mime_type() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "PUT",
+            "/api/v3/agents/1/avatar",
+            json_reply(200, include_str!("../../testdata/v3/avatar_set.json")),
+        );
+        let url = within(client(&daemon).set_avatar(
+            AvatarOwner::Agent(AgentId(1)),
+            ImageKind::Png,
+            b"\x89PNG\r\n\x1a\nbytes".to_vec(),
+        ))
+        .expect("the upload is stored");
+        assert_eq!(url, AvatarUrl("/api/v3/agents/1/avatar?v=AQADcVty".into()));
+        let requests = daemon.requests();
+        assert_eq!(requests[0].method, "PUT");
+        assert_eq!(requests[0].content_type.as_deref(), Some("image/png"));
+        assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn clearing_and_renaming_send_delete_and_patch() {
+        let daemon = FakeDaemon::start();
+        daemon.route("DELETE", "/api/v3/me/avatar", json_reply(204, ""));
+        daemon.route("PATCH", "/api/v3/me", json_reply(200, ""));
+        within(client(&daemon).clear_avatar(AvatarOwner::Me)).expect("cleared");
+        within(client(&daemon).rename_me("Pavel".into())).expect("renamed");
+        let requests = daemon.requests();
+        assert_eq!(requests[0].method, "DELETE");
+        assert_eq!(requests[1].method, "PATCH");
+        assert_eq!(
+            requests[1].content_type.as_deref(),
+            Some("application/json")
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&requests[1].body).expect("json"),
+            json!({"name": "Pavel"})
+        );
     }
 
     #[test]

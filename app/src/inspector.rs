@@ -6,12 +6,13 @@ use gpui::{
     App, Div, FontWeight, SharedString, Stateful, Window, div, phi, prelude::*, px, relative,
 };
 use gpui_kit::base::ToggleGroup;
-use tuclaw_core::model::{Agent, Message, RunOutcome, RunRef};
+use tuclaw_core::model::{Message, RunOutcome, RunRef};
 use tuclaw_core::v3::RunDetail;
 
 use crate::control::{self, button};
 use crate::icon::{Glyph, icon};
 use crate::message::{avatar, writer};
+use crate::people::People;
 use crate::rich;
 use crate::runlog::{
     self, Disclosure, Footer, OnDisclose, Owner, Row, RunLog, StepStatus, ToolCall, duration_label,
@@ -28,7 +29,7 @@ pub struct InspectorInput<'a> {
     pub inspector: Inspector,
     pub message: &'a Message,
     pub log: Option<&'a RunLog>,
-    pub agents: &'a [Agent],
+    pub people: People<'a>,
     pub is_open: &'a dyn Fn(Disclosure, bool) -> bool,
 }
 
@@ -116,7 +117,7 @@ pub fn render(input: InspectorInput, actions: InspectorActions) -> Stateful<Div>
         inspector,
         message,
         log,
-        agents,
+        people,
         is_open,
     } = input;
     let InspectorActions {
@@ -128,7 +129,7 @@ pub fn render(input: InspectorInput, actions: InspectorActions) -> Stateful<Div>
         message: id,
         filter,
     } = inspector;
-    let writer = writer(message.author, agents);
+    let writer = writer(message.author, &people);
     let close = on_close.clone();
     let header = div()
         .flex()

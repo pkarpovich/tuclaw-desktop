@@ -5,7 +5,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::future::BoxFuture;
 use serde_json::Value;
 
-use super::dto::{ErrorBody, ErrorDetail, Seq, SurfaceId};
+use super::dto::{ErrorBody, ErrorDetail, ImageKind, Seq, SurfaceId};
 use super::frames::{ClientFrame, Frame};
 
 /// Why a call to the daemon failed.
@@ -105,7 +105,45 @@ impl Connection {
     }
 }
 
-/// The seam between the typed client and the daemon: three calls, each an executor-agnostic
+/// A write other than `POST`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    /// Replaces a resource.
+    Put,
+    /// Edits a resource in place.
+    Patch,
+    /// Removes a resource.
+    Delete,
+}
+
+/// The body of a [`Request`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum Body {
+    /// No body.
+    Empty,
+    /// A JSON document.
+    Json(Value),
+    /// Raw image bytes, sent with their MIME type.
+    Image {
+        /// The image's format.
+        kind: ImageKind,
+        /// The encoded image.
+        bytes: Vec<u8>,
+    },
+}
+
+/// A `PUT`, `PATCH` or `DELETE` to `/api/v3{path}`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Request {
+    /// The method.
+    pub method: Method,
+    /// The path under `/api/v3`.
+    pub path: String,
+    /// What to send.
+    pub body: Body,
+}
+
+/// The seam between the typed client and the daemon: calls, each an executor-agnostic
 /// future that needs no runtime in the caller.
 pub trait Transport: Send + Sync {
     /// Sends `GET /api/v3{path}` and returns the JSON body (`Null` for an empty one).
@@ -113,6 +151,9 @@ pub trait Transport: Send + Sync {
 
     /// Sends `POST /api/v3{path}` with an optional JSON body and returns the JSON answer.
     fn post(&self, path: &str, body: Option<Value>) -> BoxFuture<'static, Result<Value, ApiError>>;
+
+    /// Sends a `PUT`, `PATCH` or `DELETE` and returns the JSON answer (`Null` for an empty one).
+    fn send(&self, request: Request) -> BoxFuture<'static, Result<Value, ApiError>>;
 
     /// Sends `GET /api/v3{path}` and returns the raw body, for media.
     fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>>;

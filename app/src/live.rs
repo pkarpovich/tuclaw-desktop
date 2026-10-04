@@ -2,13 +2,14 @@ use std::rc::Rc;
 
 use gpui::{App, Div, FontWeight, IntoElement, SharedString, Window, div, prelude::*, px};
 use serde_json::Value;
-use tuclaw_core::model::{Agent, Author};
+use tuclaw_core::model::Author;
 use tuclaw_core::v3::{Run, RunId, RunState};
 
 use crate::control::button;
 use crate::icon::{Glyph, icon};
 use crate::link;
 use crate::message::{agent_badge, avatar, writer};
+use crate::people::People;
 use crate::rich::{self, Ink};
 use crate::runlog::{self, OnDisclose, Owner, Row, RowView};
 use crate::theme;
@@ -105,13 +106,13 @@ pub fn state_label(state: RunState) -> &'static str {
 
 pub type OnStop = Rc<dyn Fn(&RunId, &mut Window, &mut App)>;
 
-pub fn run_card(view: &RunView, agents: &[Agent], look: LiveLook) -> impl IntoElement {
+pub fn run_card(view: &RunView, people: &People, look: LiveLook) -> impl IntoElement {
     let LiveLook {
         rows,
         on_stop,
         on_disclose,
     } = look;
-    let writer = writer(view.author, agents);
+    let writer = writer(view.author, people);
     let selector = match &view.id {
         Some(RunId(id)) => format!("run-{id}"),
         None => "run-queued".to_string(),

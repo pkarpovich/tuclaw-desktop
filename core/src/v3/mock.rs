@@ -6,7 +6,9 @@
 //! [`MockTransport::step`] or [`MockTransport::play_all`], so tests stay on their own thread; with
 //! [`Pace::Realtime`] a task on the `core` runtime plays the queue with real delays.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
@@ -21,19 +23,20 @@ use time::macros::datetime;
 use time::{Duration as TimeDuration, OffsetDateTime};
 use uuid::Uuid;
 
+use super::client::AvatarOwner;
 use super::dto::{
     Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
-    AuthorKind, Binding, Channel, ClientMessageId, ContextUsage, InputId, Message, MessageId,
-    MessageKind, MessagesPage, Mirror, Post, Posted, Role, RowKind, RunDetail, RunId, RunRow,
-    RunStatus, RunSummary, Seq, StepRow, Surface, SurfaceId, SurfaceKind, SurfaceRun, ToolUseId,
-    Usage, Wiring,
+    AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, ImageKind,
+    InputId, Me, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted, Rename, Role,
+    RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface, SurfaceId,
+    SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
     RunSnapshot, RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
 };
 use super::runtime::handle;
-use super::transport::{ApiError, Connection, Transport};
+use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
 
 const RING: usize = 1000;
 const DELTA_DELAY: Duration = Duration::from_millis(50);
@@ -65,6 +68,9 @@ pub struct Seed {
     /// Where the bytes of each attachment live, for `GET /attachments/{id}`.
     #[serde(default)]
     pub media: Vec<SeedMedia>,
+    /// The answer to `GET /me`; "You" with no avatar when absent.
+    #[serde(default)]
+    pub me: Option<Me>,
 }
 
 /// A local file serving one attachment of a [`Seed`].
@@ -77,6 +83,35 @@ pub struct SeedMedia {
 }
 
 const TONE: &[u8] = include_bytes!("../../testdata/v3/media/tone.ogg");
+const AGENT_AVATAR: &[u8] = include_bytes!("../../testdata/v3/media/avatar_agent.png");
+const MY_AVATAR: &[u8] = include_bytes!("../../testdata/v3/media/avatar_me.png");
+const AVATAR_LIMIT: usize = 2 * 1024 * 1024;
+const DEFAULT_NAME: &str = "You";
+
+#[derive(Debug, Clone)]
+struct Avatar {
+    bytes: Vec<u8>,
+    version: String,
+}
+
+impl Avatar {
+    fn new(bytes: Vec<u8>) -> Avatar {
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        Avatar {
+            version: format!("{:016x}", hasher.finish()),
+            bytes,
+        }
+    }
+
+    fn url(&self, owner: AvatarOwner) -> AvatarUrl {
+        let path = match owner {
+            AvatarOwner::Agent(AgentId(agent)) => format!("/api/v3/agents/{agent}/avatar"),
+            AvatarOwner::Me => "/api/v3/me/avatar".into(),
+        };
+        AvatarUrl(format!("{path}?v={}", self.version))
+    }
+}
 
 #[derive(Debug, Clone)]
 enum Media {
@@ -194,6 +229,8 @@ struct World {
     subscribers: Vec<Subscriber>,
     posted: HashMap<ClientMessageId, (SurfaceId, Posted)>,
     media: HashMap<AttachmentId, Media>,
+    my_name: String,
+    avatars: HashMap<AvatarOwner, Avatar>,
     next_message: i64,
     next_input: i64,
 }
@@ -402,6 +439,11 @@ impl Transport for MockTransport {
         ready(answer).boxed()
     }
 
+    fn send(&self, request: Request) -> BoxFuture<'static, Result<Value, ApiError>> {
+        let answer = self.lock().send(request);
+        ready(answer).boxed()
+    }
+
     fn connect(&self, since: Option<Seq>) -> BoxFuture<'static, Result<Connection, ApiError>> {
         let connection = self.lock().connect(since);
         ready(Ok(connection)).boxed()
@@ -536,6 +578,14 @@ impl World {
             subscribers: Vec::new(),
             posted: HashMap::new(),
             media: HashMap::new(),
+            my_name: DEFAULT_NAME.into(),
+            avatars: HashMap::from([
+                (
+                    AvatarOwner::Agent(AgentId(1)),
+                    Avatar::new(AGENT_AVATAR.to_vec()),
+                ),
+                (AvatarOwner::Me, Avatar::new(MY_AVATAR.to_vec())),
+            ]),
             next_message: 9000,
             next_input: 40,
         };
@@ -552,7 +602,15 @@ impl World {
             messages,
             runs,
             media: files,
+            me,
         } = seed;
+        let my_name = match me {
+            Some(Me {
+                name,
+                avatar_url: _,
+            }) => name,
+            None => DEFAULT_NAME.into(),
+        };
         let mut media = HashMap::new();
         for SeedMedia { id, path } in files {
             media.insert(id, Media::File(path));
@@ -620,6 +678,8 @@ impl World {
             subscribers: Vec::new(),
             posted: HashMap::new(),
             media,
+            my_name,
+            avatars: HashMap::new(),
             next_message,
             next_input: 1,
         }
@@ -977,6 +1037,7 @@ impl World {
         match segments.as_slice() {
             ["surfaces"] => to_json(&self.surfaces_view()),
             ["agents"] => to_json(&self.agents_view()),
+            ["me"] => to_json(&self.me_view()),
             ["surfaces", id, "messages"] => {
                 let surface = parse_surface(id)?;
                 self.page(surface, query)
@@ -995,9 +1056,19 @@ impl World {
         if self.unavailable() {
             return Err(ApiError::Unavailable);
         }
-        let segments = segments(path);
-        let ["attachments", id] = segments.as_slice() else {
-            return Err(ApiError::NotFound);
+        let route = match path.split_once('?') {
+            Some((route, _query)) => route,
+            None => path,
+        };
+        let segments = segments(route);
+        let id = match segments.as_slice() {
+            ["attachments", id] => id,
+            ["agents", id, "avatar"] => {
+                let owner = AvatarOwner::Agent(parse_agent(id)?);
+                return self.avatar_bytes(owner);
+            }
+            ["me", "avatar"] => return self.avatar_bytes(AvatarOwner::Me),
+            [..] => return Err(ApiError::NotFound),
         };
         let Ok(id) = id.parse::<i64>() else {
             return Err(ApiError::NotFound);
@@ -1154,10 +1225,112 @@ impl World {
         surfaces
     }
 
+    fn me_view(&self) -> Me {
+        Me {
+            name: self.my_name.clone(),
+            avatar_url: self
+                .avatars
+                .get(&AvatarOwner::Me)
+                .map(|avatar| avatar.url(AvatarOwner::Me)),
+        }
+    }
+
+    fn avatar_bytes(&self, owner: AvatarOwner) -> Result<Vec<u8>, ApiError> {
+        let Some(avatar) = self.avatars.get(&owner) else {
+            return Err(ApiError::NotFound);
+        };
+        Ok(avatar.bytes.clone())
+    }
+
+    fn send(&mut self, request: Request) -> Result<Value, ApiError> {
+        if self.unavailable() {
+            return Err(ApiError::Unavailable);
+        }
+        let Request { method, path, body } = request;
+        let segments = segments(&path);
+        let owner = match segments.as_slice() {
+            ["agents", id, "avatar"] => {
+                let agent = parse_agent(id)?;
+                let mut known = false;
+                for candidate in &self.agents {
+                    if candidate.id == agent {
+                        known = true;
+                        break;
+                    }
+                }
+                if !known {
+                    return Err(ApiError::NotFound);
+                }
+                AvatarOwner::Agent(agent)
+            }
+            ["me", "avatar"] => AvatarOwner::Me,
+            ["me"] => return self.rename(method, body),
+            [..] => return Err(ApiError::NotFound),
+        };
+        match (method, body) {
+            (Method::Put, Body::Image { kind, bytes }) => self.store_avatar(owner, kind, bytes),
+            (Method::Delete, Body::Empty) => {
+                self.avatars.remove(&owner);
+                Ok(Value::Null)
+            }
+            (Method::Put, Body::Empty) => {
+                Err(ApiError::Invalid("an image body is required".into()))
+            }
+            (Method::Put, Body::Json(_)) => {
+                Err(ApiError::Invalid("an image body is required".into()))
+            }
+            (Method::Delete, Body::Json(_)) => Err(ApiError::Invalid("no body expected".into())),
+            (Method::Delete, Body::Image { kind: _, bytes: _ }) => {
+                Err(ApiError::Invalid("no body expected".into()))
+            }
+            (Method::Patch, _) => Err(ApiError::NotFound),
+        }
+    }
+
+    fn store_avatar(
+        &mut self,
+        owner: AvatarOwner,
+        kind: ImageKind,
+        bytes: Vec<u8>,
+    ) -> Result<Value, ApiError> {
+        if bytes.len() > AVATAR_LIMIT {
+            return Err(ApiError::Invalid("the image is larger than 2 MiB".into()));
+        }
+        if ImageKind::sniff(&bytes) != Some(kind) {
+            return Err(ApiError::Invalid(format!(
+                "the body is not {}",
+                kind.mime()
+            )));
+        }
+        let avatar = Avatar::new(bytes);
+        let avatar_url = avatar.url(owner);
+        self.avatars.insert(owner, avatar);
+        to_json(&AvatarSet { avatar_url })
+    }
+
+    fn rename(&mut self, method: Method, body: Body) -> Result<Value, ApiError> {
+        let (Method::Patch, Body::Json(json)) = (method, body) else {
+            return Err(ApiError::NotFound);
+        };
+        let Ok(Rename { name }) = serde_json::from_value::<Rename>(json) else {
+            return Err(ApiError::Invalid("name is required".into()));
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(ApiError::Invalid("name must not be empty".into()));
+        }
+        self.my_name = name.to_string();
+        Ok(Value::Null)
+    }
+
     fn agents_view(&self) -> Vec<Agent> {
         let mut agents = Vec::new();
         for agent in &self.agents {
             let mut agent = agent.clone();
+            let owner = AvatarOwner::Agent(agent.id);
+            if let Some(avatar) = self.avatars.get(&owner) {
+                agent.avatar_url = Some(avatar.url(owner));
+            }
             for run in &self.runs {
                 if run.agent == agent.id && run.finished_at.is_none() {
                     agent.state = AgentState::Running;
@@ -1672,6 +1845,13 @@ fn to_json<T: Serialize>(value: &T) -> Result<Value, ApiError> {
     serde_json::to_value(value).map_err(|error| ApiError::Decode(error.to_string()))
 }
 
+fn parse_agent(id: &str) -> Result<AgentId, ApiError> {
+    let Ok(id) = id.parse::<i64>() else {
+        return Err(ApiError::NotFound);
+    };
+    Ok(AgentId(id))
+}
+
 fn parse_surface(id: &str) -> Result<SurfaceId, ApiError> {
     let Ok(id) = id.parse::<i64>() else {
         return Err(ApiError::NotFound);
@@ -1761,6 +1941,7 @@ fn seed_agents() -> Vec<Agent> {
                 state: AgentState::Idle,
                 live_run: None,
                 home_surface_id: home.map(SurfaceId),
+                avatar_url: None,
             }
         };
     vec![
@@ -2213,6 +2394,68 @@ mod tests {
     }
 
     #[test]
+    fn avatars_are_served_replaced_and_cleared() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let agents = block_on(client.agents()).expect("agents");
+        let Some(first) = agents[0].avatar_url.clone() else {
+            panic!("the mock seeds an avatar for the first agent");
+        };
+        assert_eq!(agents[1].avatar_url, None);
+        let bytes = block_on(client.avatar(&first)).expect("the avatar is served");
+        assert_eq!(ImageKind::sniff(&bytes), Some(ImageKind::Png));
+        let replaced = block_on(client.set_avatar(
+            AvatarOwner::Agent(AgentId(1)),
+            ImageKind::Png,
+            MY_AVATAR.to_vec(),
+        ))
+        .expect("stored");
+        assert_ne!(replaced, first);
+        assert_eq!(
+            block_on(client.agents()).expect("agents")[0].avatar_url,
+            Some(replaced)
+        );
+        block_on(client.clear_avatar(AvatarOwner::Agent(AgentId(1)))).expect("cleared");
+        assert_eq!(
+            block_on(client.agents()).expect("agents")[0].avatar_url,
+            None
+        );
+        assert_eq!(block_on(client.avatar(&first)), Err(ApiError::NotFound));
+    }
+
+    #[test]
+    fn an_upload_that_is_not_its_declared_image_is_refused() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let refused =
+            block_on(client.set_avatar(AvatarOwner::Me, ImageKind::Jpeg, MY_AVATAR.to_vec()));
+        assert!(matches!(refused, Err(ApiError::Invalid(_))));
+        let huge = block_on(client.set_avatar(
+            AvatarOwner::Me,
+            ImageKind::Png,
+            vec![0x89; AVATAR_LIMIT + 1],
+        ));
+        assert!(matches!(huge, Err(ApiError::Invalid(_))));
+        let unknown = block_on(client.set_avatar(
+            AvatarOwner::Agent(AgentId(99)),
+            ImageKind::Png,
+            MY_AVATAR.to_vec(),
+        ));
+        assert_eq!(unknown, Err(ApiError::NotFound));
+    }
+
+    #[test]
+    fn me_is_renamed_and_falls_back_to_you() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        assert_eq!(block_on(client.me()).expect("me").name, "You");
+        block_on(client.rename_me("Pavel".into())).expect("renamed");
+        assert_eq!(block_on(client.me()).expect("me").name, "Pavel");
+        let blank = block_on(client.rename_me("  ".into()));
+        assert!(matches!(blank, Err(ApiError::Invalid(_))));
+    }
+
+    #[test]
     fn a_seeded_attachment_is_read_from_its_file() {
         let path = std::env::temp_dir().join(format!("tuclaw-media-{}.bin", std::process::id()));
         std::fs::write(&path, b"voice bytes").expect("written");
@@ -2225,6 +2468,7 @@ mod tests {
                 id: AttachmentId(7),
                 path: path.clone(),
             }],
+            me: None,
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
@@ -2262,6 +2506,7 @@ mod tests {
             messages: page.messages,
             runs: vec![detail.clone()],
             media: Vec::new(),
+            me: None,
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);

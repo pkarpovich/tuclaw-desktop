@@ -1,6 +1,6 @@
 use tuclaw_core::model::{
     Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId,
-    RecordingId, RunOutcome, RunRef, Span, Voice,
+    Picture, RecordingId, RunOutcome, RunRef, Span, Voice,
 };
 use tuclaw_core::v3;
 
@@ -45,6 +45,7 @@ pub fn agent(agent: &v3::Agent, busy_on: Option<&str>) -> Agent {
         state: _,
         live_run: _,
         home_surface_id: _,
+        avatar_url,
     } = agent;
     let status = match busy_on {
         Some(surface) => AgentStatus::Busy(format!("in #{surface}")),
@@ -65,7 +66,18 @@ pub fn agent(agent: &v3::Agent, busy_on: Option<&str>) -> Agent {
         role,
         status,
         sort_index: raw,
+        picture: picture(avatar_url.as_ref()),
     }
+}
+
+pub fn picture(url: Option<&v3::AvatarUrl>) -> Option<Picture> {
+    let v3::AvatarUrl(url) = url?;
+    Some(Picture(url.clone()))
+}
+
+pub fn avatar_url(picture: &Picture) -> v3::AvatarUrl {
+    let Picture(url) = picture;
+    v3::AvatarUrl(url.clone())
 }
 
 pub fn message(message: &v3::Message) -> Message {

@@ -4,7 +4,8 @@ use gpui::{
 };
 use tuclaw_core::model::{Agent, AgentStatus};
 
-use crate::control::{AvatarSize, avatar};
+use crate::control::{AvatarSize, Face, avatar};
+use crate::people::People;
 use crate::state::AppState;
 use crate::theme;
 
@@ -15,9 +16,8 @@ pub struct AgentsView {
 
 pub struct AgentCard {
     pub name: SharedString,
-    pub initials: SharedString,
+    pub face: Face,
     pub role: SharedString,
-    pub tone: usize,
     pub status: Status,
 }
 
@@ -39,14 +39,13 @@ impl AgentsView {
 
 impl Render for AgentsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let cards = agent_cards(self.state.read(cx).agents());
+        let cards = agent_cards(&self.state.read(cx).people());
         let total = cards.len();
         let mut busy = 0;
         for AgentCard {
             name: _,
-            initials: _,
+            face: _,
             role: _,
-            tone: _,
             status,
         } in &cards
         {
@@ -78,9 +77,9 @@ impl Render for AgentsView {
     }
 }
 
-pub fn agent_cards(agents: &[Agent]) -> Vec<AgentCard> {
+pub fn agent_cards(people: &People) -> Vec<AgentCard> {
     let mut ordered: Vec<&Agent> = Vec::new();
-    for agent in agents {
+    for agent in people.agents {
         ordered.push(agent);
     }
     ordered.sort_by_key(|agent| (agent.sort_index, agent.id.0));
@@ -92,6 +91,7 @@ pub fn agent_cards(agents: &[Agent]) -> Vec<AgentCard> {
         role,
         status,
         sort_index,
+        picture,
     } in ordered
     {
         let status = match status {
@@ -100,9 +100,12 @@ pub fn agent_cards(agents: &[Agent]) -> Vec<AgentCard> {
         };
         cards.push(AgentCard {
             name: SharedString::from(name.clone()),
-            initials: SharedString::from(initials.clone()),
+            face: Face {
+                initials: SharedString::from(initials.clone()),
+                color: theme::agent_chip(*sort_index as usize),
+                picture: people.picture(picture.as_ref()),
+            },
             role: SharedString::from(role.clone()),
-            tone: *sort_index as usize,
             status,
         });
     }
@@ -136,9 +139,8 @@ fn header(total: usize, busy: usize) -> impl IntoElement {
 fn card_element(card: AgentCard) -> impl IntoElement {
     let AgentCard {
         name,
-        initials,
+        face,
         role,
-        tone,
         status,
     } = card;
     div()
@@ -151,7 +153,7 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         .bg(theme::raised())
         .border_1()
         .border_color(theme::border())
-        .child(chip(initials, tone))
+        .child(avatar(face, AvatarSize::Message))
         .child(
             div()
                 .flex()
@@ -173,10 +175,6 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         )
         .child(div().flex_1())
         .child(status_element(status))
-}
-
-fn chip(initials: SharedString, tone: usize) -> impl IntoElement {
-    avatar(initials, theme::agent_chip(tone), AvatarSize::Message)
 }
 
 fn status_element(status: Status) -> Div {
@@ -208,21 +206,31 @@ mod tests {
     use tuclaw_core::model::{Agent, AgentId, AgentStatus};
 
     use super::{AgentCard, AgentsView, Status, agent_cards};
+    use crate::people::{Gallery, Me, People};
     use crate::shell::Shell;
     use crate::state::{Segment, View};
     use crate::testing::loaded;
 
+    fn cards(agents: &[Agent]) -> Vec<AgentCard> {
+        let me = Me::default();
+        let gallery = Gallery::new();
+        agent_cards(&People {
+            agents,
+            me: &me,
+            gallery: &gallery,
+        })
+    }
+
     #[gpui::test]
     fn the_cards_follow_the_sort_index(cx: &mut TestAppContext) {
         let (_mock, state) = loaded(cx);
-        let cards = state.read_with(cx, |state, _cx| agent_cards(state.agents()));
+        let cards = state.read_with(cx, |state, _cx| agent_cards(&state.people()));
         let mut names = Vec::new();
         let mut statuses = Vec::new();
         for AgentCard {
             name,
-            initials: _,
+            face: _,
             role: _,
-            tone: _,
             status,
         } in &cards
         {
@@ -260,9 +268,10 @@ mod tests {
                 role: "role".to_string(),
                 status: AgentStatus::Idle,
                 sort_index,
+                picture: None,
             });
         }
-        let cards = agent_cards(&agents);
+        let cards = cards(&agents);
         let mut names = Vec::new();
         for card in &cards {
             names.push(card.name.clone());
@@ -289,9 +298,10 @@ mod tests {
                 role: "role".to_string(),
                 status: AgentStatus::Idle,
                 sort_index: 0,
+                picture: None,
             });
         }
-        let cards = agent_cards(&agents);
+        let cards = cards(&agents);
         let mut names = Vec::new();
         for card in &cards {
             names.push(card.name.clone());

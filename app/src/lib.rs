@@ -10,6 +10,7 @@ pub mod link;
 pub mod live;
 pub mod menu;
 pub mod message;
+pub mod people;
 pub mod rich;
 pub mod runlog;
 pub mod shell;
