@@ -165,6 +165,8 @@ impl Session {
             }
             Frame::TaskFired(_) => {}
             Frame::SurfaceRead(_) => {}
+            Frame::SurfaceUpdated(_) => {}
+            Frame::GroupsChanged(_) => {}
             Frame::MessageCreated(created) => {
                 let message = created.message.clone();
                 if let Some(run_id) = &message.run_id

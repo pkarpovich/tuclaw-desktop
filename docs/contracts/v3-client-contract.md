@@ -3,6 +3,11 @@ Acceptance scenario this contract must carry: a conversation in an existing Tele
 
 ## Transport and auth
 
+
+Acceptance scenario this contract must carry: a conversation in an existing Telegram topic, from the desktop, without Telegram limits - plain Markdown in and out, real token streaming, the run visible step by step (text segments, tool calls with input and result, background tasks), the final answer without the `<details>Thinking` fold. A desktop message is not echoed to Telegram; the agent's answer is mirrored there as today.
+
+## Transport and auth
+
 - Base: `http://<daemon>:9090/api/v3` (the existing `TUCLAW_HTTP_ADDR` server), event socket `ws://<daemon>:9090/api/v3/events`. LAN and Tailscale only.
 - `/api/v3` is always mounted and open to the LAN and Tailscale (decided by Pavel 2026-10-04: no token for now; Authelia may front it later). The daemon keeps one optional knob, `TUCLAW_CLIENT_TOKEN`: when it is set, every v3 request, REST and WebSocket upgrade, must carry `Authorization: Bearer <token>` and a missing or wrong header is `401`; when it is unset, no header is needed and any `Authorization` header is ignored. A client sends the bearer when it has a token configured, and learns the mode from `hello.capabilities.auth`.
 - `/health`, `/api/v1`, `/api/v2` and the mini-app stay as they are, unauthenticated, for one release.
@@ -287,3 +292,37 @@ Agreed 2026-10-05 with the desktop; Pavel chose an unread badge per surface plus
   - Posting does not move the cursor; the client sends `read` itself.
 - Every accepted read, including one that did not move the cursor, records a persisted `surface.read` event. It goes out as a frame (`surface_id` in the envelope, `run_id` null, payload `{last_read_message_id, unread}`), so every open client converges on the same badge.
 - Between reads, a client counts new messages itself from `message.created`: one per message not written by the user past its cursor, on a surface it is not showing.
+
+## v3.7 additions: organizing the sidebar
+
+Agreed 2026-10-05 with the desktop (Pavel's asks: groups with a title and an emoji, renaming and archiving channels, a channel browser). Everything here is how the desktop shows surfaces. It never touches the channel: Telegram keeps its topic names, and agents and Telegram keep working in an archived surface.
+
+- **Surfaces.** `GET /surfaces` changes and gains fields:
+  - `name` is now the effective name: the desktop's `display_name`, else `topic_name`;
+  - `topic_name` is the channel's own name (`General` for topic 0);
+  - `display_name` is the desktop's name or `null`;
+  - `group_id` is the group or `null` (ungrouped surfaces come first, with no header);
+  - `archived_at` is `null` unless the surface is archived.
+
+  `sort_order` is still the position, now within its group. The agents' roster and prompt stamps keep the topic name.
+- **`PATCH /surfaces/{id}`** takes `{display_name?, archived?, group_id?}`. An absent field stays as it is.
+  - `display_name` `null` or `""` goes back to the topic name; at most 64 characters.
+  - `archived` is a boolean. Archiving keeps the first time; a new message never unarchives.
+  - `group_id` `null` ungroups the surface.
+
+  It answers `200` with the surface. An unknown surface or group = `404`, a bad field = `400`.
+- **`PUT /surfaces/order`** takes `[{"id", "group_id" (null = ungrouped), "sort_order"}]` for drag and drop and answers `200` with the full `GET /surfaces` list.
+  - The position is the same order `/api/v1` (the Watch) and the mini-app read.
+  - An empty list or an entry without an id = `400`. An unknown surface or group = `404`, and then nothing is changed.
+- **Groups.**
+  - `GET /groups` returns `[{"id", "name", "emoji" (null), "sort_order"}]` in order.
+  - `POST /groups {name, emoji?}` answers `201` with the group, placed last.
+  - `PATCH /groups/{id} {name?, emoji?, sort_order?}`: an empty emoji clears it. It answers `200` with the group.
+  - `DELETE /groups/{id}` answers `204`; its surfaces become ungrouped.
+  - A name is 1 to 64 characters and an emoji at most 8.
+- **Events (persisted).**
+  - `surface.updated {surface}` carries the whole surface as `GET /surfaces` shows it now. It is sent for every surface a rename, archive, regroup, reorder or group deletion changed.
+  - `groups.changed {groups}` carries the whole group list.
+
+  Both are read at send time, so a replay shows the current state. A deleted surface's update is skipped.
+- **Client side.** Collapsing a group is per client. An archived surface's `unread` is still computed (the browser can show it), and the client leaves it out of every badge.

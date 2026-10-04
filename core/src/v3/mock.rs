@@ -27,10 +27,10 @@ use super::client::AvatarOwner;
 use super::dto::{
     Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
     AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, FireMark,
-    ImageKind, InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage, Mirror,
-    Outcome, Post, Posted, ReadAnswer, Role, RowKind, RunDetail, RunId, RunRow, RunStatus,
-    RunSummary, Schedule, ScheduleKind, Seq, StepRow, Surface, SurfaceId, SurfaceKind, SurfaceRun,
-    Task, TaskId, TaskRun, TaskStatus, ToolUseId, Usage, Wiring, WiringChange,
+    Group, GroupId, ImageKind, InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage,
+    Mirror, Outcome, Placement, Post, Posted, ReadAnswer, Role, RowKind, RunDetail, RunId, RunRow,
+    RunStatus, RunSummary, Schedule, ScheduleKind, Seq, StepRow, Surface, SurfaceId, SurfaceKind,
+    SurfaceRun, Task, TaskId, TaskRun, TaskStatus, ToolUseId, Usage, Wiring, WiringChange,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
@@ -239,6 +239,7 @@ struct World {
     media: HashMap<AttachmentId, Media>,
     public: HashMap<String, Vec<u8>>,
     cursors: HashMap<SurfaceId, MessageId>,
+    groups: Vec<Group>,
     my_name: String,
     my_description: String,
     tasks: Vec<Task>,
@@ -508,6 +509,7 @@ impl Transport for MockTransport {
 }
 
 const VOICE_LIMIT: usize = 20 * 1024 * 1024;
+const NAME_LIMIT: usize = 64;
 const VOICE_ATTACHMENTS: i64 = 100;
 const VOICE_TRANSCRIPT: &str = "Что нового за сегодня?";
 
@@ -641,6 +643,7 @@ impl World {
             media: HashMap::new(),
             public: HashMap::new(),
             cursors: HashMap::new(),
+            groups: Vec::new(),
             my_name: DEFAULT_NAME.into(),
             my_description: String::new(),
             tasks: Vec::new(),
@@ -763,6 +766,7 @@ impl World {
             media,
             public: HashMap::new(),
             cursors: HashMap::new(),
+            groups: Vec::new(),
             my_name,
             my_description,
             tasks,
@@ -1127,6 +1131,7 @@ impl World {
         let segments = segments(route);
         match segments.as_slice() {
             ["surfaces"] => to_json(&self.surfaces_view()),
+            ["groups"] => to_json(&self.groups_view()),
             ["agents"] => to_json(&self.agents_view()),
             ["me"] => to_json(&self.me_view()),
             ["tasks"] => to_json(&self.tasks_view(query)),
@@ -1200,6 +1205,7 @@ impl World {
                     .map_err(|error| ApiError::Invalid(error.to_string()))?;
                 to_json(&self.accept(surface, post, Vec::new())?)
             }
+            ["groups"] => self.create_group(body),
             ["surfaces", id, "read"] => {
                 let surface = parse_surface(id)?;
                 self.mark_read(surface, body)
@@ -1389,12 +1395,215 @@ impl World {
                     });
                 }
             }
+            surface.topic_name = surface.name.clone();
+            if let Some(display) = &surface.display_name {
+                surface.name = display.clone();
+            }
             let cursor = self.cursors.get(&surface.id).copied();
             surface.last_read_message_id = cursor;
             surface.unread = self.unread(surface.id, cursor);
             surfaces.push(surface);
         }
         surfaces
+    }
+
+    fn groups_view(&self) -> Vec<Group> {
+        let mut groups = self.groups.clone();
+        groups.sort_by_key(|group| (group.sort_order, group.id));
+        groups
+    }
+
+    fn surface_row(&self, surface: SurfaceId) -> Option<Surface> {
+        let mut found = None;
+        for candidate in self.surfaces_view() {
+            if candidate.id == surface {
+                found = Some(candidate);
+            }
+        }
+        found
+    }
+
+    fn announce_surface(&mut self, surface: SurfaceId) {
+        let Some(view) = self.surface_row(surface) else {
+            return;
+        };
+        self.persist(
+            "surface.updated",
+            Some(surface),
+            None,
+            &json!({ "surface": view }),
+        );
+    }
+
+    fn announce_groups(&mut self) {
+        let groups = self.groups_view();
+        self.persist("groups.changed", None, None, &json!({ "groups": groups }));
+    }
+
+    fn group_index(&self, group: GroupId) -> Option<usize> {
+        let mut found = None;
+        for (index, candidate) in self.groups.iter().enumerate() {
+            if candidate.id == group {
+                found = Some(index);
+            }
+        }
+        found
+    }
+
+    fn create_group(&mut self, body: Option<Value>) -> Result<Value, ApiError> {
+        let Some(body) = body else {
+            return Err(ApiError::Invalid("a group needs a name".into()));
+        };
+        let name = body.get("name").and_then(Value::as_str).unwrap_or_default();
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > NAME_LIMIT {
+            return Err(ApiError::Invalid(
+                "a group name is 1 to 64 characters".into(),
+            ));
+        }
+        let mut next = 1;
+        let mut last = -1;
+        for group in &self.groups {
+            let GroupId(id) = group.id;
+            next = next.max(id + 1);
+            last = last.max(group.sort_order);
+        }
+        let group = Group {
+            id: GroupId(next),
+            name: name.to_string(),
+            emoji: body
+                .get("emoji")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            sort_order: last + 1,
+        };
+        self.groups.push(group.clone());
+        self.announce_groups();
+        to_json(&group)
+    }
+
+    fn change_group(&mut self, id: &str, method: Method, body: Body) -> Result<Value, ApiError> {
+        let Ok(raw) = id.parse::<i64>() else {
+            return Err(ApiError::NotFound);
+        };
+        let Some(index) = self.group_index(GroupId(raw)) else {
+            return Err(ApiError::NotFound);
+        };
+        match method {
+            Method::Patch => {
+                let Body::Json(json) = body else {
+                    return Err(ApiError::Invalid("a JSON body is required".into()));
+                };
+                if let Some(name) = json.get("name").and_then(Value::as_str) {
+                    let name = name.trim();
+                    if name.is_empty() {
+                        return Err(ApiError::Invalid("a group needs a name".into()));
+                    }
+                    self.groups[index].name = name.to_string();
+                }
+                if let Some(emoji) = json.get("emoji") {
+                    self.groups[index].emoji = emoji.as_str().map(str::to_string);
+                }
+                if let Some(order) = json.get("sort_order").and_then(Value::as_i64) {
+                    self.groups[index].sort_order = order;
+                }
+                let group = self.groups[index].clone();
+                self.announce_groups();
+                to_json(&group)
+            }
+            Method::Delete => {
+                let gone = self.groups.remove(index).id;
+                let mut moved = Vec::new();
+                for surface in &mut self.surfaces {
+                    if surface.group_id == Some(gone) {
+                        surface.group_id = None;
+                        moved.push(surface.id);
+                    }
+                }
+                self.announce_groups();
+                for surface in moved {
+                    self.announce_surface(surface);
+                }
+                Ok(Value::Null)
+            }
+            Method::Post => Err(ApiError::NotFound),
+            Method::Put => Err(ApiError::NotFound),
+        }
+    }
+
+    fn patch_surface(
+        &mut self,
+        surface: SurfaceId,
+        method: Method,
+        body: Body,
+    ) -> Result<Value, ApiError> {
+        let index = self.surface_index(surface)?;
+        let (Method::Patch, Body::Json(json)) = (method, body) else {
+            return Err(ApiError::NotFound);
+        };
+        if let Some(group) = json.get("group_id") {
+            let group = match group.as_i64() {
+                Some(raw) => {
+                    if self.group_index(GroupId(raw)).is_none() {
+                        return Err(ApiError::NotFound);
+                    }
+                    Some(GroupId(raw))
+                }
+                None => None,
+            };
+            self.surfaces[index].group_id = group;
+        }
+        if let Some(name) = json.get("display_name") {
+            let name = name.as_str().map(str::trim).filter(|name| !name.is_empty());
+            if name.is_some_and(|name| name.chars().count() > NAME_LIMIT) {
+                return Err(ApiError::Invalid(
+                    "a display name is at most 64 characters".into(),
+                ));
+            }
+            self.surfaces[index].display_name = name.map(str::to_string);
+        }
+        if let Some(archived) = json.get("archived").and_then(Value::as_bool) {
+            self.surfaces[index].archived_at = match archived {
+                true => Some(self.now),
+                false => None,
+            };
+        }
+        self.announce_surface(surface);
+        self.surface_view(surface)
+    }
+
+    fn reorder(&mut self, method: Method, body: Body) -> Result<Value, ApiError> {
+        let (Method::Put, Body::Json(json)) = (method, body) else {
+            return Err(ApiError::NotFound);
+        };
+        let placements: Vec<Placement> =
+            serde_json::from_value(json).map_err(|error| ApiError::Invalid(error.to_string()))?;
+        for Placement {
+            id,
+            group_id,
+            sort_order: _,
+        } in &placements
+        {
+            self.surface_index(*id)?;
+            if let Some(group) = group_id
+                && self.group_index(*group).is_none()
+            {
+                return Err(ApiError::NotFound);
+            }
+        }
+        for Placement {
+            id,
+            group_id,
+            sort_order,
+        } in placements
+        {
+            if let Ok(index) = self.surface_index(id) {
+                self.surfaces[index].group_id = group_id;
+                self.surfaces[index].sort_order = sort_order;
+            }
+            self.announce_surface(id);
+        }
+        to_json(&self.surfaces_view())
     }
 
     fn unread(&self, surface: SurfaceId, cursor: Option<MessageId>) -> u32 {
@@ -1733,6 +1942,9 @@ impl World {
                 return Ok(Value::Null);
             }
             ["agents", id] => return self.patch_agent(parse_agent(id)?, method, body),
+            ["surfaces", "order"] => return self.reorder(method, body),
+            ["surfaces", id] => return self.patch_surface(parse_surface(id)?, method, body),
+            ["groups", id] => return self.change_group(id, method, body),
             ["surfaces", surface, "agents", agent] => {
                 let surface = parse_surface(surface)?;
                 let agent = parse_agent(agent)?;
@@ -2566,6 +2778,10 @@ fn seed_surfaces() -> Vec<Surface> {
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
+            topic_name: String::new(),
+            display_name: None,
+            group_id: None,
+            archived_at: None,
             last_read_message_id: None,
             unread: 0,
         },
@@ -2587,6 +2803,10 @@ fn seed_surfaces() -> Vec<Surface> {
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
+            topic_name: String::new(),
+            display_name: None,
+            group_id: None,
+            archived_at: None,
             last_read_message_id: None,
             unread: 0,
         },
@@ -2608,6 +2828,10 @@ fn seed_surfaces() -> Vec<Surface> {
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
+            topic_name: String::new(),
+            display_name: None,
+            group_id: None,
+            archived_at: None,
             last_read_message_id: None,
             unread: 0,
         },
@@ -2690,6 +2914,8 @@ mod tests {
             Frame::MessageCreated(_) => "message.created",
             Frame::TaskFired(_) => "task.fired",
             Frame::SurfaceRead(_) => "surface.read",
+            Frame::SurfaceUpdated(_) => "surface.updated",
+            Frame::GroupsChanged(_) => "groups.changed",
             Frame::TextDelta(_) => "text.delta",
             Frame::InputAccepted(_) => "input.accepted",
             Frame::Unknown(_) => "unknown",

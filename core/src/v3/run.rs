@@ -452,6 +452,8 @@ impl Run {
             Frame::MessageCreated(_) => Applied::Unchanged,
             Frame::TaskFired(_) => Applied::NotMine,
             Frame::SurfaceRead(_) => Applied::NotMine,
+            Frame::SurfaceUpdated(_) => Applied::NotMine,
+            Frame::GroupsChanged(_) => Applied::NotMine,
             Frame::RunSnapshot(snapshot) => self.apply_snapshot(snapshot),
             Frame::RunStarted(event) => {
                 self.begin(event);

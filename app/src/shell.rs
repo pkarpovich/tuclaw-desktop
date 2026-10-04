@@ -6,6 +6,7 @@ use gpui::{
 use crate::agent_settings::Target;
 use crate::agents::AgentsView;
 use crate::automations_view::AutomationsView;
+use crate::channels_view::ChannelsView;
 use crate::control::{self, button};
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
@@ -49,6 +50,7 @@ pub struct Shell {
     feed: Entity<Feed>,
     agents: Entity<AgentsView>,
     automations: Entity<AutomationsView>,
+    channels: Entity<ChannelsView>,
     settings: Option<SlotPanel>,
     viewer_focus: FocusHandle,
     _observation: Subscription,
@@ -75,6 +77,7 @@ impl Shell {
                 StateEvent::SendFailed(_) => {}
                 StateEvent::Mention(_) => {}
                 StateEvent::TasksLoaded => {}
+                StateEvent::ChannelsChanged => {}
             },
         );
         let built = state.clone();
@@ -85,12 +88,15 @@ impl Shell {
         let agents = cx.new(|cx| AgentsView::new(built, cx));
         let built = state.clone();
         let automations = cx.new(|cx| AutomationsView::new(built, cx));
+        let built = state.clone();
+        let channels = cx.new(|cx| ChannelsView::new(built, window, cx));
         Shell {
             state,
             sidebar,
             feed,
             agents,
             automations,
+            channels,
             settings: None,
             viewer_focus: cx.focus_handle(),
             _observation: observation,
@@ -144,6 +150,16 @@ impl Shell {
         let state = self.state.read(cx);
         let view = state.view();
         match view {
+            View::Channels => vec![
+                card()
+                    .id("content-card")
+                    .debug_selector(|| "content-card".to_string())
+                    .flex_1()
+                    .min_w(px(0.))
+                    .overflow_hidden()
+                    .child(self.channels.clone())
+                    .into_any_element(),
+            ],
             View::Automations => {
                 let mut cards = vec![
                     card()

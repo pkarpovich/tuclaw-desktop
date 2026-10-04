@@ -11,8 +11,8 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::dto::{
-    AgentId, ContextUsage, FireMark, InputId, Message, MessageId, Outcome, RunId, Seq, StepRow,
-    SurfaceId, TaskId, ToolUseId, Usage, null_as_empty,
+    AgentId, ContextUsage, FireMark, Group, InputId, Message, MessageId, Outcome, RunId, Seq,
+    StepRow, Surface, SurfaceId, TaskId, ToolUseId, Usage, null_as_empty,
 };
 
 /// The envelope version this build speaks.
@@ -301,6 +301,34 @@ struct ReadPayload {
     unread: u32,
 }
 
+/// `surface.updated`: a surface was renamed, archived, regrouped or moved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceUpdated {
+    /// The event's position in the log.
+    pub seq: Seq,
+    /// The surface as `GET /surfaces` would list it now.
+    pub surface: Surface,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfacePayload {
+    surface: Surface,
+}
+
+/// `groups.changed`: the sidebar groups as they are now, all of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupsChanged {
+    /// The event's position in the log.
+    pub seq: Seq,
+    /// Every group.
+    pub groups: Vec<Group>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GroupsPayload {
+    groups: Vec<Group>,
+}
+
 /// `text.delta`: streamed text of a run on a focused surface, never replayed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextDelta {
@@ -363,6 +391,10 @@ pub enum Frame {
     TaskFired(TaskFired),
     /// `surface.read`.
     SurfaceRead(SurfaceRead),
+    /// `surface.updated`.
+    SurfaceUpdated(SurfaceUpdated),
+    /// `groups.changed`.
+    GroupsChanged(GroupsChanged),
     /// `text.delta`.
     TextDelta(TextDelta),
     /// `input.accepted`.
@@ -398,6 +430,8 @@ impl Frame {
             Frame::MessageCreated(created) => Some(created.seq),
             Frame::TaskFired(fired) => Some(fired.seq),
             Frame::SurfaceRead(read) => Some(read.seq),
+            Frame::SurfaceUpdated(updated) => Some(updated.seq),
+            Frame::GroupsChanged(changed) => Some(changed.seq),
             Frame::TextDelta(_) => None,
             Frame::InputAccepted(_) => None,
             Frame::Unknown(unknown) => unknown.seq,
@@ -430,6 +464,8 @@ impl Frame {
             Frame::MessageCreated(created) => created.message.run_id.as_ref(),
             Frame::TaskFired(fired) => fired.mark.run_id.as_ref(),
             Frame::SurfaceRead(_) => None,
+            Frame::SurfaceUpdated(_) => None,
+            Frame::GroupsChanged(_) => None,
             Frame::TextDelta(delta) => Some(&delta.run_id),
             Frame::InputAccepted(_) => None,
             Frame::Unknown(_) => None,
@@ -589,6 +625,20 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
                 message,
             })
         }
+        "surface.updated" => {
+            let SurfacePayload { surface } = envelope.payload()?;
+            Frame::SurfaceUpdated(SurfaceUpdated {
+                seq: envelope.seq()?,
+                surface,
+            })
+        }
+        "groups.changed" => {
+            let GroupsPayload { groups } = envelope.payload()?;
+            Frame::GroupsChanged(GroupsChanged {
+                seq: envelope.seq()?,
+                groups,
+            })
+        }
         "surface.read" => {
             let ReadPayload {
                 last_read_message_id,
@@ -684,8 +734,27 @@ mod tests {
     use time::macros::datetime;
 
     use super::*;
+    use crate::v3::GroupId;
     use crate::v3::dto::{ClientMessageId, MessageKind, RowKind, RunStatus};
     use crate::v3::golden::fixture;
+
+    #[test]
+    fn surface_updated_and_groups_changed_carry_whole_rows() {
+        let Frame::SurfaceUpdated(updated) = crate::v3::golden::frame("surface_updated") else {
+            panic!("surface.updated decodes");
+        };
+        assert_eq!(updated.seq, Seq(1311));
+        assert_eq!(updated.surface.name, "Torrents");
+        assert_eq!(updated.surface.topic_name, "Magnet Feed");
+        assert_eq!(updated.surface.group_id, Some(GroupId(2)));
+        assert!(updated.surface.archived_at.is_some());
+        let Frame::GroupsChanged(changed) = crate::v3::golden::frame("groups_changed") else {
+            panic!("groups.changed decodes");
+        };
+        assert_eq!(changed.groups.len(), 2);
+        assert_eq!(changed.groups[0].emoji.as_deref(), Some("🎬"));
+        assert_eq!(changed.groups[1].emoji, None);
+    }
 
     #[test]
     fn surface_read_carries_the_cursor_and_the_count() {

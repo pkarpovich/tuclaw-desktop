@@ -12,12 +12,60 @@ use std::time::Duration;
 const VOICE_HEADER: &str = "[Voice message";
 const SILENT: &str = "[SILENT]";
 
-pub fn channel(surface: &v3::Surface) -> Channel {
+pub fn sidebar_order<'a>(
+    surfaces: &'a [v3::Surface],
+    groups: &[v3::Group],
+) -> Vec<&'a v3::Surface> {
+    let mut placed = Vec::new();
+    for surface in surfaces {
+        if surface.archived_at.is_some() {
+            continue;
+        }
+        let rank = match surface.group_id.and_then(|group| group_rank(group, groups)) {
+            Some(rank) => (1, rank),
+            None => (0, (0, 0)),
+        };
+        placed.push((rank, surface.sort_order, surface.id, surface));
+    }
+    placed.sort_by_key(|(rank, order, id, _surface)| (*rank, *order, *id));
+    let mut ordered = Vec::new();
+    for (_rank, _order, _id, surface) in placed {
+        ordered.push(surface);
+    }
+    ordered
+}
+
+fn group_rank(group: v3::GroupId, groups: &[v3::Group]) -> Option<(i64, i64)> {
+    let mut found = None;
+    for candidate in groups {
+        if candidate.id == group {
+            let v3::GroupId(id) = candidate.id;
+            found = Some((candidate.sort_order, id));
+        }
+    }
+    found
+}
+
+pub fn group_title(group: &v3::Group) -> String {
+    match &group.emoji {
+        Some(emoji) if !emoji.is_empty() => format!("{emoji}  {}", group.name),
+        Some(_) => group.name.clone(),
+        None => group.name.clone(),
+    }
+}
+
+pub fn channel(surface: &v3::Surface, groups: &[v3::Group]) -> Channel {
     let v3::SurfaceId(id) = surface.id;
+    let mut group = None;
+    for candidate in groups {
+        if Some(candidate.id) == surface.group_id {
+            group = Some(group_title(candidate));
+        }
+    }
     Channel {
         id: ChannelId(id),
         name: surface.name.clone(),
-        group: None,
+        group,
         kind: ChannelKind::Channel,
         unread: surface.unread as usize,
         sort_index: surface.sort_order,
@@ -349,7 +397,7 @@ mod tests {
     #[test]
     fn a_surface_becomes_an_ungrouped_channel() {
         assert_eq!(
-            channel(&surface()),
+            channel(&surface(), &[]),
             Channel {
                 id: ChannelId(4),
                 name: "Magnet Feed".into(),

@@ -326,12 +326,149 @@ pub struct Surface {
     /// The run stamped with this surface, while one is live.
     #[serde(default)]
     pub live_run: Option<SurfaceRun>,
+    /// Its own name in its channel, e.g. the Telegram topic's.
+    #[serde(default)]
+    pub topic_name: String,
+    /// The name the user gave it in a client; [`None`] when it uses the topic's.
+    #[serde(default)]
+    pub display_name: Option<String>,
+    /// The group it is filed under in the sidebar.
+    #[serde(default)]
+    pub group_id: Option<GroupId>,
+    /// When it was archived; an archived surface is left out of the sidebar.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub archived_at: Option<OffsetDateTime>,
     /// The newest message read on it; `None` before anything was read.
     #[serde(default)]
     pub last_read_message_id: Option<MessageId>,
     /// The messages after the read cursor not written by the user.
     #[serde(default)]
     pub unread: u32,
+}
+
+/// Identifies a sidebar group.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::GroupId;
+///
+/// let id: GroupId = serde_json::from_str("3").unwrap();
+/// assert_eq!(id, GroupId(3));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GroupId(pub i64);
+
+/// A named section of the sidebar that surfaces are filed under.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    /// The group's identifier.
+    pub id: GroupId,
+    /// Its title.
+    pub name: String,
+    /// The emoji drawn before its title, if any.
+    #[serde(default)]
+    pub emoji: Option<String>,
+    /// Its position among the groups.
+    #[serde(default)]
+    pub sort_order: i64,
+}
+
+/// A field a patch leaves alone, sets, or clears to `null`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change<T> {
+    /// Leaves the field as it is; the key is not sent.
+    Keep,
+    /// Sets the field.
+    Set(T),
+    /// Clears the field; sent as `null`.
+    Clear,
+}
+
+impl<T> Change<T> {
+    fn is_keep(&self) -> bool {
+        match self {
+            Change::Keep => true,
+            Change::Set(_) => false,
+            Change::Clear => false,
+        }
+    }
+}
+
+impl<T: Serialize> Serialize for Change<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Change::Keep => serializer.serialize_none(),
+            Change::Set(value) => value.serialize(serializer),
+            Change::Clear => serializer.serialize_none(),
+        }
+    }
+}
+
+/// The body of `PATCH /surfaces/{id}`; kept fields are not sent.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::{Change, GroupId, SurfacePatch};
+///
+/// let patch = SurfacePatch {
+///     display_name: Change::Clear,
+///     archived: None,
+///     group_id: Change::Set(GroupId(2)),
+/// };
+/// assert_eq!(
+///     serde_json::to_string(&patch).unwrap(),
+///     r#"{"display_name":null,"group_id":2}"#
+/// );
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SurfacePatch {
+    /// The name shown in clients; cleared, the topic's name shows again.
+    #[serde(skip_serializing_if = "Change::is_keep")]
+    pub display_name: Change<String>,
+    /// Archives or restores the surface.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived: Option<bool>,
+    /// Files the surface under a group; cleared, it is ungrouped.
+    #[serde(skip_serializing_if = "Change::is_keep")]
+    pub group_id: Change<GroupId>,
+}
+
+/// The body of `POST /groups`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NewGroup {
+    /// Its title.
+    pub name: String,
+    /// The emoji drawn before its title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emoji: Option<String>,
+}
+
+/// The body of `PATCH /groups/{id}`; kept fields are not sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GroupPatch {
+    /// The new title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The new emoji, or none.
+    #[serde(skip_serializing_if = "Change::is_keep")]
+    pub emoji: Change<String>,
+    /// The new position among the groups.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<i64>,
+}
+
+/// One surface's place in `PUT /surfaces/order`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Placement {
+    /// The surface.
+    pub id: SurfaceId,
+    /// The group it is filed under, or none.
+    pub group_id: Option<GroupId>,
+    /// Its position within that group.
+    pub sort_order: i64,
 }
 
 /// The answer to marking a surface read: where its cursor now is.
@@ -1200,10 +1337,23 @@ mod tests {
             agents,
             bindings,
             live_run,
+            topic_name,
+            display_name,
+            group_id,
+            archived_at,
             last_read_message_id,
             unread,
         } = &surfaces[0];
         assert_eq!(*last_read_message_id, Some(MessageId(9191)));
+        assert_eq!(topic_name, "General");
+        assert_eq!(*display_name, None);
+        assert_eq!(*group_id, None);
+        assert_eq!(*archived_at, None);
+        assert_eq!(surfaces[1].name, "Torrents");
+        assert_eq!(surfaces[1].display_name.as_deref(), Some("Torrents"));
+        let groups: Vec<Group> =
+            serde_json::from_str(include_str!("../../testdata/v3/groups.json")).unwrap();
+        assert_eq!(groups[0].id, GroupId(2));
         assert_eq!(*unread, 1);
         assert_eq!(surfaces[1].last_read_message_id, None);
         let answer: ReadAnswer =

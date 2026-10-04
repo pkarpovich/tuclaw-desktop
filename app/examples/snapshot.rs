@@ -22,6 +22,8 @@ fn main() {
     let recording = std::env::args().any(|arg| arg == "--recording");
     let picture = std::env::args().any(|arg| arg == "--picture");
     let unread = std::env::args().any(|arg| arg == "--unread");
+    let browse = std::env::args().any(|arg| arg == "--browse");
+    let grouped = browse || std::env::args().any(|arg| arg == "--groups");
     let mut settings = None;
     let mut task = None;
     for arg in std::env::args() {
@@ -145,6 +147,37 @@ fn main() {
         cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
         cx.run_until_parked();
     }
+    if grouped {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.create_group("🎬 Movie nights".into(), cx);
+                state.create_group("🏠 Home".into(), cx);
+            })
+        });
+        cx.run_until_parked();
+        let groups = cx.update(|cx| state.read(cx).groups().to_vec());
+        let movies = groups[0].id;
+        let home = groups[1].id;
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let channels = state.channels().to_vec();
+                for channel in channels {
+                    if channel.name == "Magnet Feed" {
+                        state.file_channel(channel.id, Some(movies), cx);
+                        state.rename_channel(channel.id, "Torrents".into(), cx);
+                    }
+                    if channel.name == "Smart Home" {
+                        state.file_channel(channel.id, Some(home), cx);
+                    }
+                }
+            })
+        });
+        cx.run_until_parked();
+        if browse {
+            cx.update(|cx| state.update(cx, |state, cx| state.open_channels(cx)));
+            cx.run_until_parked();
+        }
+    }
     if picture {
         mock.serve_public(
             "https://media.example.test/turtle.png",
@@ -210,6 +243,10 @@ fn main() {
     std::fs::create_dir_all(&directory).expect("the directory exists");
     let name = if automations || task.is_some() {
         "Automations".to_string()
+    } else if browse {
+        "Channels".to_string()
+    } else if grouped {
+        format!("{}-groups", channel.replace(' ', "-"))
     } else if unread {
         format!("{}-unread", channel.replace(' ', "-"))
     } else if picture {

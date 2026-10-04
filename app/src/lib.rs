@@ -4,6 +4,7 @@ pub mod audio;
 pub mod automation;
 pub mod automations_view;
 pub mod card;
+pub mod channels_view;
 pub mod composer;
 pub mod control;
 pub mod failure;

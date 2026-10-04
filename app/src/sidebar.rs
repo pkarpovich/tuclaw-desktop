@@ -58,6 +58,41 @@ impl Sidebar {
         }
     }
 
+    fn channels_row(
+        &self,
+        channels: usize,
+        highlight: Highlight,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let row = row_frame("sidebar-channels")
+            .py(px(6.))
+            .on_click(cx.listener(|sidebar, _event, _window, cx| {
+                sidebar
+                    .state
+                    .update(cx, |state, cx| state.open_channels(cx));
+            }))
+            .child(icon(Glyph::Channels, px(16.), theme::text_secondary()))
+            .child(
+                div()
+                    .font_weight(match highlight {
+                        Highlight::On => FontWeight::SEMIBOLD,
+                        Highlight::Off => FontWeight::NORMAL,
+                    })
+                    .child("Channels"),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .text_color(theme::text_muted())
+                    .child(channels.to_string()),
+            );
+        match highlight {
+            Highlight::On => row.bg(theme::selection()),
+            Highlight::Off => row,
+        }
+    }
+
     fn agents_row(
         &self,
         agents: usize,
@@ -152,7 +187,15 @@ impl Render for Sidebar {
             View::Agents => Highlight::On,
             View::Automations => Highlight::Off,
             View::Conversation => Highlight::Off,
+            View::Channels => Highlight::Off,
         };
+        let on_channels = match state.view() {
+            View::Channels => Highlight::On,
+            View::Agents => Highlight::Off,
+            View::Automations => Highlight::Off,
+            View::Conversation => Highlight::Off,
+        };
+        let channel_count = state.channels().len();
         let sections = sections(state);
         let footer = footer(&state.people(), self.state.clone());
         let mut rows = div()
@@ -165,7 +208,8 @@ impl Render for Sidebar {
             .px(px(6.))
             .pt(px(2.))
             .pb(px(14.))
-            .child(self.agents_row(agents, on_agents, cx));
+            .child(self.agents_row(agents, on_agents, cx))
+            .child(self.channels_row(channel_count, on_channels, cx));
         for Section { title, rows: group } in sections {
             if let Some(title) = title {
                 rows = rows.child(section_title(title));
@@ -190,6 +234,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         View::Conversation => state.selected(),
         View::Agents => None,
         View::Automations => None,
+        View::Channels => None,
     };
     let people = state.people();
     let mut sections: Vec<Section> = Vec::new();

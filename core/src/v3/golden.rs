@@ -29,6 +29,8 @@ pub(crate) fn fixture(name: &str) -> &'static str {
         "focus" => include_str!("../../testdata/v3/frames/focus.json"),
         "task_fired" => include_str!("../../testdata/v3/frames/task_fired.json"),
         "surface_read" => include_str!("../../testdata/v3/frames/surface_read.json"),
+        "surface_updated" => include_str!("../../testdata/v3/frames/surface_updated.json"),
+        "groups_changed" => include_str!("../../testdata/v3/frames/groups_changed.json"),
         other => panic!("no fixture {other}"),
     }
 }

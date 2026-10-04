@@ -6,6 +6,8 @@ use gpui_kit::component::{Icon, Sizable};
 icon_assets!(
     pub Icons,
     [
+        Archive,
+        ArchiveRestore,
         ArrowUp,
         AtSign,
         Bot,
@@ -15,14 +17,19 @@ icon_assets!(
         ChevronLeft,
         ChevronRight,
         Ellipsis,
+        Folder,
         Hash,
+        List,
         LoaderCircle,
         Lock,
+        MoveDown,
+        MoveUp,
         MessageSquare,
         Mic,
         PanelLeft,
         Paperclip,
         Pause,
+        Pencil,
         Play,
         Plus,
         RotateCcw,
@@ -69,10 +76,17 @@ pub enum Glyph {
     Automation,
     Schedule,
     Pause,
+    Archive,
+    Restore,
+    Up,
+    Down,
+    Rename,
+    Folder,
+    Channels,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 29] = [
+    pub const ALL: [Glyph; 36] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -102,6 +116,13 @@ impl Glyph {
         Glyph::Automation,
         Glyph::Schedule,
         Glyph::Pause,
+        Glyph::Archive,
+        Glyph::Restore,
+        Glyph::Up,
+        Glyph::Down,
+        Glyph::Rename,
+        Glyph::Folder,
+        Glyph::Channels,
     ];
 
     fn name(self) -> IconName {
@@ -135,6 +156,13 @@ impl Glyph {
             Glyph::Automation => IconName::Zap,
             Glyph::Schedule => IconName::Clock,
             Glyph::Pause => IconName::Pause,
+            Glyph::Archive => IconName::Archive,
+            Glyph::Restore => IconName::ArchiveRestore,
+            Glyph::Up => IconName::MoveUp,
+            Glyph::Down => IconName::MoveDown,
+            Glyph::Rename => IconName::Pencil,
+            Glyph::Folder => IconName::Folder,
+            Glyph::Channels => IconName::List,
         }
     }
 }

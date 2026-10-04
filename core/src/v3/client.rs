@@ -8,9 +8,10 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::dto::{
-    Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MePatch,
-    MessageId, MessagesPage, Post, Posted, ReadAnswer, RunDetail, RunId, Seq, Surface, SurfaceId,
-    Task, TaskId, TaskRun, VoicePost, WiringChange,
+    Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, Group, GroupId, GroupPatch,
+    ImageKind, Me, MePatch, MessageId, MessagesPage, NewGroup, Placement, Post, Posted, ReadAnswer,
+    RunDetail, RunId, Seq, Surface, SurfaceId, SurfacePatch, Task, TaskId, TaskRun, VoicePost,
+    WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -143,6 +144,80 @@ impl Client {
                 client_message_id,
             },
         });
+        async move { body(request.await?) }
+    }
+
+    /// Fetches the sidebar groups, in their order.
+    pub fn groups(&self) -> impl Future<Output = Result<Vec<Group>, ApiError>> + Send + 'static {
+        let request = self.transport.get("/groups");
+        async move { body(request.await?) }
+    }
+
+    /// Creates a sidebar group at the end of the list.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Invalid`] for an empty name.
+    pub fn create_group(
+        &self,
+        group: &NewGroup,
+    ) -> impl Future<Output = Result<Group, ApiError>> + Send + 'static {
+        let request = match serde_json::to_value(group) {
+            Ok(encoded) => self.transport.post("/groups", Some(encoded)),
+            Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
+        };
+        async move { body(request.await?) }
+    }
+
+    /// Renames, re-emojis or moves a group.
+    pub fn update_group(
+        &self,
+        group: GroupId,
+        patch: &GroupPatch,
+    ) -> impl Future<Output = Result<Group, ApiError>> + Send + 'static {
+        let GroupId(group) = group;
+        let request = self.json_write(Method::Patch, format!("/groups/{group}"), patch);
+        async move { body(request.await?) }
+    }
+
+    /// Deletes a group; its surfaces become ungrouped.
+    pub fn delete_group(
+        &self,
+        group: GroupId,
+    ) -> impl Future<Output = Result<(), ApiError>> + Send + 'static {
+        let GroupId(group) = group;
+        let request = self.transport.send(Request {
+            method: Method::Delete,
+            path: format!("/groups/{group}"),
+            body: Body::Empty,
+        });
+        async move {
+            request.await?;
+            Ok(())
+        }
+    }
+
+    /// Renames, archives or regroups a surface and returns it as `GET /surfaces` lists it.
+    pub fn update_surface(
+        &self,
+        surface: SurfaceId,
+        patch: &SurfacePatch,
+    ) -> impl Future<Output = Result<Surface, ApiError>> + Send + 'static {
+        let SurfaceId(surface) = surface;
+        let request = self.json_write(Method::Patch, format!("/surfaces/{surface}"), patch);
+        async move { body(request.await?) }
+    }
+
+    /// Places surfaces in groups and orders them, all at once; answers with every surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::NotFound`] for an unknown surface or group, and changes nothing.
+    pub fn reorder_surfaces(
+        &self,
+        placements: &[Placement],
+    ) -> impl Future<Output = Result<Vec<Surface>, ApiError>> + Send + 'static {
+        let request = self.json_write(Method::Put, "/surfaces/order".to_string(), placements);
         async move { body(request.await?) }
     }
 
@@ -333,7 +408,7 @@ impl Client {
         }
     }
 
-    fn json_write<T: Serialize>(
+    fn json_write<T: Serialize + ?Sized>(
         &self,
         method: Method,
         path: String,

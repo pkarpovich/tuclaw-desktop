@@ -106,6 +106,7 @@ impl Feed {
                         .update(cx, |composer, cx| composer.insert(&text, window, cx));
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
+                StateEvent::ChannelsChanged => {}
                 StateEvent::PictureOpened => {}
                 StateEvent::PicturesLoaded => {
                     feed.list.remeasure();

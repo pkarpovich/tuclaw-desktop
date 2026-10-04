@@ -35,6 +35,13 @@ pub enum View {
     Conversation,
     Agents,
     Automations,
+    Channels,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +88,7 @@ pub enum StateEvent {
     SendFailed(String),
     Mention(String),
     TasksLoaded,
+    ChannelsChanged,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +142,8 @@ pub struct AppState {
     source: Source,
     link: Link,
     surfaces: Vec<v3::Surface>,
+    groups: Vec<v3::Group>,
+    channels_error: Option<String>,
     directory: Vec<v3::Agent>,
     agents: Vec<Agent>,
     channels: Vec<Channel>,
@@ -192,6 +202,8 @@ impl AppState {
             source,
             link: Link::Connecting,
             surfaces: Vec::new(),
+            groups: Vec::new(),
+            channels_error: None,
             directory: Vec::new(),
             agents: Vec::new(),
             channels: Vec::new(),
@@ -249,6 +261,333 @@ impl AppState {
 
     pub fn set_recorder(&mut self, recorder: Box<dyn Recorder>) {
         self.recorder = recorder;
+    }
+
+    pub fn groups(&self) -> &[v3::Group] {
+        &self.groups
+    }
+
+    pub fn channels_error(&self) -> Option<&str> {
+        self.channels_error.as_deref()
+    }
+
+    pub fn open_channels(&mut self, cx: &mut Context<Self>) {
+        self.view = View::Channels;
+        self.channels_error = None;
+        cx.notify();
+    }
+
+    fn sorted_groups(&self) -> Vec<v3::Group> {
+        let mut groups = self.groups.clone();
+        groups.sort_by_key(|group| (group.sort_order, group.id));
+        groups
+    }
+
+    pub fn create_group(&mut self, line: String, cx: &mut Context<Self>) {
+        let (emoji, name) = split_emoji(&line);
+        if name.is_empty() {
+            return;
+        }
+        let request = self.client.create_group(&v3::NewGroup { name, emoji });
+        self.after_group_write(async move { request.await.map(|_group| ()) }, cx);
+    }
+
+    pub fn rename_group(&mut self, group: v3::GroupId, line: String, cx: &mut Context<Self>) {
+        let (emoji, name) = split_emoji(&line);
+        if name.is_empty() {
+            return;
+        }
+        let patch = v3::GroupPatch {
+            name: Some(name),
+            emoji: match emoji {
+                Some(emoji) => v3::Change::Set(emoji),
+                None => v3::Change::Clear,
+            },
+            sort_order: None,
+        };
+        let request = self.client.update_group(group, &patch);
+        self.after_group_write(async move { request.await.map(|_group| ()) }, cx);
+    }
+
+    pub fn delete_group(&mut self, group: v3::GroupId, cx: &mut Context<Self>) {
+        let request = self.client.delete_group(group);
+        self.after_group_write(request, cx);
+    }
+
+    pub fn move_group(&mut self, group: v3::GroupId, direction: Direction, cx: &mut Context<Self>) {
+        let groups = self.sorted_groups();
+        let mut index = None;
+        for (position, candidate) in groups.iter().enumerate() {
+            if candidate.id == group {
+                index = Some(position);
+            }
+        }
+        let Some(index) = index else {
+            return;
+        };
+        let other = match direction {
+            Direction::Up => index.checked_sub(1),
+            Direction::Down => Some(index + 1).filter(|next| *next < groups.len()),
+        };
+        let Some(other) = other else {
+            return;
+        };
+        let mut writes = Vec::new();
+        for (position, candidate) in groups.iter().enumerate() {
+            let target = match position {
+                position if position == index => other,
+                position if position == other => index,
+                position => position,
+            } as i64;
+            if candidate.sort_order != target {
+                writes.push(self.client.update_group(
+                    candidate.id,
+                    &v3::GroupPatch {
+                        name: None,
+                        emoji: v3::Change::Keep,
+                        sort_order: Some(target),
+                    },
+                ));
+            }
+        }
+        self.after_group_write(
+            async move {
+                for write in writes {
+                    write.await?;
+                }
+                Ok(())
+            },
+            cx,
+        );
+    }
+
+    fn after_group_write(
+        &mut self,
+        write: impl std::future::Future<Output = Result<(), v3::ApiError>> + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.channels_error = None;
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let written = write.await;
+            let groups = match written {
+                Ok(()) => client.groups().await,
+                Err(error) => Err(error),
+            };
+            let surfaces = client.surfaces().await;
+            this.update(cx, |state, cx| {
+                match groups {
+                    Ok(groups) => state.groups = groups,
+                    Err(error) => state.channels_error = Some(field_message(&error)),
+                }
+                if let Ok(surfaces) = surfaces {
+                    state.surfaces = surfaces;
+                }
+                state.rebuild_channels();
+                cx.emit(StateEvent::ChannelsChanged);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub fn rename_channel(&mut self, channel: ChannelId, name: String, cx: &mut Context<Self>) {
+        let name = name.trim().to_string();
+        let mut topic = None;
+        for surface in &self.surfaces {
+            if surface.id == link::surface_id(channel) {
+                topic = Some(surface.topic_name.clone());
+            }
+        }
+        let display_name = match topic {
+            Some(topic) if name.is_empty() || name == topic => v3::Change::Clear,
+            Some(_) => v3::Change::Set(name),
+            None => return,
+        };
+        self.patch_channel(
+            channel,
+            v3::SurfacePatch {
+                display_name,
+                archived: None,
+                group_id: v3::Change::Keep,
+            },
+            cx,
+        );
+    }
+
+    pub fn archive_channel(&mut self, channel: ChannelId, archived: bool, cx: &mut Context<Self>) {
+        self.patch_channel(
+            channel,
+            v3::SurfacePatch {
+                display_name: v3::Change::Keep,
+                archived: Some(archived),
+                group_id: v3::Change::Keep,
+            },
+            cx,
+        );
+    }
+
+    pub fn file_channel(
+        &mut self,
+        channel: ChannelId,
+        group: Option<v3::GroupId>,
+        cx: &mut Context<Self>,
+    ) {
+        self.patch_channel(
+            channel,
+            v3::SurfacePatch {
+                display_name: v3::Change::Keep,
+                archived: None,
+                group_id: match group {
+                    Some(group) => v3::Change::Set(group),
+                    None => v3::Change::Clear,
+                },
+            },
+            cx,
+        );
+    }
+
+    fn patch_channel(
+        &mut self,
+        channel: ChannelId,
+        patch: v3::SurfacePatch,
+        cx: &mut Context<Self>,
+    ) {
+        self.channels_error = None;
+        let request = self
+            .client
+            .update_surface(link::surface_id(channel), &patch);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(surface) => state.surface_updated(
+                    &v3::SurfaceUpdated {
+                        seq: v3::Seq(0),
+                        surface,
+                    },
+                    cx,
+                ),
+                Err(error) => {
+                    state.channels_error = Some(field_message(&error));
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn move_channel(
+        &mut self,
+        channel: ChannelId,
+        direction: Direction,
+        cx: &mut Context<Self>,
+    ) {
+        let surface = link::surface_id(channel);
+        let mut group = None;
+        for candidate in &self.surfaces {
+            if candidate.id == surface {
+                group = Some(candidate.group_id);
+            }
+        }
+        let Some(group) = group else {
+            return;
+        };
+        let mut siblings = Vec::new();
+        for candidate in link::sidebar_order(&self.surfaces, &self.groups) {
+            if candidate.group_id == group {
+                siblings.push(candidate.id);
+            }
+        }
+        let mut index = None;
+        for (position, candidate) in siblings.iter().enumerate() {
+            if *candidate == surface {
+                index = Some(position);
+            }
+        }
+        let Some(index) = index else {
+            return;
+        };
+        let other = match direction {
+            Direction::Up => index.checked_sub(1),
+            Direction::Down => Some(index + 1).filter(|next| *next < siblings.len()),
+        };
+        let Some(other) = other else {
+            return;
+        };
+        siblings.swap(index, other);
+        let mut placements = Vec::new();
+        for (position, id) in siblings.into_iter().enumerate() {
+            placements.push(v3::Placement {
+                id,
+                group_id: group,
+                sort_order: position as i64,
+            });
+        }
+        let request = self.client.reorder_surfaces(&placements);
+        self.after_group_write(async move { request.await.map(|_surfaces| ()) }, cx);
+    }
+
+    pub fn surfaces(&self) -> &[v3::Surface] {
+        &self.surfaces
+    }
+
+    fn rebuild_channels(&mut self) {
+        let mut counts = HashMap::new();
+        for channel in &self.channels {
+            counts.insert(channel.id, channel.unread);
+        }
+        let mut channels = Vec::new();
+        for surface in link::sidebar_order(&self.surfaces, &self.groups) {
+            let mut channel = link::channel(surface, &self.groups);
+            if let Some(unread) = counts.get(&channel.id) {
+                channel.unread = (*unread).max(channel.unread);
+            }
+            channels.push(channel);
+        }
+        self.channels = channels;
+        if let Some(selected) = self.selected {
+            let mut visible = false;
+            for channel in &self.channels {
+                if channel.id == selected {
+                    visible = true;
+                }
+            }
+            if !visible {
+                self.selected = None;
+            }
+        }
+    }
+
+    fn surface_updated(&mut self, updated: &v3::SurfaceUpdated, cx: &mut Context<Self>) {
+        let v3::SurfaceUpdated { seq: _, surface } = updated;
+        let mut replaced = false;
+        for known in &mut self.surfaces {
+            if known.id == surface.id {
+                *known = surface.clone();
+                replaced = true;
+            }
+        }
+        if !replaced {
+            self.surfaces.push(surface.clone());
+        }
+        for channel in &mut self.channels {
+            if channel.id == link::channel_id(surface.id) {
+                channel.unread = surface.unread as usize;
+            }
+        }
+        self.rebuild_channels();
+        cx.emit(StateEvent::ChannelsChanged);
+        cx.notify();
+    }
+
+    fn groups_changed(&mut self, groups: Vec<v3::Group>, cx: &mut Context<Self>) {
+        self.groups = groups;
+        self.rebuild_channels();
+        cx.emit(StateEvent::ChannelsChanged);
+        cx.notify();
     }
 
     pub fn divider(&self) -> Option<MessageId> {
@@ -1781,6 +2120,7 @@ impl AppState {
             View::Agents => Segment::Agents,
             View::Conversation => Segment::Channel,
             View::Automations => Segment::Automations,
+            View::Channels => Segment::Channel,
         }
     }
 
@@ -2071,16 +2411,14 @@ impl AppState {
         agents: Vec<v3::Agent>,
         cx: &mut Context<Self>,
     ) {
-        let mut channels = Vec::new();
         for surface in &surfaces {
-            channels.push(link::channel(surface));
             if let Some(cursor) = surface.last_read_message_id {
                 self.cursors
                     .insert(link::channel_id(surface.id), link::message_id(cursor));
             }
         }
-        self.channels = channels;
         self.surfaces = surfaces;
+        self.rebuild_channels();
         self.directory = agents;
         self.refresh_agents();
         self.fill_pictures(cx);
@@ -2242,6 +2580,14 @@ impl AppState {
                 self.surface_read(read, cx);
                 false
             }
+            Frame::SurfaceUpdated(updated) => {
+                self.surface_updated(updated, cx);
+                false
+            }
+            Frame::GroupsChanged(changed) => {
+                self.groups_changed(changed.groups.clone(), cx);
+                false
+            }
             Frame::StepText(_) => self.apply_to_run(&frame),
             Frame::ToolStarted(_) => self.apply_to_run(&frame),
             Frame::ToolFinished(_) => self.apply_to_run(&frame),
@@ -2401,6 +2747,17 @@ fn voice_failure(error: &v3::ApiError) -> String {
     }
 }
 
+fn split_emoji(line: &str) -> (Option<String>, String) {
+    let line = line.trim();
+    let Some((first, rest)) = line.split_once(char::is_whitespace) else {
+        return (None, line.to_string());
+    };
+    if first.chars().any(char::is_alphanumeric) {
+        return (None, line.to_string());
+    }
+    (Some(first.to_string()), rest.trim().to_string())
+}
+
 fn field_message(error: &v3::ApiError) -> String {
     match error {
         v3::ApiError::Invalid(message) => message.clone(),
@@ -2423,6 +2780,9 @@ async fn fetch_directory(
     client: &v3::Client,
     cx: &mut AsyncApp,
 ) -> bool {
+    if let Ok(groups) = client.groups().await {
+        this.update(cx, |state, _cx| state.groups = groups).ok();
+    }
     let surfaces = client.surfaces().await;
     let agents = client.agents().await;
     let loaded = match (surfaces, agents) {
@@ -2459,6 +2819,8 @@ fn is_gap(frame: &Frame) -> bool {
         Frame::MessageCreated(_) => false,
         Frame::TaskFired(_) => false,
         Frame::SurfaceRead(_) => false,
+        Frame::SurfaceUpdated(_) => false,
+        Frame::GroupsChanged(_) => false,
         Frame::TextDelta(_) => false,
         Frame::InputAccepted(_) => false,
         Frame::Unknown(_) => false,
