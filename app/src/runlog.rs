@@ -5,7 +5,9 @@ use gpui::{App, Div, FontWeight, SharedString, Window, div, prelude::*, px, rela
 use serde_json::Value;
 use time::OffsetDateTime;
 use tuclaw_core::model::{MessageId, RunOutcome, RunRef};
-use tuclaw_core::v3::{ContextWindow, RowKind, RunDetail, StepRow, Usage};
+use tuclaw_core::v3::{
+    ContextWindow, RowKind, Run, RunDetail, Step, StepKind, StepRow, ToolStatus, Usage,
+};
 
 use crate::live::tool_detail;
 use crate::rich::{self, Ink};
@@ -17,12 +19,34 @@ pub type OnDisclose = Rc<dyn Fn(Disclosure, &mut Window, &mut App)>;
 
 pub const RESULT_LINES: usize = 12;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Owner {
+    Message(MessageId),
+    Run(String),
+}
+
+impl Owner {
+    fn key(&self) -> String {
+        match self {
+            Owner::Message(MessageId(id)) => format!("m{id}"),
+            Owner::Run(id) => format!("r{id}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Disclosure {
     Log(MessageId),
-    Group(MessageId, i64),
-    Step(MessageId, i64),
-    FullResult(MessageId, i64),
+    Group(Owner, i64),
+    Step(Owner, i64),
+    FullResult(Owner, i64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskState {
+    Running,
+    Done,
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,8 +105,10 @@ pub enum Row {
     },
     Task {
         seq: i64,
+        task_id: String,
         kind: String,
         description: String,
+        state: TaskState,
     },
     Status {
         seq: i64,
@@ -230,6 +256,28 @@ fn same_words(left: &str, right: &str) -> bool {
 }
 
 fn push_grouped(rows: &mut Vec<Row>, row: Row) {
+    let row = match row {
+        Row::Task {
+            seq,
+            task_id,
+            kind,
+            description,
+            state,
+        } => {
+            merge_task(
+                rows,
+                Row::Task {
+                    seq,
+                    task_id,
+                    kind,
+                    description,
+                    state,
+                },
+            );
+            return;
+        }
+        other => other,
+    };
     let Row::Tool(call) = row else {
         rows.push(row);
         return;
@@ -258,6 +306,131 @@ fn push_grouped(rows: &mut Vec<Row>, row: Row) {
         }
         None => rows.push(Row::Tool(call)),
     }
+}
+
+fn merge_task(rows: &mut Vec<Row>, task: Row) {
+    let Row::Task {
+        seq,
+        task_id,
+        kind,
+        description,
+        state,
+    } = task
+    else {
+        return;
+    };
+    for existing in rows.iter_mut() {
+        if let Row::Task {
+            seq: _,
+            task_id: known,
+            kind: known_kind,
+            description: known_description,
+            state: known_state,
+        } = existing
+            && !task_id.is_empty()
+            && *known == task_id
+        {
+            *known_state = state;
+            if known_description.is_empty() {
+                *known_description = description;
+            }
+            if known_kind.is_empty() {
+                *known_kind = kind;
+            }
+            return;
+        }
+    }
+    rows.push(Row::Task {
+        seq,
+        task_id,
+        kind,
+        description,
+        state,
+    });
+}
+
+fn task_state(state: &str) -> TaskState {
+    match state {
+        "completed" | "done" | "success" => TaskState::Done,
+        "failed" | "error" | "killed" | "stopped" | "cancelled" => TaskState::Failed,
+        _other => TaskState::Running,
+    }
+}
+
+pub fn live_rows(run: &Run) -> Vec<Row> {
+    let mut rows: Vec<Row> = Vec::new();
+    for (index, step) in run.steps.iter().enumerate() {
+        let seq = index as i64;
+        let Step { started_at, kind } = step;
+        let row = match kind {
+            StepKind::Text { text } => Row::Thought {
+                seq,
+                text: text.clone(),
+            },
+            StepKind::Tool {
+                tool_use_id: _,
+                name,
+                input,
+                output,
+                status,
+                finished_at,
+            } => {
+                let full_name = if name.is_empty() {
+                    "tool".to_string()
+                } else {
+                    name.clone()
+                };
+                Row::Tool(ToolCall {
+                    seq,
+                    name: short_name(&full_name),
+                    full_name,
+                    arg: main_argument(input),
+                    status: match status {
+                        ToolStatus::Running => StepStatus::Running,
+                        ToolStatus::Ok => StepStatus::Ok,
+                        ToolStatus::Error => StepStatus::Error,
+                    },
+                    duration: match started_at {
+                        Some(started) => elapsed(*started, *finished_at),
+                        None => None,
+                    },
+                    input: pretty(input),
+                    result: output.clone().unwrap_or_default(),
+                })
+            }
+            StepKind::Task {
+                task_id,
+                task_type,
+                state,
+                description,
+                summary,
+            } => Row::Task {
+                seq,
+                task_id: task_id.clone(),
+                kind: task_type.clone(),
+                description: description
+                    .clone()
+                    .filter(|text| !text.is_empty())
+                    .or_else(|| summary.clone())
+                    .unwrap_or_default(),
+                state: task_state(state),
+            },
+            StepKind::Status { status, detail } => Row::Status {
+                seq,
+                text: if detail.is_empty() {
+                    status.clone()
+                } else {
+                    format!("{status} · {detail}")
+                },
+            },
+            StepKind::Other { name, output: _ } => Row::Status {
+                seq,
+                text: name.clone().unwrap_or_else(|| "step".to_string()),
+            },
+        };
+        push_grouped(&mut rows, row);
+    }
+    rows
 }
 
 fn group(calls: Vec<ToolCall>) -> Row {
@@ -402,17 +575,15 @@ fn task_row(step: &StepRow) -> Row {
     if description.is_empty() {
         description = field("summary");
     }
-    if description.is_empty() {
+    if description.is_empty() && parsed.is_null() {
         description = raw;
-    }
-    let state = field("state");
-    if !state.is_empty() && state != "started" {
-        description = format!("{state} · {description}");
     }
     Row::Task {
         seq: step.seq,
+        task_id: field("task_id"),
         kind,
         description,
+        state: task_state(&field("state")),
     }
 }
 
@@ -509,6 +680,7 @@ pub enum RowView {
     Task {
         kind: String,
         description: String,
+        state: TaskState,
     },
     Status {
         text: String,
@@ -555,23 +727,23 @@ pub fn pane(input: PaneInput, is_open: &dyn Fn(Disclosure, bool) -> bool) -> Opt
         Some(RunLog::Loading) => Body::Loading,
         Some(RunLog::Failed) => Body::Failed,
         Some(RunLog::Loaded(detail)) => Body::Log {
-            rows: views(message, rows(detail, answer), is_open),
+            rows: views(Owner::Message(message), rows(detail, answer), is_open),
             footer: footer(detail),
         },
     };
     Some(Pane { summary, body })
 }
 
-fn views(
-    message: MessageId,
+pub fn views(
+    owner: Owner,
     rows: Vec<Row>,
     is_open: &dyn Fn(Disclosure, bool) -> bool,
 ) -> Vec<RowView> {
     let tool = |call: ToolCall| {
         let errored = call.status == StepStatus::Error;
         ToolView {
-            open: is_open(Disclosure::Step(message, call.seq), errored),
-            full: is_open(Disclosure::FullResult(message, call.seq), false),
+            open: is_open(Disclosure::Step(owner.clone(), call.seq), errored),
+            full: is_open(Disclosure::FullResult(owner.clone(), call.seq), false),
             call,
         }
     };
@@ -603,15 +775,21 @@ fn views(
                     description,
                     status,
                     duration,
-                    open: is_open(Disclosure::Group(message, seq), false),
+                    open: is_open(Disclosure::Group(owner.clone(), seq), false),
                     calls: members,
                 }
             }
             Row::Task {
                 seq: _,
+                task_id: _,
                 kind,
                 description,
-            } => RowView::Task { kind, description },
+                state,
+            } => RowView::Task {
+                kind,
+                description,
+                state,
+            },
             Row::Status { seq: _, text } => RowView::Status { text },
         };
         views.push(view);
@@ -653,7 +831,9 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
         Body::Closed => return column,
         Body::Loading => notice("Loading the run log…"),
         Body::Failed => notice("Couldn't load the run log."),
-        Body::Log { rows, footer } => log_card(message, rows, footer, on_disclose),
+        Body::Log { rows, footer } => {
+            log_card(Owner::Message(message), rows, Some(footer), on_disclose)
+        }
     };
     column.child(card)
 }
@@ -678,28 +858,33 @@ fn card() -> Div {
         .overflow_hidden()
 }
 
+pub fn live_steps(owner: Owner, rows: Vec<RowView>, on_disclose: OnDisclose) -> Div {
+    log_card(owner, rows, None, on_disclose)
+}
+
 fn log_card(
-    message: MessageId,
+    owner: Owner,
     rows: Vec<RowView>,
-    footer: Footer,
+    footer: Option<Footer>,
     on_disclose: OnDisclose,
 ) -> Div {
     let mut list = div().flex().flex_col().gap(px(2.)).px(px(12.)).py(px(8.));
     for (index, row) in rows.into_iter().enumerate() {
-        list = list.child(row_element(message, index, row, on_disclose.clone()));
+        list = list.child(row_element(&owner, index, row, on_disclose.clone()));
     }
     let card = card().child(list);
     match footer {
-        Footer {
+        None => card,
+        Some(Footer {
             context: None,
             tokens: None,
-        } => card,
-        footer => card.child(footer_element(footer)),
+        }) => card,
+        Some(footer) => card.child(footer_element(footer)),
     }
 }
 
-fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDisclose) -> Div {
-    let MessageId(raw) = message;
+fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDisclose) -> Div {
+    let raw = owner.key();
     match row {
         RowView::Thought { text, first } => {
             let mut thought = div().flex().flex_col().gap(px(1.)).py(px(2.));
@@ -718,7 +903,7 @@ fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDi
                 Ink::Muted,
             )))
         }
-        RowView::Tool(view) => tool_element(message, view, on_disclose, px(0.)),
+        RowView::Tool(view) => tool_element(owner, view, on_disclose, px(0.)),
         RowView::Group {
             seq,
             name,
@@ -730,6 +915,7 @@ fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDi
         } => {
             let selector = format!("runlog-{raw}-group-{seq}");
             let toggle = on_disclose.clone();
+            let group_owner = owner.clone();
             let count = calls.len();
             let header = step_line(
                 div()
@@ -737,7 +923,7 @@ fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDi
                     .debug_selector(move || selector)
                     .cursor_pointer()
                     .on_click(move |_event, window, cx| {
-                        toggle(Disclosure::Group(message, seq), window, cx)
+                        toggle(Disclosure::Group(group_owner.clone(), seq), window, cx)
                     }),
                 StepLine {
                     name,
@@ -751,12 +937,16 @@ fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDi
             let mut group = div().flex().flex_col().child(header);
             if open {
                 for call in calls {
-                    group = group.child(tool_element(message, call, on_disclose.clone(), px(14.)));
+                    group = group.child(tool_element(owner, call, on_disclose.clone(), px(14.)));
                 }
             }
             group
         }
-        RowView::Task { kind, description } => div()
+        RowView::Task {
+            kind,
+            description,
+            state,
+        } => div()
             .flex()
             .items_center()
             .gap(px(6.))
@@ -784,7 +974,8 @@ fn row_element(message: MessageId, index: usize, row: RowView, on_disclose: OnDi
                     .whitespace_nowrap()
                     .text_color(theme::text_muted())
                     .child(SharedString::from(first_line(&description))),
-            ),
+            )
+            .child(task_mark(state)),
         RowView::Status { text } => div()
             .py(px(2.))
             .text_size(px(12.))
@@ -879,12 +1070,12 @@ fn step_line(line: gpui::Stateful<Div>, step: StepLine) -> gpui::Stateful<Div> {
 }
 
 fn tool_element(
-    message: MessageId,
+    owner: &Owner,
     view: ToolView,
     on_disclose: OnDisclose,
     indent: gpui::Pixels,
 ) -> Div {
-    let MessageId(raw) = message;
+    let raw = owner.key();
     let ToolView { call, open, full } = view;
     let ToolCall {
         seq,
@@ -898,13 +1089,16 @@ fn tool_element(
     } = call;
     let selector = format!("runlog-{raw}-step-{seq}");
     let toggle = on_disclose.clone();
+    let step_owner = owner.clone();
     let name_shown = name.clone();
     let header = step_line(
         div()
             .id(SharedString::from(selector.clone()))
             .debug_selector(move || selector)
             .cursor_pointer()
-            .on_click(move |_event, window, cx| toggle(Disclosure::Step(message, seq), window, cx)),
+            .on_click(move |_event, window, cx| {
+                toggle(Disclosure::Step(step_owner.clone(), seq), window, cx)
+            }),
         StepLine {
             name,
             badge: None,
@@ -954,6 +1148,7 @@ fn tool_element(
         if clipped || full {
             let selector = format!("runlog-{raw}-full-{seq}");
             let toggle = on_disclose.clone();
+            let full_owner = owner.clone();
             meta = meta.child(
                 div()
                     .id(SharedString::from(selector.clone()))
@@ -961,7 +1156,7 @@ fn tool_element(
                     .cursor_pointer()
                     .text_color(theme::text_secondary())
                     .on_click(move |_event, window, cx| {
-                        toggle(Disclosure::FullResult(message, seq), window, cx)
+                        toggle(Disclosure::FullResult(full_owner.clone(), seq), window, cx)
                     })
                     .child(if full { "Show less" } else { "Show full" }),
             );
@@ -1045,6 +1240,15 @@ fn footer_element(footer: Footer) -> Div {
         )));
     }
     line
+}
+
+fn task_mark(state: TaskState) -> Div {
+    let (glyph, tone) = match state {
+        TaskState::Running => ("…", theme::text_muted()),
+        TaskState::Done => ("✓", theme::status_idle()),
+        TaskState::Failed => ("✕", theme::accent()),
+    };
+    div().flex_none().w(px(12.)).text_color(tone).child(glyph)
 }
 
 fn first_line(text: &str) -> String {
@@ -1212,8 +1416,10 @@ mod tests {
             vec![
                 Row::Task {
                     seq: 1,
+                    task_id: String::new(),
                     kind: "local_bash".into(),
-                    description: "Download the image".into()
+                    description: "Download the image".into(),
+                    state: TaskState::Running,
                 },
                 Row::Status {
                     seq: 2,
@@ -1248,22 +1454,54 @@ mod tests {
     }
 
     #[test]
-    fn a_finished_background_task_shows_its_summary_and_state() {
-        let rows = rows(
-            &detail(vec![step(
-                1,
+    fn a_background_task_is_one_row_that_follows_its_state() {
+        let task = |seq: i64, payload: &str| {
+            step(
+                seq,
                 "task",
-                json!({"name": "local_bash", "output": "{\"task_type\":\"local_bash\",\"state\":\"completed\",\"summary\":\"cat > /tmp/wf.py\"}"}),
-            )]),
+                json!({"name": "local_bash", "output": payload}),
+            )
+        };
+        let rows = rows(
+            &detail(vec![
+                task(
+                    1,
+                    "{\"task_id\":\"bb45\",\"task_type\":\"local_bash\",\"state\":\"started\",\"description\":\"Collect hall list\"}",
+                ),
+                step(2, "text", json!({"output": "Meanwhile, past showings."})),
+                task(
+                    3,
+                    "{\"task_id\":\"bb45\",\"task_type\":\"local_bash\",\"state\":\"completed\",\"summary\":\"15 halls\"}",
+                ),
+                task(
+                    4,
+                    "{\"task_id\":\"cc01\",\"task_type\":\"local_agent\",\"state\":\"failed\",\"summary\":\"timed out\"}",
+                ),
+            ]),
             "",
         );
         assert_eq!(
             rows,
-            vec![Row::Task {
-                seq: 1,
-                kind: "local_bash".into(),
-                description: "completed · cat > /tmp/wf.py".into()
-            }]
+            vec![
+                Row::Task {
+                    seq: 1,
+                    task_id: "bb45".into(),
+                    kind: "local_bash".into(),
+                    description: "Collect hall list".into(),
+                    state: TaskState::Done,
+                },
+                Row::Thought {
+                    seq: 2,
+                    text: "Meanwhile, past showings.".into(),
+                },
+                Row::Task {
+                    seq: 4,
+                    task_id: "cc01".into(),
+                    kind: "local_agent".into(),
+                    description: "timed out".into(),
+                    state: TaskState::Failed,
+                },
+            ]
         );
     }
 

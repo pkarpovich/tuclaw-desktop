@@ -453,7 +453,7 @@ impl AppState {
 
     pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
         if !self.toggled.remove(&disclosure) {
-            self.toggled.insert(disclosure);
+            self.toggled.insert(disclosure.clone());
         }
         if let Disclosure::Log(message) = disclosure {
             self.ensure_log(message, cx);

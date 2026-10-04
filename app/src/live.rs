@@ -3,11 +3,12 @@ use std::rc::Rc;
 use gpui::{App, Div, FontWeight, IntoElement, SharedString, Window, div, prelude::*, px};
 use serde_json::Value;
 use tuclaw_core::model::{Agent, Author};
-use tuclaw_core::v3::{Run, RunId, RunState, StepKind, ToolStatus};
+use tuclaw_core::v3::{Run, RunId, RunState};
 
 use crate::link;
 use crate::message::{agent_badge, avatar, writer};
 use crate::rich::{self, Ink};
+use crate::runlog::{self, OnDisclose, Owner, Row, RowView};
 use crate::theme;
 
 const DETAIL: usize = 90;
@@ -18,79 +19,31 @@ pub struct RunView {
     pub id: Option<RunId>,
     pub author: Author,
     pub state: RunState,
-    pub steps: Vec<StepView>,
+    pub steps: Vec<Row>,
     pub segment: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StepView {
-    Thought(String),
-    Tool {
-        name: String,
-        detail: String,
-        status: ToolStatus,
-    },
-    Task {
-        kind: String,
-        state: String,
-        description: String,
-    },
-    Status {
-        status: String,
-        detail: String,
-    },
-    Other(String),
-}
-
 pub fn run_view(run: &Run) -> RunView {
-    let mut steps = Vec::new();
-    for step in &run.steps {
-        let view = match &step.kind {
-            StepKind::Text { text } => StepView::Thought(text.clone()),
-            StepKind::Tool {
-                tool_use_id: _,
-                name,
-                input,
-                output: _,
-                status,
-                finished_at: _,
-            } => StepView::Tool {
-                name: if name.is_empty() {
-                    "tool".to_string()
-                } else {
-                    name.clone()
-                },
-                detail: tool_detail(input),
-                status: *status,
-            },
-            StepKind::Task {
-                task_id: _,
-                task_type,
-                state,
-                description,
-                summary: _,
-            } => StepView::Task {
-                kind: task_type.clone(),
-                state: state.clone(),
-                description: description.clone().unwrap_or_default(),
-            },
-            StepKind::Status { status, detail } => StepView::Status {
-                status: status.clone(),
-                detail: detail.clone(),
-            },
-            StepKind::Other { name, output: _ } => {
-                StepView::Other(name.clone().unwrap_or_else(|| "step".to_string()))
-            }
-        };
-        steps.push(view);
-    }
     RunView {
         id: run.id.clone(),
         author: Author::Agent(link::agent_id(run.agent_id)),
         state: run.state,
-        steps,
+        steps: runlog::live_rows(run),
         segment: run.segment.clone(),
     }
+}
+
+pub fn owner(view: &RunView) -> Owner {
+    match &view.id {
+        Some(RunId(id)) => Owner::Run(id.clone()),
+        None => Owner::Run("queued".to_string()),
+    }
+}
+
+pub struct LiveLook {
+    pub rows: Vec<RowView>,
+    pub on_stop: OnStop,
+    pub on_disclose: OnDisclose,
 }
 
 pub fn tool_detail(input: &Value) -> String {
@@ -150,7 +103,12 @@ pub fn state_label(state: RunState) -> &'static str {
 
 pub type OnStop = Rc<dyn Fn(&RunId, &mut Window, &mut App)>;
 
-pub fn run_card(view: &RunView, agents: &[Agent], on_stop: OnStop) -> impl IntoElement {
+pub fn run_card(view: &RunView, agents: &[Agent], look: LiveLook) -> impl IntoElement {
+    let LiveLook {
+        rows,
+        on_stop,
+        on_disclose,
+    } = look;
     let writer = writer(view.author, agents);
     let selector = match &view.id {
         Some(RunId(id)) => format!("run-{id}"),
@@ -182,8 +140,8 @@ pub fn run_card(view: &RunView, agents: &[Agent], on_stop: OnStop) -> impl IntoE
         Some(RunId(id)) => id.clone(),
         None => "queued".to_string(),
     };
-    for (index, step) in view.steps.iter().enumerate() {
-        column = column.child(step_element(&key, index, step));
+    if !rows.is_empty() {
+        column = column.child(runlog::live_steps(owner(view), rows, on_disclose));
     }
     if !view.segment.is_empty() || view.state == RunState::Running {
         let cursor = match view.state {
@@ -260,68 +218,6 @@ fn state_chip(state: RunState) -> Div {
         .text_color(theme::text_muted())
         .child(div().w(px(6.)).h(px(6.)).rounded_full().bg(dot))
         .child(state_label(state))
-}
-
-fn step_element(key: &str, index: usize, step: &StepView) -> Div {
-    let row = div()
-        .flex()
-        .items_center()
-        .gap(px(6.))
-        .min_w(px(0.))
-        .text_size(px(12.5))
-        .text_color(theme::text_secondary());
-    match step {
-        StepView::Thought(text) => div().text_size(px(13.)).child(rich::markdown(
-            SharedString::from(format!("run-{key}-thought-{index}")),
-            text.clone(),
-            Ink::Muted,
-        )),
-        StepView::Tool {
-            name,
-            detail,
-            status,
-        } => row
-            .child(div().text_color(theme::text_label()).child("▸"))
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(SharedString::from(name.clone())),
-            )
-            .child(
-                div()
-                    .min_w(px(0.))
-                    .overflow_hidden()
-                    .text_color(theme::text_muted())
-                    .child(SharedString::from(detail.clone())),
-            )
-            .child(div().flex_none().child(match status {
-                ToolStatus::Running => "…",
-                ToolStatus::Ok => "✓",
-                ToolStatus::Error => "✗",
-            })),
-        StepView::Task {
-            kind,
-            state,
-            description,
-        } => row
-            .child(div().text_color(theme::text_label()).child("◷"))
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(SharedString::from(kind.clone())),
-            )
-            .child(
-                div()
-                    .text_color(theme::text_muted())
-                    .child(SharedString::from(format!("{state} · {description}"))),
-            ),
-        StepView::Status { status, detail } => row
-            .text_color(theme::text_muted())
-            .child(SharedString::from(format!("· {status} - {detail}"))),
-        StepView::Other(name) => row
-            .text_color(theme::text_muted())
-            .child(SharedString::from(format!("· {name}"))),
-    }
 }
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
 use crate::composer::Composer;
-use crate::live::{OnStop, RunView, run_card, run_view};
+use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
@@ -259,7 +259,17 @@ impl Feed {
                     message_row(message, state.agents(), look, &actions).into_any_element()
                 }
                 Item::Run(run) => {
-                    run_card(run, state.read(cx).agents(), on_stop.clone()).into_any_element()
+                    let state = state.read(cx);
+                    let rows =
+                        runlog::views(owner(run), run.steps.clone(), &|disclosure, by_default| {
+                            state.is_open(disclosure, by_default)
+                        });
+                    let look = LiveLook {
+                        rows,
+                        on_stop: on_stop.clone(),
+                        on_disclose: actions.on_disclose.clone(),
+                    };
+                    run_card(run, state.agents(), look).into_any_element()
                 }
             }
         })
@@ -663,10 +673,11 @@ mod tests {
     use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Span};
     use tuclaw_core::v3::MockTransport;
 
-    use tuclaw_core::v3::{RunState, ToolStatus};
+    use tuclaw_core::v3::RunState;
 
     use super::{Busy, Feed, Header, Item, busy_agents, header};
-    use crate::live::{RunView, StepView};
+    use crate::live::RunView;
+    use crate::runlog::{Row, StepStatus};
     use crate::state::AppState;
     use crate::testing::{channel_named, loaded, play};
 
@@ -875,20 +886,27 @@ mod tests {
         let live = runs(&feed, cx);
         assert_eq!(live.len(), 1);
         assert_eq!(live[0].author, Author::Agent(AgentId(3)));
+        let steps = &live[0].steps;
+        assert_eq!(steps.len(), 3);
         assert_eq!(
-            live[0].steps,
-            vec![
-                StepView::Thought("Проверяю новые релизы.".to_string()),
-                StepView::Tool {
-                    name: "WebFetch".to_string(),
-                    detail: "https://example.org/releases".to_string(),
-                    status: ToolStatus::Ok,
-                },
-                StepView::Status {
-                    status: "compacting".to_string(),
-                    detail: "context 91%".to_string(),
-                },
-            ]
+            steps[0],
+            Row::Thought {
+                seq: 0,
+                text: "Проверяю новые релизы.".to_string()
+            }
+        );
+        let Row::Tool(call) = &steps[1] else {
+            panic!("the second step is the tool, got {:?}", steps[1]);
+        };
+        assert_eq!(call.name, "WebFetch");
+        assert_eq!(call.arg, "example.org/releases");
+        assert_eq!(call.status, StepStatus::Ok);
+        assert_eq!(
+            steps[2],
+            Row::Status {
+                seq: 2,
+                text: "compacting · context 91%".to_string()
+            }
         );
         assert_eq!(live[0].segment, "Нашёл три новых релиза, ");
     }
