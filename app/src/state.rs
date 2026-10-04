@@ -317,7 +317,7 @@ impl AppState {
             this.update(cx, |state, cx| {
                 state.recording = match posted {
                     Ok(_) => Recording::Idle,
-                    Err(error) => Recording::Failed(format!("not sent: {error}")),
+                    Err(error) => Recording::Failed(voice_failure(&error)),
                 };
                 cx.notify();
             })
@@ -2153,9 +2153,23 @@ fn ends_its_run(kind: v3::MessageKind) -> bool {
     }
 }
 
+fn voice_failure(error: &v3::ApiError) -> String {
+    match error {
+        v3::ApiError::Invalid(message) => message.clone(),
+        v3::ApiError::Refused { code: _, message } => message.clone(),
+        v3::ApiError::NotFound => "the channel is gone; not sent".into(),
+        v3::ApiError::Unauthorized => "the daemon rejected the token".into(),
+        v3::ApiError::Conflict => "the recording was already sent elsewhere".into(),
+        v3::ApiError::Unavailable => "the daemon is unavailable; not sent".into(),
+        v3::ApiError::Transport(_) => "the daemon did not answer; not sent".into(),
+        v3::ApiError::Decode(_) => "the daemon answered something unexpected".into(),
+    }
+}
+
 fn field_message(error: &v3::ApiError) -> String {
     match error {
         v3::ApiError::Invalid(message) => message.clone(),
+        v3::ApiError::Refused { code: _, message } => message.clone(),
         v3::ApiError::NotFound => "the agent is gone".into(),
         v3::ApiError::Unauthorized => "the daemon rejected the token".into(),
         v3::ApiError::Conflict => "the change conflicts with the current state".into(),

@@ -55,6 +55,7 @@ pub struct Tape {
     pub recording: bool,
     pub cancelled: usize,
     pub refuse: Option<String>,
+    pub take: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Default)]
@@ -76,9 +77,13 @@ impl Recorder for FakeRecorder {
             return Err("nothing is being recorded".to_string());
         }
         tape.recording = false;
+        let bytes = match tape.take.take() {
+            Some(bytes) => bytes,
+            None => b"....ftypM4A recording".to_vec(),
+        };
         Ok(Take {
             kind: tuclaw_core::v3::AudioKind::M4a,
-            bytes: b"....ftypM4A recording".to_vec(),
+            bytes,
         })
     }
 

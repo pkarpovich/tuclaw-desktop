@@ -1173,7 +1173,10 @@ impl World {
             return Err(ApiError::Invalid("the recording is empty".into()));
         }
         if bytes.len() > VOICE_LIMIT {
-            return Err(ApiError::Invalid("the recording is over 20 MiB".into()));
+            return Err(ApiError::Refused {
+                code: "too_large".into(),
+                message: "the recording must be at most 20971520 bytes".into(),
+            });
         }
         let mut addressed_agent_id = None;
         for pair in query.split('&') {

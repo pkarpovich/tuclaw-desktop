@@ -805,6 +805,23 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_recording_the_daemon_refuses_shows_its_reason(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        recorder.0.borrow_mut().take = Some(vec![0; 21 * 1024 * 1024]);
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        click(cx, "composer-talk".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.recording(),
+                &Recording::Failed("the recording must be at most 20971520 bytes".into())
+            );
+        });
+        assert!(cx.debug_bounds("composer-voice-error").is_some());
+    }
+
+    #[gpui::test]
     fn a_microphone_that_refuses_shows_why(cx: &mut TestAppContext) {
         let (_mock, state, _feed, cx) = feed(cx);
         let recorder = FakeRecorder::default();

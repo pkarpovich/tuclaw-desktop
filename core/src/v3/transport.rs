@@ -21,6 +21,13 @@ pub enum ApiError {
     Conflict,
     /// The daemon cannot serve the request right now (`503`).
     Unavailable,
+    /// The daemon refused with an error code this client does not model, e.g. `too_large`.
+    Refused {
+        /// The envelope's `code`.
+        code: String,
+        /// The envelope's `message`, meant for a person.
+        message: String,
+    },
     /// The request did not complete: connection, timeout, or an unexpected answer.
     Transport(String),
     /// The answer does not match the contract.
@@ -55,7 +62,7 @@ impl ApiError {
             "invalid_request" => ApiError::Invalid(message),
             "conflict" => ApiError::Conflict,
             "unavailable" => ApiError::Unavailable,
-            other => ApiError::Transport(format!("HTTP {status} {other}: {message}")),
+            _ => ApiError::Refused { code, message },
         }
     }
 }
@@ -68,6 +75,7 @@ impl fmt::Display for ApiError {
             ApiError::Invalid(message) => write!(f, "invalid request: {message}"),
             ApiError::Conflict => write!(f, "conflict"),
             ApiError::Unavailable => write!(f, "the daemon is unavailable"),
+            ApiError::Refused { code: _, message } => write!(f, "{message}"),
             ApiError::Transport(reason) => write!(f, "transport: {reason}"),
             ApiError::Decode(reason) => write!(f, "decode: {reason}"),
         }
@@ -235,7 +243,10 @@ mod tests {
             (
                 418,
                 "teapot",
-                ApiError::Transport("HTTP 418 teapot: bad".into()),
+                ApiError::Refused {
+                    code: "teapot".into(),
+                    message: "bad".into(),
+                },
             ),
         ];
         for (status, code, expected) in cases {
@@ -298,6 +309,10 @@ mod tests {
             Err(ApiError::Invalid(_)) => false,
             Err(ApiError::Conflict) => false,
             Err(ApiError::Unavailable) => false,
+            Err(ApiError::Refused {
+                code: _,
+                message: _,
+            }) => false,
             Err(ApiError::Decode(_)) => false,
             Ok(()) => false,
         }
