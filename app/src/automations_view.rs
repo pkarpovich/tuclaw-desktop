@@ -415,8 +415,8 @@ fn detail(task: &Task, runs: Option<Vec<TaskRun>>) -> Div {
             );
         }
         Some(runs) => {
-            for run in runs {
-                history = history.child(run_line(&run));
+            for stretch in stretches(runs) {
+                history = history.child(run_line(&stretch));
             }
         }
     }
@@ -443,13 +443,73 @@ fn fact(name: &'static str, value: &str) -> Div {
         )
 }
 
-fn run_line(run: &TaskRun) -> Div {
+struct Stretch {
+    newest: TaskRun,
+    oldest: OffsetDateTime,
+    count: usize,
+}
+
+fn stretches(runs: Vec<TaskRun>) -> Vec<Stretch> {
+    let mut stretches: Vec<Stretch> = Vec::new();
+    for run in runs {
+        if let Some(last) = stretches.last_mut()
+            && skipped(last.newest.outcome)
+            && skipped(run.outcome)
+        {
+            last.oldest = run.at;
+            last.count += 1;
+            continue;
+        }
+        stretches.push(Stretch {
+            oldest: run.at,
+            newest: run,
+            count: 1,
+        });
+    }
+    stretches
+}
+
+fn skipped(outcome: Outcome) -> bool {
+    match outcome {
+        Outcome::Skipped => true,
+        Outcome::Ran => false,
+        Outcome::Silent => false,
+        Outcome::Failed => false,
+        Outcome::Unknown => false,
+    }
+}
+
+fn stretch_time(stretch: &Stretch) -> String {
+    let Stretch {
+        newest,
+        oldest,
+        count,
+    } = stretch;
+    if *count == 1 {
+        return when(newest.at);
+    }
+    format!("{} – {}", when(*oldest), clock(newest.at))
+}
+
+fn stretch_word(stretch: &Stretch) -> String {
+    let Stretch {
+        newest,
+        oldest: _,
+        count,
+    } = stretch;
+    if *count == 1 {
+        return outcome_word(newest.outcome).to_string();
+    }
+    format!("{} {count}×", outcome_word(newest.outcome))
+}
+
+fn run_line(stretch: &Stretch) -> Div {
     let TaskRun {
-        at,
+        at: _,
         outcome,
         duration_ms,
         error,
-    } = run;
+    } = &stretch.newest;
     let mut line = div()
         .flex()
         .items_center()
@@ -458,17 +518,18 @@ fn run_line(run: &TaskRun) -> Div {
         .child(div().size(px(6.)).rounded_full().bg(outcome_tone(*outcome)))
         .child(
             div()
-                .w(px(130.))
+                .w(px(170.))
                 .flex_none()
                 .text_color(theme::text_secondary())
-                .child(SharedString::from(when(*at))),
+                .child(SharedString::from(stretch_time(stretch))),
         )
         .child(
             div()
                 .text_color(outcome_tone(*outcome))
-                .child(outcome_word(*outcome)),
-        )
-        .child(
+                .child(SharedString::from(stretch_word(stretch))),
+        );
+    if stretch.count == 1 {
+        line = line.child(
             div()
                 .text_color(theme::text_muted())
                 .child(SharedString::from(format!(
@@ -476,6 +537,7 @@ fn run_line(run: &TaskRun) -> Div {
                     *duration_ms as f64 / 1000.
                 ))),
         );
+    }
     if let Some(error) = error {
         line = line.child(
             div()
@@ -514,4 +576,41 @@ fn when(at: OffsetDateTime) -> String {
 
 fn first_line(text: &str) -> String {
     text.lines().next().unwrap_or_default().trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use time::macros::datetime;
+    use tuclaw_core::v3::{Outcome, TaskRun};
+
+    use super::{stretch_word, stretches};
+
+    fn run(minute: u8, outcome: Outcome) -> TaskRun {
+        TaskRun {
+            at: datetime!(2026-10-04 18:00 UTC) + time::Duration::minutes(i64::from(minute)),
+            outcome,
+            duration_ms: 600,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn consecutive_skips_read_as_one_stretch() {
+        let runs = vec![
+            run(50, Outcome::Ran),
+            run(45, Outcome::Skipped),
+            run(40, Outcome::Skipped),
+            run(35, Outcome::Skipped),
+            run(30, Outcome::Failed),
+            run(25, Outcome::Skipped),
+        ];
+        let stretches = stretches(runs);
+        let mut words = Vec::new();
+        for stretch in &stretches {
+            words.push(stretch_word(stretch));
+        }
+        assert_eq!(words, ["ran", "skipped 3×", "failed", "skipped"]);
+        assert_eq!(stretches[1].oldest, datetime!(2026-10-04 18:35 UTC));
+        assert_eq!(stretches[1].newest.at, datetime!(2026-10-04 18:45 UTC));
+    }
 }
