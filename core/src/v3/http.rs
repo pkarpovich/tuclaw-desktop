@@ -427,7 +427,7 @@ mod tests {
             Posted {
                 message_id: MessageId(9193),
                 input_id: Some(InputId(42)),
-                agent_id: AgentId(1),
+                agent_id: Some(AgentId(1)),
             }
         );
         let sent: serde_json::Value =

@@ -9,6 +9,15 @@
     "save": "all"
   },
   {
+    "label": "tuclaw: run against bravo (debug)",
+    "command": "mise",
+    "args": ["run", "dev-bravo"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "no_focus",
+    "save": "all"
+  },
+  {
     "label": "tuclaw: preview Tuclaw.app (release bundle)",
     "command": "mise",
     "args": ["run", "preview"],

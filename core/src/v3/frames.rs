@@ -12,6 +12,7 @@ use time::OffsetDateTime;
 
 use super::dto::{
     AgentId, ContextUsage, InputId, Message, RunId, Seq, StepRow, SurfaceId, ToolUseId, Usage,
+    null_as_empty,
 };
 
 /// The envelope version this build speaks.
@@ -90,7 +91,7 @@ pub struct RunSnapshot {
     /// The newest seq whose effects `steps` already contain.
     pub as_of_seq: Seq,
     /// The text segment in progress.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub text: String,
     /// The finished steps.
     #[serde(default)]
@@ -121,10 +122,10 @@ pub struct RunStarted {
     #[serde(default)]
     pub input_ids: Vec<InputId>,
     /// What caused it.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub origin: String,
     /// Its metrics kind.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub turn_kind: String,
 }
 
@@ -190,7 +191,7 @@ pub struct ToolFinished {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// The result text, clamped to 2 KB.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub summary: String,
 }
 
@@ -200,10 +201,10 @@ pub struct TaskUpdate {
     /// The task.
     pub task_id: String,
     /// Its type.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub task_type: String,
     /// Its state.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub state: String,
     /// What it does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -219,7 +220,7 @@ pub struct StatusUpdate {
     /// The status.
     pub status: String,
     /// Its detail.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub detail: String,
 }
 
@@ -237,7 +238,7 @@ pub struct RunFinished {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Why it ended: `success`, `interrupted`, `agent_crashed`, ...
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub terminal_reason: String,
     /// The run's token counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]

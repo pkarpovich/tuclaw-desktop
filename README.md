@@ -46,6 +46,7 @@ running anything else.
 ```
 mise run build       # cargo build --workspace --all-targets
 mise run dev         # cargo run -p tuclaw-desktop
+mise run dev-bravo   # the same against the live daemon on bravo (TUCLAW_DAEMON_URL, no token)
 mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all

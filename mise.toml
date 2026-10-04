@@ -9,6 +9,11 @@ run = "cargo build --workspace --all-targets"
 description = "Build and run the app"
 run = "cargo run -p tuclaw-desktop"
 
+[tasks.dev-bravo]
+description = "Build and run the app against the daemon on bravo (/api/v3 open, no token)"
+env = { TUCLAW_DAEMON_URL = "http://192.168.199.72:9090" }
+run = "cargo run -p tuclaw-desktop"
+
 [tasks.test]
 description = "Run both test tiers"
 run = "cargo test --workspace"

@@ -192,7 +192,7 @@ struct World {
     runs: Vec<MockRun>,
     queue: VecDeque<Script>,
     subscribers: Vec<Subscriber>,
-    posted: HashMap<ClientMessageId, Posted>,
+    posted: HashMap<ClientMessageId, (SurfaceId, Posted)>,
     media: HashMap<AttachmentId, Media>,
     next_message: i64,
     next_input: i64,
@@ -1036,28 +1036,25 @@ impl World {
     }
 
     fn accept(&mut self, surface: SurfaceId, post: Post) -> Result<Posted, ApiError> {
-        if let Some(posted) = self.posted.get(&post.client_message_id) {
+        if let Some((first, posted)) = self.posted.get(&post.client_message_id) {
+            if *first != surface {
+                return Err(ApiError::Conflict);
+            }
             return Ok(*posted);
         }
         let Some(found) = self.surface(surface) else {
             return Err(ApiError::NotFound);
         };
-        let agent = match post.addressed_agent_id {
-            Some(addressed) => {
-                let mut wired = false;
-                for wiring in &found.agents {
-                    if wiring.agent_id == addressed {
-                        wired = true;
-                    }
+        let mut wired = None;
+        if let Some(addressed) = post.addressed_agent_id {
+            for wiring in &found.agents {
+                if wiring.agent_id == addressed {
+                    wired = Some(addressed);
                 }
-                if !wired {
-                    return Err(ApiError::Invalid(format!(
-                        "agent {} is not wired to this surface",
-                        addressed.0
-                    )));
-                }
-                addressed
             }
+        }
+        let agent = match wired {
+            Some(addressed) => addressed,
             None => {
                 let Some(lead) = found.lead_agent_id else {
                     return Err(ApiError::Invalid("the surface has no lead".into()));
@@ -1079,9 +1076,10 @@ impl World {
         let posted = Posted {
             message_id: message.id,
             input_id: Some(input),
-            agent_id: agent,
+            agent_id: Some(agent),
         };
-        self.posted.insert(post.client_message_id, posted);
+        self.posted
+            .insert(post.client_message_id, (surface, posted));
         self.queue.push_back(Script::Accepted(InputAccepted {
             input_id: input,
             surface_id: surface,
@@ -1272,7 +1270,7 @@ impl World {
         };
         self.deliver_to(&subscriber, &self.line("hello", None, None, None, &hello));
         if let Some(Seq(since)) = since {
-            let gap = self.scenario.gap_once || since < self.floor();
+            let gap = self.scenario.gap_once || since + 1 < self.floor() || since > self.head;
             if gap {
                 self.scenario.gap_once = false;
                 let gap = Gap {
@@ -1910,7 +1908,7 @@ mod tests {
         let (mock, client) = stepped();
         let mut connection = connected(&mock, &client, vec![SurfaceId(1)]);
         let posted = block_on(client.post(SurfaceId(1), &post("Лисички?", None))).expect("posted");
-        assert_eq!(posted.agent_id, AgentId(1));
+        assert_eq!(posted.agent_id, Some(AgentId(1)));
         assert!(mock.play_all() > 10);
         let frames = drain(&mut connection);
         assert_eq!(
@@ -1956,13 +1954,12 @@ mod tests {
         let addressed =
             block_on(client.post(SurfaceId(1), &post("@magnet_feed?", Some(AgentId(3)))))
                 .expect("posted");
-        assert_eq!(addressed.agent_id, AgentId(3));
+        assert_eq!(addressed.agent_id, Some(AgentId(3)));
         let lead = block_on(client.post(SurfaceId(3), &post("свет", None))).expect("posted");
-        assert_eq!(lead.agent_id, AgentId(2));
-        let unwired = block_on(client.post(SurfaceId(1), &post("@scout", Some(AgentId(4)))));
-        let Err(ApiError::Invalid(_)) = unwired else {
-            panic!("an unwired agent is invalid, got {unwired:?}");
-        };
+        assert_eq!(lead.agent_id, Some(AgentId(2)));
+        let unwired = block_on(client.post(SurfaceId(1), &post("@scout", Some(AgentId(4)))))
+            .expect("an unwired agent routes to the lead");
+        assert_eq!(unwired.agent_id, Some(AgentId(1)));
         assert_eq!(
             block_on(client.post(SurfaceId(9), &post("x", None))),
             Err(ApiError::NotFound)
@@ -1978,6 +1975,24 @@ mod tests {
         let again = block_on(client.post(SurfaceId(1), &first)).expect("posted");
         assert_eq!(again, posted);
         assert_eq!(mock.pending(), pending);
+        assert_eq!(
+            block_on(client.post(SurfaceId(3), &first)),
+            Err(ApiError::Conflict)
+        );
+        assert_eq!(mock.pending(), pending);
+    }
+
+    #[test]
+    fn a_since_beyond_the_head_gets_a_gap() {
+        let (mock, client) = stepped();
+        let Seq(head) = mock.head();
+        let mut ahead = block_on(client.connect(Some(Seq(head + 5)))).expect("connects");
+        assert_eq!(
+            kinds(&drain(&mut ahead)),
+            vec!["hello", "gap", "run.snapshot"]
+        );
+        let mut current = block_on(client.connect(Some(Seq(head)))).expect("connects");
+        assert_eq!(kinds(&drain(&mut current)), vec!["hello", "run.snapshot"]);
     }
 
     #[test]
@@ -2261,7 +2276,7 @@ mod tests {
         assert_eq!(run.run.status, RunStatus::Ok);
         let posted = block_on(client.post(SurfaceId(1), &post("Привет", None))).expect("posted");
         assert_eq!(posted.message_id, MessageId(9193));
-        assert_eq!(posted.agent_id, AgentId(1));
+        assert_eq!(posted.agent_id, Some(AgentId(1)));
         let mut connection = block_on(client.connect(None)).expect("connects");
         assert_eq!(kinds(&drain(&mut connection)), vec!["hello"]);
     }

@@ -94,7 +94,7 @@ One page, oldest first inside the page; without `before` it is the newest page. 
 - `text` is the answer verbatim, Markdown, no Thinking fold.
 - `origin` is B2's `message.created` origin (what caused the message: `user`, `a2a`, `scheduled`, ...). `channel` is where a `user` message was typed: `telegram` or `desktop` (`null` for agent and system messages).
 - `client_message_id` echoes the id a v3 client posted the message with (else `null`), so `message.created` can be matched to the client's optimistic row whether or not the `202` arrived first.
-- `run_summary` is present on a message with a `run_id` and lets the client draw "6 steps, 1 tool, 13 s" without fetching the run.
+- `run_summary` is present on a message with a `run_id` and lets the client draw "6 steps, 1 tool, 13 s" without fetching the run; it is `null` on a message without a run.
 
 ### `POST /surfaces/{id}/messages`
 
@@ -102,9 +102,9 @@ One page, oldest first inside the page; without `before` it is the newest page. 
 {"text": "Лисички появились в магазине...", "addressed_agent_id": null, "client_message_id": "8b0c...-uuid"}
 ```
 
-- Routes exactly like a Telegram message on that surface: `addressed_agent_id` (a mention) wins, else sticky, else the lead. The user row is written with `channel` origin `desktop` and is NOT mirrored to Telegram (`mirror = agent_only`); the answer is.
-- `client_message_id` (UUID chosen by the client, required) makes the post idempotent: a retry with the same id returns the first result instead of a second message, and the id is echoed on the message (above).
-- `202 {"message_id": 9193, "input_id": 42, "agent_id": 1}`. `input_id` is `null` when the message was stored but its wake could not be queued (the daemon then posts an error notice on the surface, as it does for a Telegram message); a retry with the same `client_message_id` returns the same answer. The reply arrives on the event socket: `message.created` for the user row, then the run's events.
+- Routes exactly like a Telegram message on that surface: `addressed_agent_id` (a mention) wins, else sticky, else the lead. An `addressed_agent_id` not wired on the surface is not an error: it routes the way Telegram routes a tag of a bot that is not in the topic, and the `202`'s `agent_id` names the agent actually woken. The user row is written with `channel` origin `desktop` and is NOT mirrored to Telegram (`mirror = agent_only`); the answer is.
+- `client_message_id` (UUID chosen by the client, required) makes the post idempotent: a retry with the same id returns the first result instead of a second message, and the id is echoed on the message (above). The id is unique across all surfaces: posting an id already used on a DIFFERENT surface answers `409 conflict`.
+- `202 {"message_id": 9193, "input_id": 42, "agent_id": 1}`. `input_id` `null` means the message was stored but not queued: the daemon posted an error notice on the surface (as it does for a Telegram message), or it restarted before queuing. `agent_id` is `null` in that case too. A retry with the same `client_message_id` returns the same answer and queues nothing; to try again the client posts again with a NEW `client_message_id`. The reply arrives on the event socket: `message.created` for the user row, then the run's events.
 - While the woken agent already has a live run, the input waits behind it as today (held). Steering into the live run is decided in the C1 plan, not here; the client contract does not change either way.
 
 ### `GET /runs/{id}`
@@ -139,8 +139,8 @@ Every frame is one JSON text message:
 
 `seq` is absent on ephemeral frames. Connect sequence:
 
-1. `hello` `{head, floor, server_time, capabilities: {events: [...], ops: [...], auth: "none" | "bearer"}}` - `head` the newest seq, `floor` the oldest still kept (30-day retention).
-2. if `since < floor`: `gap {floor}` - the client refetches `GET /surfaces` and the message pages it shows, then continues from `head`; else every persisted event with `since < seq <= head`, in order.
+1. `hello` `{head, floor, server_time, capabilities: {events: [...], ops: [...], auth: "none" | "bearer"}}` - `head` the newest seq, `floor` the oldest still kept (30-day retention). `capabilities.events` lists the persisted and ephemeral event types this daemon sends (the protocol frames `hello`, `gap` and `run.snapshot` are not listed); `capabilities.ops` lists the client frame types it accepts (`focus`); `capabilities.auth` is the auth mode.
+2. if `since + 1 < floor` (events the client never saw were pruned) or `since > head` (a seq this log never had, e.g. after a reset): `gap {floor}` - the client refetches `GET /surfaces` and the message pages it shows, then continues from `head`; else every persisted event with `since < seq <= head`, in order.
 3. one `run.snapshot` per live run: `{run_id, agent_id, surface_id, started_at, as_of_seq, text, steps: [...]}` - `steps` as in `GET /runs/{id}`; `as_of_seq` is the newest event seq whose effects the `steps` already contain (the server reads both in one database snapshot), and the client ignores that run's persisted frames with `seq <= as_of_seq` so no step is applied twice; `text` is the IN-PROGRESS text segment only (the agent streams every assistant text block and records each finished block as a `step.text`, so a client renders the text steps plus this one current segment, and clears its current segment on every `step.text` and on `run.reset`).
 4. live events.
 

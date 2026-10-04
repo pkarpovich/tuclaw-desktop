@@ -2,11 +2,19 @@
 //!
 //! Every optional field defaults when absent, unknown fields are ignored, and every enum-valued
 //! field has an `Unknown` variant, so a value this build does not know never fails a whole body.
+//! A defaulted string field also reads `null` as empty, since the daemon writes `null` for values
+//! older rows never had.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+pub(crate) fn null_as_empty<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
+}
 
 /// Identifies a surface (today a Telegram topic).
 ///
@@ -303,13 +311,13 @@ pub struct Agent {
     /// What an `@mention` of it resolves to.
     pub ident: String,
     /// Its description.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub description: String,
     /// Its own Telegram bot, when it has one.
     #[serde(default)]
     pub bot_username: Option<String>,
     /// The effective model spec; empty for the SDK default.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub model: String,
     /// Whether it is running a turn.
     pub state: AgentState,
@@ -427,7 +435,7 @@ pub struct Attachment {
     /// What it holds.
     pub kind: AttachmentKind,
     /// Its media type, e.g. `audio/ogg` or `audio/mp4`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub mime: String,
     /// Its size.
     #[serde(default)]
@@ -455,13 +463,13 @@ pub struct Message {
     #[serde(default)]
     pub reply_to_message_id: Option<MessageId>,
     /// The Markdown text, verbatim.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub text: String,
     /// The run that produced it or that it started.
     #[serde(default)]
     pub run_id: Option<RunId>,
     /// What caused it: `user`, `a2a`, `scheduled`, ...
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub origin: String,
     /// Where a user message was typed.
     #[serde(default)]
@@ -520,11 +528,12 @@ pub struct Post {
 pub struct Posted {
     /// The user message written.
     pub message_id: MessageId,
-    /// The input queued for the agent; `None` when the message was stored but its wake could not
-    /// be queued (the daemon then posts an error notice on the surface).
+    /// The input queued for the agent; `None` when the message was stored but not queued (the
+    /// daemon posted an error notice, or restarted before queuing). Retrying with the same
+    /// `client_message_id` queues nothing; a retry needs a new one.
     pub input_id: Option<InputId>,
-    /// The agent that will answer.
-    pub agent_id: AgentId,
+    /// The agent actually woken; `None` exactly when `input_id` is.
+    pub agent_id: Option<AgentId>,
 }
 
 /// Token counts of one run.
@@ -563,7 +572,7 @@ pub struct ContextUsage {
     #[serde(default)]
     pub percentage: f64,
     /// The model measured.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub model: String,
 }
 
@@ -577,7 +586,7 @@ pub struct ContextWindow {
     #[serde(default)]
     pub max_tokens: u64,
     /// The model measured.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub model: String,
 }
 
@@ -592,10 +601,10 @@ pub struct RunRow {
     #[serde(default)]
     pub surface_id: Option<SurfaceId>,
     /// What caused it.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub origin: String,
     /// Its metrics kind.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub kind: String,
     /// Its state.
     pub status: RunStatus,
@@ -690,7 +699,7 @@ pub struct ErrorDetail {
     /// The snake_case code: `unauthorized`, `not_found`, `invalid_request`, `conflict`, `unavailable`.
     pub code: String,
     /// The human text.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub message: String,
 }
 
@@ -908,7 +917,7 @@ mod tests {
             Posted {
                 message_id: MessageId(9193),
                 input_id: Some(InputId(42)),
-                agent_id: AgentId(1),
+                agent_id: Some(AgentId(1)),
             }
         );
     }
@@ -949,7 +958,19 @@ mod tests {
         assert_eq!(posted.input_id, Some(InputId(42)));
         let orphan: Posted = serde_json::from_str(POSTED_WITHOUT_INPUT).unwrap();
         assert_eq!(orphan.input_id, None);
+        assert_eq!(orphan.agent_id, None);
         assert_eq!(orphan.message_id, MessageId(9194));
+    }
+
+    #[test]
+    fn a_null_string_field_reads_as_empty() {
+        let message: Message = serde_json::from_str(
+            r#"{"id": 6017, "surface_id": 3, "kind": "answer", "author": {"kind": "agent", "agent_id": 2},
+                "text": "ok", "origin": null, "created_at": "2026-07-31T22:17:32Z", "run_summary": null}"#,
+        )
+        .expect("a pre-B2 answer decodes");
+        assert_eq!(message.origin, "");
+        assert_eq!(message.run_summary, None);
     }
 
     #[test]
