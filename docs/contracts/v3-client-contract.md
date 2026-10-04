@@ -176,3 +176,17 @@ Same envelope as server frames, without `seq`: `{"v": 1, "type": "<type>", "payl
 ## Out of v3.0 (step D or later)
 
 Creating channels and DMs, threads (`thread_root_id`), read state and unread counts, cards and dialogs (`ask`), attachments and artifacts, message edit (`message.updated`), search, task and wiring management over v3 (v2 keeps serving the mini-app), agent create/update/delete, `thinking.delta` (the agent emits no thinking stream today).
+
+## v3.1 additions
+
+Agreed 2026-10-04 (daemon plan `docs/plans/completed/20261004-v3.1-voice-attachments.md`): the original of every voice message, played by the client through the daemon. Additive only; a v3.0 client that ignores unknown fields is unaffected.
+
+- Every message in `GET /surfaces/{id}/messages` and in `message.created` gains `attachments`, an empty list when there are none:
+
+  ```json
+  "attachments": [{"id": 1, "kind": "voice", "mime": "audio/ogg", "size_bytes": 1166097, "duration_ms": 294474}]
+  ```
+
+  `id` is an integer (int64) like every other v3 id; `kind` is `voice` in v3.1; `mime` is the stored object's type (`audio/ogg` for Telegram voice, `audio/mp4` for the watch); `duration_ms` is `null` when unknown, never `0`.
+- `GET /attachments/{id}` (bearer like every v3 route) streams the original: `200` with `Content-Type` = the attachment's `mime` and `Content-Length`; `Range: bytes=a-b` or `bytes=a-` answers `206` with `Content-Range: bytes a-b/<size>` and the range's length as `Content-Length`; `Accept-Ranges: bytes` on both. Any other range (several ranges, a suffix `bytes=-n`, a start past the end) answers `416` with `Content-Range: bytes */<size>`. Unknown id = `404 not_found`; the object missing from storage = `404 not_found` with message "attachment object missing"; storage unreachable = `503 unavailable`.
+- Capabilities: unchanged (`capabilities.ops` lists client frame types, not REST routes; a route's presence is its capability).

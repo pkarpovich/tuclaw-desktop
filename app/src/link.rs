@@ -114,15 +114,17 @@ fn voice(attachments: &[v3::Attachment]) -> Option<Voice> {
 }
 
 fn transcript(text: &str) -> &str {
-    let Some((header, rest)) = text.split_once('\n') else {
+    let trimmed = text.trim_start();
+    if !trimmed.starts_with(VOICE_HEADER) {
+        return text;
+    }
+    let Some((header, rest)) = trimmed.split_once(']') else {
         return text;
     };
-    let header = header.trim();
-    if header.starts_with(VOICE_HEADER) && header.ends_with(']') {
-        rest.trim_start()
-    } else {
-        text
+    if header.contains('\n') {
+        return text;
     }
+    rest.trim_start()
 }
 
 pub fn recording_id(recording: RecordingId) -> v3::AttachmentId {
@@ -371,6 +373,36 @@ mod tests {
         ));
         assert_eq!(forwarded.body, vec![Span::Text("Привет".into())]);
         assert_eq!(forwarded.voice.map(|voice| voice.duration), Some(None));
+    }
+
+    #[test]
+    fn the_v3_1_voice_fixtures_map_to_recordings_with_transcripts() {
+        let page: v3::MessagesPage = serde_json::from_str(include_str!(
+            "../../core/testdata/v3/messages_page_voice.json"
+        ))
+        .unwrap();
+        let mapped = message(&page.messages[0]);
+        assert_eq!(
+            mapped.voice.map(|voice| voice.mime),
+            Some("audio/ogg".to_string())
+        );
+        assert_eq!(
+            mapped.body,
+            vec![Span::Text(
+                "Лисички появились в магазине, что приготовить?".into()
+            )]
+        );
+        let v3::Frame::MessageCreated(created) = v3::decode(include_str!(
+            "../../core/testdata/v3/frames/message_created_voice.json"
+        ))
+        .unwrap() else {
+            panic!("expected message.created");
+        };
+        let mapped = message(&created.message);
+        assert_eq!(
+            mapped.voice.map(|voice| voice.recording),
+            Some(RecordingId(1))
+        );
     }
 
     #[test]
