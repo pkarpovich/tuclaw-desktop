@@ -162,6 +162,8 @@ The agent's run events pass through unchanged (same names and payloads as the ag
 
 Order guarantee (B2): for a user or a2a run with a visible answer, `message.created{run_id}` comes before that run's `run.finished`; a scheduled run's answer may come after.
 
+A finished run may have no answer message at all: a run the user interrupted, a delegated a2a handoff, an a2a turn answering `[SILENT]`, and a user or voice run whose answer is only `[SILENT]` (the agent already said what it had through posts). A `run.finished{is_error: false}` with no answer before it just closes the run; there is nothing to show.
+
 ### Ephemeral events (no `seq`, never replayed)
 
 - `text.delta {text}` - streamed answer text, coalesced per client on a 50 ms tick; only for focused surfaces.

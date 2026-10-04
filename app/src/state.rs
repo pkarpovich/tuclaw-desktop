@@ -989,7 +989,10 @@ impl AppState {
             Frame::Task(_) => self.apply_to_run(&frame),
             Frame::Status(_) => self.apply_to_run(&frame),
             Frame::RunReset(_) => self.apply_to_run(&frame),
-            Frame::RunFinished(_) => self.apply_to_run(&frame),
+            Frame::RunFinished(_) => {
+                let changed = self.apply_to_run(&frame);
+                self.close_quiet_run(&frame) || changed
+            }
             Frame::Unknown(_) => false,
         };
         if changed {
@@ -1017,6 +1020,20 @@ impl AppState {
             return false;
         };
         run.apply(frame) == Applied::Changed
+    }
+
+    fn close_quiet_run(&mut self, frame: &Frame) -> bool {
+        let Some(run_id) = frame.run_id() else {
+            return false;
+        };
+        let Some(run) = self.runs.get(run_id) else {
+            return false;
+        };
+        if run.state != RunState::Ok {
+            return false;
+        }
+        self.runs.remove(run_id);
+        true
     }
 
     fn message_created(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
@@ -1713,6 +1730,33 @@ mod tests {
             assert!(
                 state.live_runs().is_empty(),
                 "the answer replaces the live run"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn a_run_that_finishes_without_an_answer_closes_its_card(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        let tuclaw_core::v3::RunId(raw) = state.read_with(cx, |state, _cx| {
+            let live = state.live_runs();
+            live.first()
+                .and_then(|run| run.id.clone())
+                .expect("Magnet Feed has a live run")
+        });
+        let frame = serde_json::json!({
+            "v": 1, "seq": 1000000, "type": "run.finished", "surface_id": 2, "run_id": raw,
+            "at": "2026-10-04T11:25:00Z",
+            "payload": {"is_error": false, "terminal_reason": "success"}
+        });
+        let frame = tuclaw_core::v3::decode(&frame.to_string()).expect("a frame");
+        state.update(cx, |state, cx| state.apply(frame, cx));
+        state.read_with(cx, |state, _cx| {
+            assert!(
+                state.live_runs().is_empty(),
+                "a silent finish leaves nothing to show"
             );
         });
     }
