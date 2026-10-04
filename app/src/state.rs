@@ -1021,7 +1021,7 @@ impl AppState {
 
     fn message_created(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
         if let Some(run_id) = &message.run_id
-            && message.kind != v3::MessageKind::User
+            && ends_its_run(message.kind)
             && let Some(run) = self.runs.get(run_id)
             && run.state != RunState::Interrupted
         {
@@ -1097,6 +1097,17 @@ async fn waveform_for(
             .ok();
     }
     Some(waveform)
+}
+
+fn ends_its_run(kind: v3::MessageKind) -> bool {
+    match kind {
+        v3::MessageKind::Answer => true,
+        v3::MessageKind::Notice => true,
+        v3::MessageKind::Post => false,
+        v3::MessageKind::A2a => false,
+        v3::MessageKind::User => false,
+        v3::MessageKind::Unknown => false,
+    }
 }
 
 fn jitter() -> f64 {
@@ -1653,6 +1664,56 @@ mod tests {
         });
         state.read_with(cx, |state, _cx| {
             assert!(!state.is_open(Disclosure::Log(MessageId(2)), true));
+        });
+    }
+
+    #[gpui::test]
+    fn a_post_during_a_run_keeps_the_live_run(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        let run = state.read_with(cx, |state, _cx| {
+            let live = state.live_runs();
+            let run = live.first().expect("Magnet Feed has a live run");
+            run.id.clone().expect("the live run has an id")
+        });
+        let tuclaw_core::v3::RunId(raw) = run.clone();
+        let created = |id: i64, kind: &str| {
+            let frame = serde_json::json!({
+                "v": 1, "seq": 900 + id, "type": "message.created", "surface_id": 2, "run_id": raw,
+                "at": "2026-10-04T11:15:00Z",
+                "payload": {"message": {
+                    "id": id, "surface_id": 2, "kind": kind,
+                    "author": {"kind": "agent", "agent_id": 3},
+                    "text": "Читаю вопросы, это займёт несколько минут.", "run_id": raw,
+                    "created_at": "2026-10-04T11:15:00Z"
+                }}
+            });
+            tuclaw_core::v3::decode(&frame.to_string()).expect("a frame")
+        };
+        state.update(cx, |state, cx| state.apply(created(9298, "post"), cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.live_runs().len(),
+                1,
+                "a send_message post leaves the run live"
+            );
+            assert!(
+                state
+                    .messages()
+                    .iter()
+                    .any(|message| message.id == MessageId(9298))
+            );
+        });
+        state.update(cx, |state, cx| state.apply(created(9299, "a2a"), cx));
+        state.read_with(cx, |state, _cx| assert_eq!(state.live_runs().len(), 1));
+        state.update(cx, |state, cx| state.apply(created(9300, "answer"), cx));
+        state.read_with(cx, |state, _cx| {
+            assert!(
+                state.live_runs().is_empty(),
+                "the answer replaces the live run"
+            );
         });
     }
 }
