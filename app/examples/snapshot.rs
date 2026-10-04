@@ -82,7 +82,7 @@ fn main() {
                 width: px(1280.),
                 height: px(height),
             },
-            move |_window, cx| cx.new(|cx| Shell::new(built, cx)),
+            move |window, cx| cx.new(|cx| Shell::new(built, window, cx)),
         )
         .expect("the window opens");
     cx.run_until_parked();

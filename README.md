@@ -21,7 +21,7 @@ shown in UTC, not in the local zone.
 | Path | What it is |
 |---|---|
 | `core/` | `tuclaw-core`: the domain types the views render, day grouping, and `v3`, the client of the daemon's `/api/v3`. No `gpui` dependency, so it is testable without a window. |
-| `app/` | `tuclaw-desktop`: the binary — state, views, the text input element, the theme. |
+| `app/` | `tuclaw-desktop`: a library (state, views, the theme) and a thin binary. |
 | `docs/design/` | The designer's mockup and five screenshots of it. Look here before touching a view. |
 | `docs/contracts/` | `v3-client-contract.md`, the wire contract with the daemon, a copy of tuclaw's. |
 | `docs/plans/completed/` | The implementation plans this repository was built from, archived complete. |

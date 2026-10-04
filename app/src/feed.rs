@@ -63,33 +63,37 @@ struct Busy {
 }
 
 impl Feed {
-    pub fn new(state: Entity<AppState>, cx: &mut Context<Self>) -> Feed {
+    pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Feed {
         let observation = cx.observe(&state, |_feed, _state, cx| cx.notify());
-        let events = cx.subscribe(&state, |feed, _state, event: &StateEvent, cx| match event {
-            StateEvent::SelectionChanged => {
-                feed.resync(Resync::Reset, cx);
-                feed.refresh_placeholder(cx);
-            }
-            StateEvent::MessagesLoaded => {
-                feed.resync(Resync::Reset, cx);
-                feed.list.scroll_to_end();
-            }
-            StateEvent::MessageAppended => {
-                feed.resync(Resync::Reset, cx);
-                feed.list.scroll_to_end();
-            }
-            StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
-            StateEvent::FoldToggled => {
-                feed.list.remeasure();
-                cx.notify();
-            }
-            StateEvent::OlderLoaded => feed.keep_position(cx),
-            StateEvent::SendFailed(text) => {
-                let text = text.clone();
-                feed.composer
-                    .update(cx, |composer, cx| composer.restore(text, cx));
-            }
-        });
+        let events = cx.subscribe_in(
+            &state,
+            window,
+            |feed, _state, event: &StateEvent, window, cx| match event {
+                StateEvent::SelectionChanged => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.refresh_placeholder(window, cx);
+                }
+                StateEvent::MessagesLoaded => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.list.scroll_to_end();
+                }
+                StateEvent::MessageAppended => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.list.scroll_to_end();
+                }
+                StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
+                StateEvent::FoldToggled => {
+                    feed.list.remeasure();
+                    cx.notify();
+                }
+                StateEvent::OlderLoaded => feed.keep_position(cx),
+                StateEvent::SendFailed(text) => {
+                    let text = text.clone();
+                    feed.composer
+                        .update(cx, |composer, cx| composer.restore(text, window, cx));
+                }
+            },
+        );
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
         list.set_follow_mode(FollowMode::Tail);
@@ -113,6 +117,7 @@ impl Feed {
             Composer::new(
                 placeholder,
                 Box::new(move |body, cx| sender.update(cx, |state, cx| state.send(body, cx))),
+                window,
                 cx,
             )
         });
@@ -127,10 +132,11 @@ impl Feed {
         }
     }
 
-    fn refresh_placeholder(&mut self, cx: &mut Context<Self>) {
+    fn refresh_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let placeholder = placeholder(self.state.read(cx));
-        self.composer
-            .update(cx, |composer, cx| composer.set_placeholder(placeholder, cx));
+        self.composer.update(cx, |composer, cx| {
+            composer.set_placeholder(placeholder, window, cx)
+        });
     }
 
     fn keep_position(&mut self, cx: &mut Context<Self>) {
@@ -685,7 +691,7 @@ mod tests {
     ) {
         let (mock, state) = loaded(cx);
         let built = state.clone();
-        let (feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         (mock, state, feed, cx)
     }
 
@@ -946,7 +952,7 @@ mod tests {
     fn a_thinking_fold_starts_collapsed_and_toggles(cx: &mut TestAppContext) {
         let (_mock, state) = crate::testing::seeded(cx, folded_world());
         let built = state.clone();
-        let (_feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        let (_feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         cx.run_until_parked();
         assert!(
             cx.debug_bounds("message-7").is_some(),
@@ -994,7 +1000,7 @@ mod tests {
     fn the_play_button_plays_the_original_recording(cx: &mut TestAppContext) {
         let (_mock, state) = crate::testing::seeded(cx, spoken_world());
         let built = state.clone();
-        let (_feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        let (_feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         cx.run_until_parked();
         let button = cx
             .debug_bounds("voice-8")
@@ -1032,7 +1038,7 @@ mod tests {
     fn loading_older_messages_keeps_the_visible_message_in_place(cx: &mut TestAppContext) {
         let (_mock, state) = crate::testing::seeded(cx, crate::testing::long_world(120));
         let built = state.clone();
-        let (feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         cx.run_until_parked();
         let anchored = tuclaw_core::model::MessageId(75);
         feed.update(cx, |feed, _cx| {

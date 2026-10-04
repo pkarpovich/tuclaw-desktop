@@ -37,12 +37,12 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn new(state: Entity<AppState>, cx: &mut Context<Self>) -> Shell {
+    pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Shell {
         let observation = cx.observe(&state, |_shell, _state, cx| cx.notify());
         let built = state.clone();
         let sidebar = cx.new(|cx| Sidebar::new(built, cx));
         let built = state.clone();
-        let feed = cx.new(|cx| Feed::new(built, cx));
+        let feed = cx.new(|cx| Feed::new(built, window, cx));
         let built = state.clone();
         let agents = cx.new(|cx| AgentsView::new(built, cx));
         Shell {
@@ -339,7 +339,7 @@ mod tests {
     fn shell(cx: &mut TestAppContext) -> (Entity<AppState>, &mut VisualTestContext) {
         let (_mock, state) = loaded(cx);
         let built = state.clone();
-        let (_shell, cx) = cx.add_window_view(move |_window, cx| Shell::new(built, cx));
+        let (_shell, cx) = cx.add_window_view(move |window, cx| Shell::new(built, window, cx));
         (state, cx)
     }
 

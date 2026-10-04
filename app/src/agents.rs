@@ -219,7 +219,6 @@ mod tests {
     use tuclaw_core::model::{Agent, AgentId, AgentStatus};
 
     use super::{AgentCard, AgentsView, Status, agent_cards};
-    use crate::input::bind_keys;
     use crate::shell::Shell;
     use crate::state::{Segment, View};
     use crate::testing::loaded;
@@ -331,11 +330,10 @@ mod tests {
 
     #[gpui::test]
     fn a_channel_row_leaves_the_agents_view(cx: &mut TestAppContext) {
-        cx.update(bind_keys);
         let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_shell, cx): (Entity<Shell>, &mut VisualTestContext) =
-            cx.add_window_view(move |_window, cx| Shell::new(built, cx));
+            cx.add_window_view(move |window, cx| Shell::new(built, window, cx));
         let agents = cx
             .debug_bounds("sidebar-agents")
             .expect("the agents row is drawn");

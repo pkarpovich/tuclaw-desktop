@@ -1,13 +1,15 @@
 use anyhow::Result;
 use gpui::{
-    App, BoxShadow, Context, Div, Entity, FocusHandle, FontWeight, IntoElement, Render,
+    App, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement, Render,
     SharedString, Subscription, Window, div, prelude::*, px,
 };
+use gpui_kit::base::input::{Enter, Textarea, TextareaState};
 
-use crate::input::{Submitted, TextInput};
 use crate::theme;
 
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
+
+const MAX_ROWS: usize = 10;
 
 enum Sendable {
     Blank,
@@ -15,63 +17,83 @@ enum Sendable {
 }
 
 pub struct Composer {
-    input: Entity<TextInput>,
+    input: Entity<TextareaState>,
     on_submit: OnSubmit,
     _observation: Subscription,
-    _submissions: Subscription,
 }
 
 impl Composer {
     pub fn new(
         placeholder: impl Into<SharedString>,
         on_submit: OnSubmit,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Composer {
-        let input = cx.new(|cx| TextInput::new(placeholder, "input-feed", cx));
-        let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
-        let submissions = cx.subscribe(&input, |composer, _input, _event: &Submitted, cx| {
-            composer.submit(cx);
+        let placeholder = placeholder.into();
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, MAX_ROWS)
+                .submit_on_enter(true)
+                .placeholder(placeholder)
         });
+        let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
         Composer {
             input,
             on_submit,
             _observation: observation,
-            _submissions: submissions,
         }
     }
 
     pub fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.input.read(cx).focus_handle().clone()
+        self.input.read(cx).focus_handle(cx)
     }
 
     pub fn set_placeholder(
         &mut self,
         placeholder: impl Into<SharedString>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.input
-            .update(cx, |input, cx| input.set_placeholder(placeholder, cx));
+        self.input.update(cx, |input, cx| {
+            input.set_placeholder(placeholder, window, cx)
+        });
     }
 
     #[cfg(test)]
-    pub fn text<'a>(&self, cx: &'a App) -> &'a str {
-        self.input.read(cx).text()
+    pub fn text(&self, cx: &App) -> String {
+        self.input.read(cx).value().to_string()
     }
 
-    pub fn restore(&mut self, text: String, cx: &mut Context<Self>) {
-        self.input.update(cx, |input, cx| input.set_text(text, cx));
+    pub fn restore(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.input.update(cx, |input, cx| {
+            input.set_value(text, window, cx);
+            let end = input.value().len();
+            input.set_selected_range(end..end, cx);
+        });
     }
 
-    fn submit(&mut self, cx: &mut Context<Self>) {
-        let input = self.input.read(cx);
-        if input.is_blank() {
+    fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        let Enter {
+            secondary: _,
+            shift,
+        } = action;
+        if *shift {
+            cx.propagate();
             return;
         }
-        let body = input.text().to_string();
+        self.submit(window, cx);
+    }
+
+    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let body = self.input.read(cx).value().to_string();
+        if body.trim().is_empty() {
+            return;
+        }
         let Ok(()) = (self.on_submit)(body, cx) else {
             return;
         };
-        self.input.update(cx, |input, cx| input.clear(cx));
+        self.input
+            .update(cx, |input, cx| input.set_value("", window, cx));
     }
 
     fn send_button(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
@@ -101,7 +123,7 @@ impl Composer {
                         .blur_radius(px(8.))
                         .spread_radius(px(-3.)),
                 ])
-                .on_click(cx.listener(|composer, _event, _window, cx| composer.submit(cx))),
+                .on_click(cx.listener(|composer, _event, window, cx| composer.submit(window, cx))),
         }
     }
 
@@ -134,7 +156,15 @@ impl Composer {
                             .min_w(px(0.))
                             .text_size(px(14.5))
                             .line_height(px(21.))
-                            .child(self.input.clone()),
+                            .child(
+                                div()
+                                    .id("input-feed")
+                                    .debug_selector(|| "input-feed".to_string())
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .on_action(cx.listener(Self::enter))
+                                    .child(Textarea::new(&self.input)),
+                            ),
                     )
                     .child(
                         div()
@@ -159,7 +189,7 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sendable = if self.input.read(cx).is_blank() {
+        let sendable = if self.input.read(cx).value().trim().is_empty() {
             Sendable::Blank
         } else {
             Sendable::Ready
@@ -269,7 +299,6 @@ mod tests {
     use tuclaw_core::model::Span;
 
     use super::{Composer, OnSubmit};
-    use crate::input::bind_keys;
     use crate::state::AppState;
     use crate::testing::loaded;
 
@@ -277,8 +306,10 @@ mod tests {
         cx: &mut TestAppContext,
         on_submit: OnSubmit,
     ) -> (Entity<Composer>, &mut VisualTestContext) {
-        cx.update(bind_keys);
-        cx.add_window_view(move |_window, cx| Composer::new("Message #General", on_submit, cx))
+        cx.update(gpui_kit::init);
+        cx.add_window_view(move |window, cx| {
+            Composer::new("Message #General", on_submit, window, cx)
+        })
     }
 
     fn sending(
@@ -302,9 +333,7 @@ mod tests {
     }
 
     fn typed(composer: &Entity<Composer>, cx: &mut VisualTestContext) -> String {
-        composer.read_with(cx, |composer, cx| {
-            composer.input.read(cx).text().to_string()
-        })
+        composer.read_with(cx, |composer, cx| composer.text(cx))
     }
 
     #[gpui::test]
@@ -378,12 +407,36 @@ mod tests {
     #[gpui::test]
     fn restore_puts_a_failed_body_back(cx: &mut TestAppContext) {
         let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
-        composer.update(cx, |composer, cx| {
-            composer.restore("Лисички 🍄".to_string(), cx)
+        composer.update_in(cx, |composer, window, cx| {
+            composer.restore("Лисички 🍄".to_string(), window, cx)
         });
         assert_eq!(typed(&composer, cx), "Лисички 🍄");
         focus(&composer, cx);
         cx.simulate_input("!");
         assert_eq!(typed(&composer, cx), "Лисички 🍄!");
+    }
+
+    #[gpui::test]
+    fn pasting_inserts_the_clipboard_text(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        focus(&composer, cx);
+        cx.simulate_input("ask ");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+            "лисички со сливками\nи луком".to_string(),
+        ));
+        cx.simulate_keystrokes("cmd-v");
+        assert_eq!(typed(&composer, cx), "ask лисички со сливками\nи луком");
+    }
+
+    #[gpui::test]
+    fn select_all_then_typing_replaces_the_text(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        focus(&composer, cx);
+        cx.simulate_input("draft one");
+        cx.simulate_keystrokes("cmd-a");
+        cx.simulate_input("final");
+        assert_eq!(typed(&composer, cx), "final");
+        cx.simulate_keystrokes("shift-left shift-left backspace");
+        assert_eq!(typed(&composer, cx), "fin");
     }
 }
