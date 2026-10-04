@@ -1,8 +1,3 @@
-# v3 client contract (step C)
-
-Frozen 2026-10-03 between the C1 (daemon, repo tuclaw) and C2 (desktop, this repo) authors; a verbatim copy of tuclaw's `docs/plans/20261003-v3-client-contract.md`. The two copies are kept identical. Decisions here need both authors' agreement; anything we cannot agree on goes to Pavel as an open question. Both plans cite this file as the single source; the C2 mock speaks exactly this contract.
-
-Source: tuclaw's `docs/plans/20261002-v2-architecture-proposal.md` S4, cut down to step C (rollout row C: `/api/v3` + event socket + bearer auth, the desktop goes online, Pavel's acceptance scenario lands). Everything S4 lists that needs step D machinery (new channels and DMs, threads, cards, dialogs, attachments, read state) is out of v3.0 and listed at the end.
 
 Acceptance scenario this contract must carry: a conversation in an existing Telegram topic, from the desktop, without Telegram limits - plain Markdown in and out, real token streaming, the run visible step by step (text segments, tool calls with input and result, background tasks), the final answer without the `<details>Thinking` fold. A desktop message is not echoed to Telegram; the agent's answer is mirrored there as today.
 
@@ -279,3 +274,16 @@ Agreed 2026-10-04 with the desktop (its Talk button records a voice message).
 - A failed or empty transcription = `502` with the code `transcription_failed` and no message stored. A retry with the same id transcribes again, while a retry after a `202` answers with the first ids.
 - An empty body = `400`. A body over 20 MiB = `413` with the code `too_large`. The duration cap (10 minutes) belongs to the client.
 - An unknown surface = `404`.
+
+## v3.6 additions: read state
+
+Agreed 2026-10-05 with the desktop; Pavel chose an unread badge per surface plus a "new" divider in the feed. Only the desktop moves the cursor: Telegram keeps its own unread state, and nothing read or posted there counts.
+
+- `GET /surfaces` gains two fields:
+  - `last_read_message_id`: the surface's read cursor, `null` before anything was read. The migration starts every existing surface at its newest message.
+  - `unread`: the count of messages past the cursor that the user did not write. Scheduler prompts never count; fire marks are not messages and never count. Answers, posts, a2a messages and notices do.
+- `POST /surfaces/{id}/read` `{"message_id": 9192}` moves the cursor forward only (it keeps the larger of the two) and answers `200 {"last_read_message_id", "unread"}`.
+  - A `message_id` that is missing, not positive, or not a message of this surface = `400`. An unknown surface = `404`.
+  - Posting does not move the cursor; the client sends `read` itself.
+- Every accepted read, including one that did not move the cursor, records a persisted `surface.read` event. It goes out as a frame (`surface_id` in the envelope, `run_id` null, payload `{last_read_message_id, unread}`), so every open client converges on the same badge.
+- Between reads, a client counts new messages itself from `message.created`: one per message not written by the user past its cursor, on a surface it is not showing.
