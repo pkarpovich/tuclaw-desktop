@@ -239,6 +239,7 @@ mod tests {
             client_message_id: None,
             created_at: at,
             run_summary: None,
+            attachments: Vec::new(),
         };
         assert_eq!(
             message(&make(v3::AuthorKind::User, None)).author,

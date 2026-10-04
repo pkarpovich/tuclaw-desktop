@@ -205,24 +205,52 @@ def messages(db, summaries):
     return result
 
 
+def attachments(directory):
+    manifest = directory / "attachments.json"
+    if not manifest.is_file():
+        return {}, []
+    by_message = {}
+    media = []
+    for entry in json.loads(manifest.read_text()):
+        files = sorted(directory.glob(f"{entry['id']}.*"))
+        if not files:
+            continue
+        by_message.setdefault(entry["message_id"], []).append(
+            {
+                "id": entry["id"],
+                "kind": entry["kind"],
+                "mime": entry["mime"],
+                "size_bytes": entry["size_bytes"],
+                "duration_ms": entry.get("duration_ms"),
+            }
+        )
+        media.append({"id": entry["id"], "path": str(files[0])})
+    return by_message, media
+
+
 def main():
     source = Path(sys.argv[1]) if len(sys.argv) > 1 else SUPPORT / "snapshot.db"
     target = Path(sys.argv[2]) if len(sys.argv) > 2 else SUPPORT / "world.json"
     db = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     db.row_factory = sqlite3.Row
     run_list, summaries = runs(db)
+    attached, media = attachments(SUPPORT / "attachments")
+    message_list = messages(db, summaries)
+    for message in message_list:
+        message["attachments"] = attached.get(message["id"], [])
     world = {
         "surfaces": surfaces(db),
         "agents": agents(db),
-        "messages": messages(db, summaries),
+        "messages": message_list,
         "runs": run_list,
+        "media": media,
     }
     descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w") as handle:
         json.dump(world, handle, ensure_ascii=False)
     print(
         f"{target}: {len(world['surfaces'])} surfaces, {len(world['agents'])} agents, "
-        f"{len(world['messages'])} messages, {len(world['runs'])} runs"
+        f"{len(world['messages'])} messages, {len(world['runs'])} runs, {len(media)} attachments"
     )
 
 

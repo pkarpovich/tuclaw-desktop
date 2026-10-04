@@ -7,6 +7,7 @@
 //! [`Pace::Realtime`] a task on the `core` runtime plays the queue with real delays.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 
@@ -21,10 +22,11 @@ use time::{Duration as TimeDuration, OffsetDateTime};
 use uuid::Uuid;
 
 use super::dto::{
-    Agent, AgentId, AgentRun, AgentState, Author, AuthorKind, Binding, Channel, ClientMessageId,
-    ContextUsage, InputId, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted,
-    Role, RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface,
-    SurfaceId, SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring,
+    Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
+    AuthorKind, Binding, Channel, ClientMessageId, ContextUsage, InputId, Message, MessageId,
+    MessageKind, MessagesPage, Mirror, Post, Posted, Role, RowKind, RunDetail, RunId, RunRow,
+    RunStatus, RunSummary, Seq, StepRow, Surface, SurfaceId, SurfaceKind, SurfaceRun, ToolUseId,
+    Usage, Wiring,
 };
 use super::frames::{
     Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished, RunSnapshot,
@@ -60,6 +62,26 @@ pub struct Seed {
     /// The runs `GET /runs/{id}` answers, finished ones included.
     #[serde(default)]
     pub runs: Vec<RunDetail>,
+    /// Where the bytes of each attachment live, for `GET /attachments/{id}`.
+    #[serde(default)]
+    pub media: Vec<SeedMedia>,
+}
+
+/// A local file serving one attachment of a [`Seed`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SeedMedia {
+    /// The attachment.
+    pub id: AttachmentId,
+    /// The file holding its bytes.
+    pub path: PathBuf,
+}
+
+const TONE: &[u8] = include_bytes!("../../testdata/v3/media/tone.ogg");
+
+#[derive(Debug, Clone)]
+enum Media {
+    Embedded(&'static [u8]),
+    File(PathBuf),
 }
 
 /// How the mock plays its queued frames.
@@ -171,6 +193,7 @@ struct World {
     queue: VecDeque<Script>,
     subscribers: Vec<Subscriber>,
     posted: HashMap<ClientMessageId, Posted>,
+    media: HashMap<AttachmentId, Media>,
     next_message: i64,
     next_input: i64,
 }
@@ -374,6 +397,11 @@ impl Transport for MockTransport {
         ready(answer).boxed()
     }
 
+    fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>> {
+        let answer = self.lock().fetch(path);
+        ready(answer).boxed()
+    }
+
     fn connect(&self, since: Option<Seq>) -> BoxFuture<'static, Result<Connection, ApiError>> {
         let connection = self.lock().connect(since);
         ready(Ok(connection)).boxed()
@@ -507,11 +535,13 @@ impl World {
             queue: VecDeque::new(),
             subscribers: Vec::new(),
             posted: HashMap::new(),
+            media: HashMap::new(),
             next_message: 9000,
             next_input: 40,
         };
         world.seed_messages(base);
         world.seed_live_run();
+        world.seed_voice(base);
         world
     }
 
@@ -521,7 +551,12 @@ impl World {
             agents,
             messages,
             runs,
+            media: files,
         } = seed;
+        let mut media = HashMap::new();
+        for SeedMedia { id, path } in files {
+            media.insert(id, Media::File(path));
+        }
         let mut next_message = 0;
         let mut now = datetime!(2026-10-03 00:00 UTC);
         for message in &messages {
@@ -584,6 +619,7 @@ impl World {
             queue: VecDeque::new(),
             subscribers: Vec::new(),
             posted: HashMap::new(),
+            media,
             next_message,
             next_input: 1,
         }
@@ -638,6 +674,7 @@ impl World {
             client_message_id: None,
             created_at: at,
             run_summary: None,
+            attachments: Vec::new(),
         }
     }
 
@@ -702,6 +739,7 @@ impl World {
                 tool_count: 0,
                 duration_ms: 9000,
             }),
+            attachments: Vec::new(),
         }
     }
 
@@ -723,6 +761,7 @@ impl World {
             client_message_id: None,
             created_at: at,
             run_summary: None,
+            attachments: Vec::new(),
         }
     }
 
@@ -745,6 +784,7 @@ impl World {
                 client_message_id: None,
                 created_at: at,
                 run_summary: None,
+                attachments: Vec::new(),
             };
         }
         Message {
@@ -764,7 +804,39 @@ impl World {
             client_message_id: None,
             created_at: at,
             run_summary: None,
+            attachments: Vec::new(),
         }
+    }
+
+    fn seed_voice(&mut self, base: OffsetDateTime) {
+        let id = AttachmentId(1);
+        self.media.insert(id, Media::Embedded(TONE));
+        let message = Message {
+            id: self.next_message(),
+            surface_id: SurfaceId(2),
+            kind: MessageKind::User,
+            author: Author {
+                kind: AuthorKind::User,
+                agent_id: None,
+            },
+            addressed_agent_id: None,
+            reply_to_message_id: None,
+            text: "[Voice message]\nЧто вышло за неделю из сериалов?".into(),
+            run_id: None,
+            origin: "user".into(),
+            channel: Some(Channel::Telegram),
+            client_message_id: None,
+            created_at: base + TimeDuration::hours(6),
+            run_summary: None,
+            attachments: vec![Attachment {
+                id,
+                kind: AttachmentKind::Voice,
+                mime: "audio/ogg".into(),
+                size_bytes: u64::try_from(TONE.len()).unwrap_or(u64::MAX),
+                duration_ms: Some(3006),
+            }],
+        };
+        self.messages.push(message);
     }
 
     fn seed_live_run(&mut self) {
@@ -854,6 +926,7 @@ impl World {
             client_message_id: client,
             created_at: self.now,
             run_summary: None,
+            attachments: Vec::new(),
         };
         self.messages.push(message.clone());
         message
@@ -915,6 +988,27 @@ impl World {
                 to_json(&self.detail(index))
             }
             [..] => Err(ApiError::NotFound),
+        }
+    }
+
+    fn fetch(&mut self, path: &str) -> Result<Vec<u8>, ApiError> {
+        if self.unavailable() {
+            return Err(ApiError::Unavailable);
+        }
+        let segments = segments(path);
+        let ["attachments", id] = segments.as_slice() else {
+            return Err(ApiError::NotFound);
+        };
+        let Ok(id) = id.parse::<i64>() else {
+            return Err(ApiError::NotFound);
+        };
+        let Some(media) = self.media.get(&AttachmentId(id)) else {
+            return Err(ApiError::NotFound);
+        };
+        match media {
+            Media::Embedded(bytes) => Ok(bytes.to_vec()),
+            Media::File(path) => std::fs::read(path)
+                .map_err(|error| ApiError::Transport(format!("{}: {error}", path.display()))),
         }
     }
 
@@ -1523,6 +1617,7 @@ impl World {
                 client_message_id: None,
                 created_at: self.now,
                 run_summary: Some(summary),
+                attachments: Vec::new(),
             };
             self.messages.push(message.clone());
             self.persist(
@@ -1798,7 +1893,7 @@ mod tests {
                 .messages
                 .len();
         }
-        assert_eq!(total, 60);
+        assert_eq!(total, 61);
         let live = surfaces[1].live_run.clone().expect("a live run");
         let detail = block_on(client.run(&live.run_id)).expect("the live run");
         assert_eq!(detail.run.status, RunStatus::Running);
@@ -2080,6 +2175,54 @@ mod tests {
     }
 
     #[test]
+    fn the_built_in_voice_message_serves_its_recording() {
+        let (_mock, client) = stepped();
+        let page = block_on(client.messages(SurfaceId(2), 50)).expect("page");
+        let mut voice = None;
+        for message in &page.messages {
+            if let Some(attachment) = message.attachments.first() {
+                voice = Some(attachment.clone());
+            }
+        }
+        let voice = voice.expect("Magnet Feed carries a voice message");
+        assert_eq!(voice.kind, AttachmentKind::Voice);
+        assert_eq!(voice.mime, "audio/ogg");
+        let bytes = block_on(client.attachment(voice.id)).expect("the recording");
+        assert_eq!(u64::try_from(bytes.len()).ok(), Some(voice.size_bytes));
+        assert!(bytes.starts_with(b"OggS"));
+        assert_eq!(
+            block_on(client.attachment(AttachmentId(99))),
+            Err(ApiError::NotFound)
+        );
+    }
+
+    #[test]
+    fn a_seeded_attachment_is_read_from_its_file() {
+        let path = std::env::temp_dir().join(format!("tuclaw-media-{}.bin", std::process::id()));
+        std::fs::write(&path, b"voice bytes").expect("written");
+        let seed = Seed {
+            surfaces: Vec::new(),
+            agents: Vec::new(),
+            messages: Vec::new(),
+            runs: Vec::new(),
+            media: vec![SeedMedia {
+                id: AttachmentId(7),
+                path: path.clone(),
+            }],
+        };
+        let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        assert_eq!(
+            block_on(client.attachment(AttachmentId(7))),
+            Ok(b"voice bytes".to_vec())
+        );
+        std::fs::remove_file(&path).expect("removed");
+        let Err(ApiError::Transport(_)) = block_on(client.attachment(AttachmentId(7))) else {
+            panic!("a missing file is a transport error");
+        };
+    }
+
+    #[test]
     fn fail_next_call_fails_exactly_one_call() {
         let (mock, client) = stepped();
         mock.fail_next_call();
@@ -2102,6 +2245,7 @@ mod tests {
             agents,
             messages: page.messages,
             runs: vec![detail.clone()],
+            media: Vec::new(),
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);

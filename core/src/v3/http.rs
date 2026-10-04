@@ -125,6 +125,14 @@ impl Transport for HttpTransport {
         )
     }
 
+    fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>> {
+        let request = self.authorized(self.client.get(format!("{}{path}", self.api)));
+        spawn(
+            &self.handle,
+            async move { bytes(request.send().await).await },
+        )
+    }
+
     fn post(&self, path: &str, body: Option<Value>) -> BoxFuture<'static, Result<Value, ApiError>> {
         let request = self.authorized(self.client.post(format!("{}{path}", self.api)));
         let request = match body {
@@ -177,6 +185,16 @@ async fn answer(sent: reqwest::Result<Response>) -> Result<Value, ApiError> {
         return Ok(Value::Null);
     }
     serde_json::from_slice(&body).map_err(|error| ApiError::Decode(error.to_string()))
+}
+
+async fn bytes(sent: reqwest::Result<Response>) -> Result<Vec<u8>, ApiError> {
+    let response = sent.map_err(request_error)?;
+    let status = response.status();
+    let body = response.bytes().await.map_err(request_error)?;
+    if !status.is_success() {
+        return Err(ApiError::from_status(status.as_u16(), &body));
+    }
+    Ok(body.to_vec())
 }
 
 fn request_error(error: reqwest::Error) -> ApiError {
@@ -410,6 +428,27 @@ mod tests {
         assert_eq!(
             sent,
             json!({"text": "Лисички?", "addressed_agent_id": 3, "client_message_id": "8b0c"})
+        );
+    }
+
+    #[test]
+    fn attachments_are_fetched_raw_with_the_bearer() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "GET",
+            "/api/v3/attachments/5",
+            json_reply(200, "OggS-bytes"),
+        );
+        let bytes = within(client(&daemon).attachment(crate::v3::dto::AttachmentId(5)))
+            .expect("the attachment");
+        assert_eq!(bytes, b"OggS-bytes".to_vec());
+        assert_eq!(
+            daemon.requests()[0].authorization.as_deref(),
+            Some("Bearer s3cret")
+        );
+        assert_eq!(
+            within(client(&daemon).attachment(crate::v3::dto::AttachmentId(6))),
+            Err(ApiError::NotFound)
         );
     }
 

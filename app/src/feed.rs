@@ -817,6 +817,7 @@ mod tests {
             agents,
             messages: vec![serde_json::from_value(message).expect("message")],
             runs: Vec::new(),
+            media: Vec::new(),
         }
     }
 

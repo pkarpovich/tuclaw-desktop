@@ -12,6 +12,8 @@ gpui_platform.workspace = true
 gpui-kit.workspace = true
 time = { workspace = true }
 tuclaw-core = { path = "../core" }
+opus-pure = "0.2.2"
+rodio = { version = "0.22.2", default-features = false, features = ["playback", "mp4"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

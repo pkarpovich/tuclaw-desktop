@@ -113,6 +113,20 @@ impl ClientMessageId {
     }
 }
 
+/// Identifies an attachment of a message (v3.1 draft).
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::AttachmentId;
+///
+/// let id: AttachmentId = serde_json::from_str("5").unwrap();
+/// assert_eq!(id, AttachmentId(5));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AttachmentId(pub i64);
+
 /// Positions a persisted event in the daemon's event log.
 ///
 /// # Examples
@@ -384,6 +398,45 @@ pub struct RunSummary {
     pub duration_ms: u64,
 }
 
+/// What an attachment holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachmentKind {
+    /// A voice recording the message's text transcribes.
+    Voice,
+    /// A value this build does not know.
+    #[serde(other)]
+    Unknown,
+}
+
+/// A file attached to a message, fetched through `GET /attachments/{id}` (v3.1 draft).
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::{Attachment, AttachmentKind};
+///
+/// let json = r#"{"id": 5, "kind": "voice", "mime": "audio/ogg", "size_bytes": 1200, "duration_ms": 3000}"#;
+/// let attachment: Attachment = serde_json::from_str(json).unwrap();
+/// assert_eq!(attachment.kind, AttachmentKind::Voice);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attachment {
+    /// The attachment's identifier.
+    pub id: AttachmentId,
+    /// What it holds.
+    pub kind: AttachmentKind,
+    /// Its media type, e.g. `audio/ogg` or `audio/mp4`.
+    #[serde(default)]
+    pub mime: String,
+    /// Its size.
+    #[serde(default)]
+    pub size_bytes: u64,
+    /// Its length, when known.
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
+}
+
 /// One message of a surface.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
@@ -422,6 +475,9 @@ pub struct Message {
     /// The counts of its run.
     #[serde(default)]
     pub run_summary: Option<RunSummary>,
+    /// Its attachments (v3.1 draft); empty when it has none.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 
 /// One page of `GET /surfaces/{id}/messages`, oldest first.

@@ -6,7 +6,9 @@ use futures::future::ready;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use super::dto::{Agent, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId};
+use super::dto::{
+    Agent, AttachmentId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId,
+};
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
 use super::transport::{ApiError, Connection, Transport};
@@ -118,6 +120,15 @@ impl Client {
             request.await?;
             Ok(())
         }
+    }
+
+    /// Fetches an attachment's bytes (v3.1 draft).
+    pub fn attachment(
+        &self,
+        attachment: AttachmentId,
+    ) -> impl Future<Output = Result<Vec<u8>, ApiError>> + Send + 'static {
+        let AttachmentId(attachment) = attachment;
+        self.transport.fetch(&format!("/attachments/{attachment}"))
     }
 
     /// Opens the event socket, replaying after `since` when given.

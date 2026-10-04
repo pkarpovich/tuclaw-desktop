@@ -114,6 +114,9 @@ pub trait Transport: Send + Sync {
     /// Sends `POST /api/v3{path}` with an optional JSON body and returns the JSON answer.
     fn post(&self, path: &str, body: Option<Value>) -> BoxFuture<'static, Result<Value, ApiError>>;
 
+    /// Sends `GET /api/v3{path}` and returns the raw body, for media.
+    fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>>;
+
     /// Opens the event socket, replaying after `since` when given.
     fn connect(&self, since: Option<Seq>) -> BoxFuture<'static, Result<Connection, ApiError>>;
 }
