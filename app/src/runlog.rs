@@ -37,6 +37,7 @@ impl Owner {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Disclosure {
     Log(MessageId),
+    Inspect(MessageId),
     Group(Owner, i64),
     Step(Owner, i64),
     FullResult(Owner, i64),
@@ -664,6 +665,7 @@ pub struct ToolView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowView {
     Thought {
+        seq: i64,
         text: String,
         first: bool,
     },
@@ -678,13 +680,27 @@ pub enum RowView {
         calls: Vec<ToolView>,
     },
     Task {
+        seq: i64,
         kind: String,
         description: String,
         state: TaskState,
     },
     Status {
+        seq: i64,
         text: String,
     },
+}
+
+impl RowView {
+    pub fn seq(&self) -> i64 {
+        match self {
+            RowView::Thought { seq, .. } => *seq,
+            RowView::Tool(view) => view.call.seq,
+            RowView::Group { seq, .. } => *seq,
+            RowView::Task { seq, .. } => *seq,
+            RowView::Status { seq, .. } => *seq,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -751,10 +767,10 @@ pub fn views(
     let mut thought_seen = false;
     for row in rows {
         let view = match row {
-            Row::Thought { seq: _, text } => {
+            Row::Thought { seq, text } => {
                 let first = !thought_seen;
                 thought_seen = true;
-                RowView::Thought { text, first }
+                RowView::Thought { seq, text, first }
             }
             Row::Tool(call) => RowView::Tool(tool(call)),
             Row::Group {
@@ -780,17 +796,18 @@ pub fn views(
                 }
             }
             Row::Task {
-                seq: _,
+                seq,
                 task_id: _,
                 kind,
                 description,
                 state,
             } => RowView::Task {
+                seq,
                 kind,
                 description,
                 state,
             },
-            Row::Status { seq: _, text } => RowView::Status { text },
+            Row::Status { seq, text } => RowView::Status { seq, text },
         };
         views.push(view);
     }
@@ -832,7 +849,27 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
         Body::Loading => notice("Loading the run log…"),
         Body::Failed => notice("Couldn't load the run log."),
         Body::Log { rows, footer } => {
-            log_card(Owner::Message(message), rows, Some(footer), on_disclose)
+            let selector = format!("runlog-{raw}-inspect");
+            let inspect = on_disclose.clone();
+            let link = div()
+                .id(SharedString::from(selector.clone()))
+                .debug_selector(move || selector)
+                .self_end()
+                .cursor_pointer()
+                .text_size(px(11.5))
+                .text_color(theme::text_secondary())
+                .on_click(move |_event, window, cx| {
+                    inspect(Disclosure::Inspect(message), window, cx)
+                })
+                .child("Open in panel →");
+            return column
+                .child(log_card(
+                    Owner::Message(message),
+                    rows,
+                    Some(footer),
+                    on_disclose,
+                ))
+                .child(link);
         }
     };
     column.child(card)
@@ -883,10 +920,14 @@ fn log_card(
     }
 }
 
-fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDisclose) -> Div {
+pub fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDisclose) -> Div {
     let raw = owner.key();
     match row {
-        RowView::Thought { text, first } => {
+        RowView::Thought {
+            seq: _,
+            text,
+            first,
+        } => {
             let mut thought = div().flex().flex_col().gap(px(1.)).py(px(2.));
             if first {
                 thought = thought.child(
@@ -943,6 +984,7 @@ fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDisclos
             group
         }
         RowView::Task {
+            seq: _,
             kind,
             description,
             state,
@@ -972,11 +1014,12 @@ fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDisclos
                     .min_w(px(0.))
                     .overflow_hidden()
                     .whitespace_nowrap()
+                    .text_ellipsis()
                     .text_color(theme::text_muted())
                     .child(SharedString::from(first_line(&description))),
             )
             .child(task_mark(state)),
-        RowView::Status { text } => div()
+        RowView::Status { seq: _, text } => div()
             .py(px(2.))
             .text_size(px(12.))
             .text_color(theme::text_muted())
@@ -1038,6 +1081,7 @@ fn step_line(line: gpui::Stateful<Div>, step: StepLine) -> gpui::Stateful<Div> {
             .min_w(px(0.))
             .overflow_hidden()
             .whitespace_nowrap()
+            .text_ellipsis()
             .font_family(MONO)
             .text_size(px(11.5))
             .text_color(theme::text_muted())

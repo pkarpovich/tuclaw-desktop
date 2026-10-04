@@ -3,6 +3,7 @@ pub mod audio;
 pub mod composer;
 pub mod failure;
 pub mod feed;
+pub mod inspector;
 pub mod link;
 pub mod live;
 pub mod menu;

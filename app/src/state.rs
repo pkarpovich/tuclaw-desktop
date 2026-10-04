@@ -59,6 +59,20 @@ pub enum StateEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Filter {
+    All,
+    Tools,
+    Thoughts,
+    Errors,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Inspector {
+    pub message: MessageId,
+    pub filter: Filter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum History {
     Unknown,
     More,
@@ -112,6 +126,7 @@ pub struct AppState {
     sidebar: SidebarVisibility,
     expanded: HashSet<MessageId>,
     toggled: HashSet<Disclosure>,
+    inspector: Option<Inspector>,
     run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
     playback: Option<Playback>,
@@ -150,6 +165,7 @@ impl AppState {
             sidebar: SidebarVisibility::Shown,
             expanded: HashSet::new(),
             toggled: HashSet::new(),
+            inspector: None,
             run_logs: HashMap::new(),
             speaker,
             playback: None,
@@ -451,7 +467,32 @@ impl AppState {
         self.run_logs.get(run)
     }
 
+    pub fn inspector(&self) -> Option<Inspector> {
+        self.inspector
+    }
+
+    pub fn close_inspector(&mut self, cx: &mut Context<Self>) {
+        self.inspector = None;
+        cx.notify();
+    }
+
+    pub fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
+        if let Some(inspector) = &mut self.inspector {
+            inspector.filter = filter;
+        }
+        cx.notify();
+    }
+
     pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
+        if let Disclosure::Inspect(message) = disclosure {
+            self.inspector = Some(Inspector {
+                message,
+                filter: Filter::All,
+            });
+            self.ensure_log(message, cx);
+            cx.notify();
+            return;
+        }
         if !self.toggled.remove(&disclosure) {
             self.toggled.insert(disclosure.clone());
         }
@@ -531,6 +572,7 @@ impl AppState {
         if self.selected != Some(channel) {
             self.selected = Some(channel);
             self.halt();
+            self.inspector = None;
             self.messages.clear();
             self.history = History::Unknown;
             self.pending.clear();
@@ -1759,5 +1801,37 @@ mod tests {
                 "a silent finish leaves nothing to show"
             );
         });
+    }
+
+    #[gpui::test]
+    fn the_inspector_opens_on_a_run_filters_and_closes(cx: &mut TestAppContext) {
+        use crate::runlog::{Disclosure, RunLog};
+        let (_mock, state) = crate::testing::seeded(cx, run_world());
+        state.update(cx, |state, cx| {
+            state.toggle(Disclosure::Inspect(MessageId(1)), cx)
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.inspector(),
+                Some(super::Inspector {
+                    message: MessageId(1),
+                    filter: super::Filter::All
+                })
+            );
+            let Some(RunLog::Loaded(_)) = state.run_log("6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11")
+            else {
+                panic!("opening the inspector loads the run");
+            };
+        });
+        state.update(cx, |state, cx| state.set_filter(super::Filter::Errors, cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.inspector().map(|inspector| inspector.filter),
+                Some(super::Filter::Errors)
+            );
+        });
+        state.update(cx, |state, cx| state.close_inspector(cx));
+        state.read_with(cx, |state, _cx| assert_eq!(state.inspector(), None));
     }
 }

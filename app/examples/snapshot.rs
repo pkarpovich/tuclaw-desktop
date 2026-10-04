@@ -14,6 +14,7 @@ fn main() {
         .nth(1)
         .unwrap_or_else(|| "Magnet Feed".to_string());
     let open_logs = std::env::args().any(|arg| arg == "--open-logs");
+    let inspect = std::env::args().any(|arg| arg == "--inspect");
     let height = match std::env::var("SNAPSHOT_HEIGHT") {
         Ok(height) => height.parse::<f32>().expect("a height in points"),
         Err(_) => 820.,
@@ -70,6 +71,22 @@ fn main() {
                 }
                 for id in ids {
                     state.toggle(Disclosure::Log(id), cx);
+                }
+            })
+        });
+        cx.run_until_parked();
+    }
+    if inspect {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let mut last = None;
+                for message in state.messages() {
+                    if message.run.is_some() {
+                        last = Some(message.id);
+                    }
+                }
+                if let Some(id) = last {
+                    state.toggle(Disclosure::Inspect(id), cx);
                 }
             })
         });
