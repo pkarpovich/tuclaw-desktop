@@ -2,13 +2,14 @@ use std::future::Future;
 use std::sync::Arc;
 
 use futures::FutureExt;
-use futures::future::ready;
+use futures::future::{BoxFuture, ready};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::dto::{
-    Agent, AgentId, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MessageId, MessagesPage,
-    Post, Posted, Rename, RunDetail, RunId, Seq, Surface, SurfaceId,
+    Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MessageId,
+    MessagesPage, Post, Posted, Rename, RunDetail, RunId, Seq, Surface, SurfaceId, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -230,6 +231,69 @@ impl Client {
         }
     }
 
+    /// Changes an agent's description or model and returns the agent as stored.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Invalid`] for a description over the limit or a malformed model.
+    pub fn update_agent(
+        &self,
+        agent: AgentId,
+        patch: &AgentPatch,
+    ) -> impl Future<Output = Result<Agent, ApiError>> + Send + 'static {
+        let AgentId(agent) = agent;
+        let request = self.json_write(Method::Patch, format!("/agents/{agent}"), patch);
+        async move { body(request.await?) }
+    }
+
+    /// Wires an agent to a surface or changes its role there and returns the surface as stored.
+    pub fn set_wiring(
+        &self,
+        surface: SurfaceId,
+        agent: AgentId,
+        change: WiringChange,
+    ) -> impl Future<Output = Result<Surface, ApiError>> + Send + 'static {
+        let request = self.json_write(Method::Put, wiring_path(surface, agent), &change);
+        async move { body(request.await?) }
+    }
+
+    /// Takes an agent off a surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Conflict`] when the agent leads the surface.
+    pub fn remove_wiring(
+        &self,
+        surface: SurfaceId,
+        agent: AgentId,
+    ) -> impl Future<Output = Result<(), ApiError>> + Send + 'static {
+        let request = self.transport.send(Request {
+            method: Method::Delete,
+            path: wiring_path(surface, agent),
+            body: Body::Empty,
+        });
+        async move {
+            request.await?;
+            Ok(())
+        }
+    }
+
+    fn json_write<T: Serialize>(
+        &self,
+        method: Method,
+        path: String,
+        value: &T,
+    ) -> BoxFuture<'static, Result<Value, ApiError>> {
+        match serde_json::to_value(value) {
+            Ok(encoded) => self.transport.send(Request {
+                method,
+                path,
+                body: Body::Json(encoded),
+            }),
+            Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
+        }
+    }
+
     /// Opens the event socket, replaying after `since` when given.
     pub fn connect(
         &self,
@@ -249,6 +313,12 @@ pub enum AvatarOwner {
 }
 
 const API_PREFIX: &str = "/api/v3";
+
+fn wiring_path(surface: SurfaceId, agent: AgentId) -> String {
+    let SurfaceId(surface) = surface;
+    let AgentId(agent) = agent;
+    format!("/surfaces/{surface}/agents/{agent}")
+}
 
 fn avatar_path(owner: AvatarOwner) -> String {
     match owner {

@@ -29,7 +29,7 @@ use super::dto::{
     AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, ImageKind,
     InputId, Me, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted, Rename, Role,
     RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface, SurfaceId,
-    SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring,
+    SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring, WiringChange,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
@@ -87,6 +87,8 @@ const AGENT_AVATAR: &[u8] = include_bytes!("../../testdata/v3/media/avatar_agent
 const MY_AVATAR: &[u8] = include_bytes!("../../testdata/v3/media/avatar_me.png");
 const AVATAR_LIMIT: usize = 2 * 1024 * 1024;
 const DEFAULT_NAME: &str = "You";
+const DEFAULT_MODEL: &str = "opus[1m]";
+const DESCRIPTION_LIMIT: usize = 140;
 
 #[derive(Debug, Clone)]
 struct Avatar {
@@ -1273,6 +1275,28 @@ impl World {
             }
             ["me", "avatar"] => AvatarOwner::Me,
             ["me"] => return self.rename(method, body),
+            ["agents", id] => return self.patch_agent(parse_agent(id)?, method, body),
+            ["surfaces", surface, "agents", agent] => {
+                let surface = parse_surface(surface)?;
+                let agent = parse_agent(agent)?;
+                return match (method, body) {
+                    (Method::Put, Body::Json(json)) => self.wire(surface, agent, &json),
+                    (
+                        Method::Delete,
+                        Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ },
+                    ) => self.unwire(surface, agent),
+                    (Method::Put, Body::Empty) => {
+                        Err(ApiError::Invalid("a body is required".into()))
+                    }
+                    (Method::Put, Body::Image { kind: _, bytes: _ }) => {
+                        Err(ApiError::Invalid("a JSON body is required".into()))
+                    }
+                    (
+                        Method::Patch,
+                        Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ },
+                    ) => Err(ApiError::NotFound),
+                };
+            }
             [..] => return Err(ApiError::NotFound),
         };
         match (method, body) {
@@ -1291,8 +1315,160 @@ impl World {
             (Method::Delete, Body::Image { kind: _, bytes: _ }) => {
                 Err(ApiError::Invalid("no body expected".into()))
             }
-            (Method::Patch, _) => Err(ApiError::NotFound),
+            (Method::Patch, Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ }) => {
+                Err(ApiError::NotFound)
+            }
         }
+    }
+
+    fn agent_index(&self, agent: AgentId) -> Result<usize, ApiError> {
+        let mut found = None;
+        for (index, candidate) in self.agents.iter().enumerate() {
+            if candidate.id == agent {
+                found = Some(index);
+                break;
+            }
+        }
+        found.ok_or(ApiError::NotFound)
+    }
+
+    fn surface_index(&self, surface: SurfaceId) -> Result<usize, ApiError> {
+        let mut found = None;
+        for (index, candidate) in self.surfaces.iter().enumerate() {
+            if candidate.id == surface {
+                found = Some(index);
+                break;
+            }
+        }
+        found.ok_or(ApiError::NotFound)
+    }
+
+    fn patch_agent(
+        &mut self,
+        agent: AgentId,
+        method: Method,
+        body: Body,
+    ) -> Result<Value, ApiError> {
+        let (Method::Patch, Body::Json(json)) = (method, body) else {
+            return Err(ApiError::NotFound);
+        };
+        self.update_agent(agent, &json)
+    }
+
+    fn update_agent(&mut self, agent: AgentId, json: &Value) -> Result<Value, ApiError> {
+        let index = self.agent_index(agent)?;
+        let Value::Object(fields) = json else {
+            return Err(ApiError::Invalid("an object is expected".into()));
+        };
+        let description = match fields.get("description") {
+            None => None,
+            Some(Value::String(text)) if text.chars().count() > DESCRIPTION_LIMIT => {
+                return Err(ApiError::Invalid(format!(
+                    "description is longer than {DESCRIPTION_LIMIT} characters"
+                )));
+            }
+            Some(Value::String(text)) => Some(text.clone()),
+            Some(_) => return Err(ApiError::Invalid("description must be a string".into())),
+        };
+        let model = match fields.get("model") {
+            None => None,
+            Some(Value::Null) => Some(DEFAULT_MODEL.to_string()),
+            Some(Value::String(spec)) if spec.trim().is_empty() => Some(DEFAULT_MODEL.to_string()),
+            Some(Value::String(spec)) if spec.chars().any(char::is_whitespace) => {
+                return Err(ApiError::Invalid("model must not contain spaces".into()));
+            }
+            Some(Value::String(spec)) => Some(spec.clone()),
+            Some(_) => return Err(ApiError::Invalid("model must be a string or null".into())),
+        };
+        let stored = &mut self.agents[index];
+        if let Some(description) = description {
+            stored.description = description;
+        }
+        if let Some(model) = model {
+            stored.model = model;
+        }
+        let mut view = None;
+        for candidate in self.agents_view() {
+            if candidate.id == agent {
+                view = Some(candidate);
+                break;
+            }
+        }
+        to_json(&view)
+    }
+
+    fn surface_view(&self, surface: SurfaceId) -> Result<Value, ApiError> {
+        for candidate in self.surfaces_view() {
+            if candidate.id == surface {
+                return to_json(&candidate);
+            }
+        }
+        Err(ApiError::NotFound)
+    }
+
+    fn wire(
+        &mut self,
+        surface: SurfaceId,
+        agent: AgentId,
+        json: &Value,
+    ) -> Result<Value, ApiError> {
+        let index = self.surface_index(surface)?;
+        self.agent_index(agent)?;
+        let Ok(WiringChange { role, listens }) =
+            serde_json::from_value::<WiringChange>(json.clone())
+        else {
+            return Err(ApiError::Invalid("role and listens are required".into()));
+        };
+        let target = &mut self.surfaces[index];
+        match role {
+            Role::Lead => {
+                for wiring in &mut target.agents {
+                    if wiring.agent_id != agent && wiring.role == Role::Lead {
+                        wiring.role = Role::Mention;
+                    }
+                }
+                target.lead_agent_id = Some(agent);
+            }
+            Role::Mention => {
+                if target.lead_agent_id == Some(agent) {
+                    target.lead_agent_id = None;
+                }
+            }
+            Role::Unknown => return Err(ApiError::Invalid("role must be lead or mention".into())),
+        }
+        let mut updated = false;
+        for wiring in &mut target.agents {
+            if wiring.agent_id == agent {
+                wiring.role = role;
+                wiring.listens = listens;
+                updated = true;
+            }
+        }
+        if !updated {
+            target.agents.push(Wiring {
+                agent_id: agent,
+                role,
+                listens,
+            });
+        }
+        self.surface_view(surface)
+    }
+
+    fn unwire(&mut self, surface: SurfaceId, agent: AgentId) -> Result<Value, ApiError> {
+        let index = self.surface_index(surface)?;
+        self.agent_index(agent)?;
+        let target = &mut self.surfaces[index];
+        if target.lead_agent_id == Some(agent) {
+            return Err(ApiError::Conflict);
+        }
+        let mut kept = Vec::new();
+        for wiring in std::mem::take(&mut target.agents) {
+            if wiring.agent_id != agent {
+                kept.push(wiring);
+            }
+        }
+        target.agents = kept;
+        Ok(Value::Null)
     }
 
     fn store_avatar(&mut self, owner: AvatarOwner, bytes: Vec<u8>) -> Result<Value, ApiError> {
@@ -1982,6 +2158,7 @@ mod tests {
 
     use super::*;
     use crate::v3::client::Client;
+    use crate::v3::dto::{AgentPatch, ModelChange};
 
     fn stepped() -> (MockTransport, Client) {
         let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
@@ -2449,6 +2626,120 @@ mod tests {
             MY_AVATAR.to_vec(),
         ));
         assert_eq!(unknown, Err(ApiError::NotFound));
+    }
+
+    #[test]
+    fn an_agent_description_and_model_are_patched_and_reset() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let patched = block_on(client.update_agent(
+            AgentId(3),
+            &AgentPatch {
+                description: Some("Pulls releases".into()),
+                model: ModelChange::Set("opus[1m]:high".into()),
+            },
+        ))
+        .expect("patched");
+        assert_eq!(patched.description, "Pulls releases");
+        assert_eq!(patched.model, "opus[1m]:high");
+        let reset = block_on(client.update_agent(
+            AgentId(3),
+            &AgentPatch {
+                description: None,
+                model: ModelChange::Default,
+            },
+        ))
+        .expect("reset");
+        assert_eq!(reset.description, "Pulls releases");
+        assert_eq!(reset.model, DEFAULT_MODEL);
+        let long = block_on(client.update_agent(
+            AgentId(3),
+            &AgentPatch {
+                description: Some("x".repeat(DESCRIPTION_LIMIT + 1)),
+                model: ModelChange::Keep,
+            },
+        ));
+        assert!(matches!(long, Err(ApiError::Invalid(_))));
+        let unknown = block_on(client.update_agent(
+            AgentId(99),
+            &AgentPatch {
+                description: None,
+                model: ModelChange::Keep,
+            },
+        ));
+        assert_eq!(unknown, Err(ApiError::NotFound));
+    }
+
+    #[test]
+    fn a_new_lead_demotes_the_old_one_and_a_lead_cannot_be_removed() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let surface = SurfaceId(1);
+        let before = block_on(client.surfaces()).expect("surfaces");
+        let old_lead = before[0].lead_agent_id.expect("General has a lead");
+        let fresh = AgentId(4);
+        let added = block_on(client.set_wiring(
+            surface,
+            fresh,
+            WiringChange {
+                role: Role::Mention,
+                listens: true,
+            },
+        ))
+        .expect("added");
+        assert_eq!(added.lead_agent_id, Some(old_lead));
+        let promoted = block_on(client.set_wiring(
+            surface,
+            fresh,
+            WiringChange {
+                role: Role::Lead,
+                listens: true,
+            },
+        ))
+        .expect("promoted");
+        assert_eq!(promoted.lead_agent_id, Some(fresh));
+        let mut leads = 0;
+        for wiring in &promoted.agents {
+            if wiring.role == Role::Lead {
+                leads += 1;
+            }
+        }
+        assert_eq!(leads, 1);
+        assert_eq!(
+            block_on(client.remove_wiring(surface, fresh)),
+            Err(ApiError::Conflict)
+        );
+        block_on(client.remove_wiring(surface, old_lead)).expect("the demoted lead leaves");
+        block_on(client.remove_wiring(surface, old_lead)).expect("removing twice is fine");
+        let after = block_on(client.surfaces()).expect("surfaces");
+        let mut still_wired = false;
+        for wiring in &after[0].agents {
+            if wiring.agent_id == old_lead {
+                still_wired = true;
+            }
+        }
+        assert!(!still_wired);
+        assert_eq!(
+            block_on(client.remove_wiring(SurfaceId(99), fresh)),
+            Err(ApiError::NotFound)
+        );
+    }
+
+    #[test]
+    fn a_wiring_with_an_unknown_role_is_refused() {
+        let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
+        let refused = block_on(mock.send(Request {
+            method: Method::Put,
+            path: "/surfaces/1/agents/4".into(),
+            body: Body::Json(json!({"role": "boss", "listens": true})),
+        }));
+        assert!(matches!(refused, Err(ApiError::Invalid(_))));
+        let not_bool = block_on(mock.send(Request {
+            method: Method::Put,
+            path: "/surfaces/1/agents/4".into(),
+            body: Body::Json(json!({"role": "mention", "listens": "yes"})),
+        }));
+        assert!(matches!(not_bool, Err(ApiError::Invalid(_))));
     }
 
     #[test]

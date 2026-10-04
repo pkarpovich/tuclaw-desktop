@@ -295,8 +295,8 @@ mod tests {
     use crate::testing::{Events, FakeDaemon, Reply};
     use crate::v3::client::{AvatarOwner, Client};
     use crate::v3::dto::{
-        AgentId, AvatarUrl, ClientMessageId, ImageKind, InputId, MessageId, Post, Posted, RunId,
-        SurfaceId,
+        AgentId, AgentPatch, AvatarUrl, ClientMessageId, ImageKind, InputId, MessageId,
+        ModelChange, Post, Posted, Role, RunId, SurfaceId, WiringChange,
     };
     use crate::v3::frames::Frame;
 
@@ -397,6 +397,56 @@ mod tests {
         assert_eq!(requests[0].method, "PUT");
         assert_eq!(requests[0].content_type.as_deref(), Some("image/png"));
         assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn agent_and_wiring_writes_hit_their_paths_with_json() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "PATCH",
+            "/api/v3/agents/3",
+            json_reply(200, &agents_fixture()[1].to_string()),
+        );
+        daemon.route(
+            "PUT",
+            "/api/v3/surfaces/1/agents/3",
+            json_reply(200, &surfaces_fixture()[0].to_string()),
+        );
+        daemon.route("DELETE", "/api/v3/surfaces/1/agents/3", json_reply(204, ""));
+        within(client(&daemon).update_agent(
+            AgentId(3),
+            &AgentPatch {
+                description: None,
+                model: ModelChange::Default,
+            },
+        ))
+        .expect("patched");
+        within(client(&daemon).set_wiring(
+            SurfaceId(1),
+            AgentId(3),
+            WiringChange {
+                role: Role::Lead,
+                listens: false,
+            },
+        ))
+        .expect("wired");
+        within(client(&daemon).remove_wiring(SurfaceId(1), AgentId(3))).expect("removed");
+        let requests = daemon.requests();
+        let bodies: Vec<serde_json::Value> = vec![
+            serde_json::from_str(&requests[0].body).expect("json"),
+            serde_json::from_str(&requests[1].body).expect("json"),
+        ];
+        assert_eq!(bodies[0], json!({"model": null}));
+        assert_eq!(bodies[1], json!({"role": "lead", "listens": false}));
+        assert_eq!(requests[2].method, "DELETE");
+    }
+
+    fn agents_fixture() -> Vec<serde_json::Value> {
+        serde_json::from_str(include_str!("../../testdata/v3/agents.json")).expect("agents")
+    }
+
+    fn surfaces_fixture() -> Vec<serde_json::Value> {
+        serde_json::from_str(include_str!("../../testdata/v3/surfaces.json")).expect("surfaces")
     }
 
     #[test]

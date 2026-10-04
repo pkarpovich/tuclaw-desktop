@@ -418,6 +418,66 @@ pub struct AvatarSet {
     pub avatar_url: AvatarUrl,
 }
 
+/// How `PATCH /agents/{id}` changes an agent's model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelChange {
+    /// Leaves the model as it is.
+    Keep,
+    /// Sets a model spec such as `opus[1m]:medium`.
+    Set(String),
+    /// Clears the agent's own model, so it runs on the daemon default.
+    Default,
+}
+
+impl ModelChange {
+    fn is_keep(&self) -> bool {
+        match self {
+            ModelChange::Keep => true,
+            ModelChange::Set(_) => false,
+            ModelChange::Default => false,
+        }
+    }
+}
+
+impl Serialize for ModelChange {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ModelChange::Keep => serializer.serialize_none(),
+            ModelChange::Set(model) => serializer.serialize_str(model),
+            ModelChange::Default => serializer.serialize_none(),
+        }
+    }
+}
+
+/// The body of `PATCH /agents/{id}`; absent fields stay as they are.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::{AgentPatch, ModelChange};
+///
+/// let reset = AgentPatch { description: None, model: ModelChange::Default };
+/// assert_eq!(serde_json::to_string(&reset).unwrap(), r#"{"model":null}"#);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AgentPatch {
+    /// The new description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The model change.
+    #[serde(skip_serializing_if = "ModelChange::is_keep")]
+    pub model: ModelChange,
+}
+
+/// The body of `PUT /surfaces/{id}/agents/{agent}`: how the agent is wired there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WiringChange {
+    /// Lead or answers on mention; a new lead demotes the old one.
+    pub role: Role,
+    /// Whether it hears the messages it does not answer.
+    pub listens: bool,
+}
+
 /// The body of `PATCH /me`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rename {
