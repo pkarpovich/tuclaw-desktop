@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, BoxShadow, Context, Div, Entity, Hsla, IntoElement, Pixels, Point, Render,
-    SharedString, Subscription, Window, actions, div, phi, point, prelude::*, px,
+    AnyElement, BoxShadow, Context, Div, Entity, FocusHandle, Hsla, IntoElement, Pixels, Point,
+    Render, SharedString, Subscription, Window, actions, div, phi, point, prelude::*, px,
 };
 
 use crate::agent_settings::Target;
@@ -21,8 +21,9 @@ enum SlotPanel {
     Me(Entity<ProfilePanel>),
 }
 use crate::sidebar::Sidebar;
-use crate::state::{AppState, Link, Segment, SidebarVisibility, View};
+use crate::state::{AppState, Link, Segment, SidebarVisibility, StateEvent, View};
 use crate::theme;
+use crate::viewer;
 
 actions!(tuclaw_shell, [ToggleSidebar]);
 
@@ -49,12 +50,33 @@ pub struct Shell {
     agents: Entity<AgentsView>,
     automations: Entity<AutomationsView>,
     settings: Option<SlotPanel>,
+    viewer_focus: FocusHandle,
     _observation: Subscription,
+    _events: Subscription,
 }
 
 impl Shell {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Shell {
         let observation = cx.observe(&state, |_shell, _state, cx| cx.notify());
+        let events = cx.subscribe_in(
+            &state,
+            window,
+            |shell, _state, event: &StateEvent, window, cx| match event {
+                StateEvent::PictureOpened => {
+                    window.focus(&shell.viewer_focus, cx);
+                }
+                StateEvent::SelectionChanged => {}
+                StateEvent::MessagesLoaded => {}
+                StateEvent::MessageAppended => {}
+                StateEvent::RunsChanged => {}
+                StateEvent::FoldToggled => {}
+                StateEvent::OlderLoaded => {}
+                StateEvent::PicturesLoaded => {}
+                StateEvent::SendFailed(_) => {}
+                StateEvent::Mention(_) => {}
+                StateEvent::TasksLoaded => {}
+            },
+        );
         let built = state.clone();
         let sidebar = cx.new(|cx| Sidebar::new(built, cx));
         let built = state.clone();
@@ -70,7 +92,9 @@ impl Shell {
             agents,
             automations,
             settings: None,
+            viewer_focus: cx.focus_handle(),
             _observation: observation,
+            _events: events,
         }
     }
 
@@ -371,6 +395,7 @@ impl Render for Shell {
             }))
             .child(self.top_bar(cx))
             .child(columns.children(body))
+            .children(viewer::viewer(&self.state, &self.viewer_focus, window, cx))
     }
 }
 

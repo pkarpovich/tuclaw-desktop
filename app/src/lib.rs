@@ -30,6 +30,7 @@ pub mod state;
 #[cfg(test)]
 mod testing;
 pub mod theme;
+pub mod viewer;
 
 use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 

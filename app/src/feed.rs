@@ -18,7 +18,7 @@ use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::local;
-use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
+use crate::message::{Actions, Fold, Look, OnPicture, OnPlay, OnToggle, message_row};
 use crate::people::People;
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
@@ -107,6 +107,7 @@ impl Feed {
                         .update(cx, |composer, cx| composer.insert(&text, window, cx));
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
+                StateEvent::PictureOpened => {}
                 StateEvent::PicturesLoaded => {
                     feed.list.remeasure();
                     cx.notify();
@@ -234,10 +235,15 @@ impl Feed {
         let on_disclose: OnDisclose = Rc::new(move |disclosure, _window, cx| {
             discloser.update(cx, |state, cx| state.toggle(disclosure, cx));
         });
+        let viewer = self.state.clone();
+        let on_picture: OnPicture = Rc::new(move |viewed, _window, cx| {
+            viewer.update(cx, |state, cx| state.view_picture(viewed, cx));
+        });
         let actions = Actions {
             on_toggle,
             on_play,
             on_disclose,
+            on_picture,
             card: card::actions(&self.state),
         };
         let stopper = self.state.clone();

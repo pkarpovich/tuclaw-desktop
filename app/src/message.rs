@@ -20,7 +20,7 @@ use crate::icon::{Glyph, icon, spinner};
 use crate::link;
 use crate::local::clock;
 use crate::people::People;
-use crate::pictures::{MAX_WIDTH, Remote, Shelf, fit};
+use crate::pictures::{MAX_WIDTH, Remote, Shelf, Viewed, fit};
 use crate::rich::{self, Ink, Parts, Picture, Segment};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
@@ -54,8 +54,11 @@ pub struct Actions {
     pub on_toggle: OnToggle,
     pub on_play: OnPlay,
     pub on_disclose: OnDisclose,
+    pub on_picture: OnPicture,
     pub card: CardActions,
 }
+
+pub type OnPicture = Rc<dyn Fn(Viewed, &mut Window, &mut App)>;
 
 pub enum Fold {
     Collapsed,
@@ -161,7 +164,12 @@ pub fn message_row(
                 text,
                 Ink::Body,
             ))),
-            Segment::Picture(picture) => column.child(picture_block(&key, &picture, shelf)),
+            Segment::Picture(picture) => column.child(picture_block(
+                &key,
+                &picture,
+                shelf,
+                actions.on_picture.clone(),
+            )),
         };
     }
     if let Some(pane) = pane {
@@ -170,7 +178,7 @@ pub fn message_row(
     row(selector, face, column)
 }
 
-fn picture_block(key: &str, picture: &Picture, shelf: &Shelf) -> AnyElement {
+fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPicture) -> AnyElement {
     let Picture { alt, url } = picture;
     let caption = if alt.is_empty() {
         url.clone()
@@ -183,7 +191,10 @@ fn picture_block(key: &str, picture: &Picture, shelf: &Shelf) -> AnyElement {
     match shelf.get(&public) {
         Some(Remote::Ready(shown)) => {
             let (width, height) = fit(shown.width, shown.height);
-            let opened = url.clone();
+            let viewed = Viewed {
+                url: public.clone(),
+                caption: alt.clone(),
+            };
             let mut block = div().flex().flex_col().gap(px(4.)).py(px(4.)).child(
                 row_button(format!("{key}-picture"))
                     .accessibility_label(format!("Open {caption}"))
@@ -193,7 +204,7 @@ fn picture_block(key: &str, picture: &Picture, shelf: &Shelf) -> AnyElement {
                     .overflow_hidden()
                     .border_1()
                     .border_color(theme::hairline())
-                    .on_click(move |_event, _window, cx| cx.open_url(&opened))
+                    .on_click(move |_event, window, cx| on_picture(viewed.clone(), window, cx))
                     .child(
                         img(ImageSource::Image(shown.image.clone()))
                             .w(px(width))

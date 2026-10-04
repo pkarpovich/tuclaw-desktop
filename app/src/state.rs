@@ -22,7 +22,7 @@ use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
-use crate::pictures::{self, Remote, Shelf};
+use crate::pictures::{self, Remote, Shelf, Viewed};
 use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
@@ -77,6 +77,7 @@ pub enum StateEvent {
     FoldToggled,
     OlderLoaded,
     PicturesLoaded,
+    PictureOpened,
     SendFailed(String),
     Mention(String),
     TasksLoaded,
@@ -164,6 +165,7 @@ pub struct AppState {
     speaker: Box<dyn Speaker>,
     recorder: Box<dyn Recorder>,
     pictures: Shelf,
+    viewer: Option<Viewed>,
     recording: Recording,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
@@ -218,6 +220,7 @@ impl AppState {
             speaker,
             recorder: Box::new(NoRecorder),
             pictures: Shelf::new(),
+            viewer: None,
             recording: Recording::Idle,
             playback: None,
             _playback: None,
@@ -240,6 +243,22 @@ impl AppState {
 
     pub fn set_recorder(&mut self, recorder: Box<dyn Recorder>) {
         self.recorder = recorder;
+    }
+
+    pub fn viewer(&self) -> Option<&Viewed> {
+        self.viewer.as_ref()
+    }
+
+    pub fn view_picture(&mut self, viewed: Viewed, cx: &mut Context<Self>) {
+        self.viewer = Some(viewed);
+        cx.emit(StateEvent::PictureOpened);
+        cx.notify();
+    }
+
+    pub fn close_picture(&mut self, cx: &mut Context<Self>) {
+        if self.viewer.take().is_some() {
+            cx.notify();
+        }
     }
 
     pub fn pictures(&self) -> &Shelf {

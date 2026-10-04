@@ -35,6 +35,12 @@ pub enum Remote {
 
 pub type Shelf = HashMap<PublicUrl, Remote>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Viewed {
+    pub url: PublicUrl,
+    pub caption: String,
+}
+
 pub fn wanted(messages: &[Message], shelf: &Shelf) -> Vec<PublicUrl> {
     let mut urls = Vec::new();
     for message in messages {
