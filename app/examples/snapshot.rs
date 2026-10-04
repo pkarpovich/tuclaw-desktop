@@ -4,6 +4,7 @@ use std::sync::Arc;
 use gpui::{AppContext, HeadlessAppContext, Size, px};
 use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario};
 use tuclaw_desktop::audio::{PeakCache, RodioSpeaker};
+use tuclaw_desktop::icon::Icons;
 use tuclaw_desktop::link::Source;
 use tuclaw_desktop::runlog::Disclosure;
 use tuclaw_desktop::shell::Shell;
@@ -22,7 +23,7 @@ fn main() {
     let platform = gpui_platform::current_platform(true);
     let mut cx = HeadlessAppContext::with_platform(
         platform.text_system(),
-        Arc::new(()),
+        Arc::new(Icons),
         gpui_platform::current_headless_renderer,
     );
     cx.update(gpui_kit::init);

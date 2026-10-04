@@ -4,6 +4,7 @@ use gpui::{
 };
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
+use crate::icon::{Glyph, icon};
 use crate::state::{AppState, Segment, View};
 use crate::theme;
 
@@ -71,7 +72,7 @@ impl Sidebar {
                     .state
                     .update(cx, |state, cx| state.activate_segment(Segment::Agents, cx));
             }))
-            .child(agents_glyph())
+            .child(icon(Glyph::Agents, px(16.), theme::text_secondary()))
             .child(
                 div()
                     .font_weight(match highlight {
@@ -280,9 +281,7 @@ fn lead_element(lead: Lead) -> Div {
             .flex_none()
             .flex()
             .justify_center()
-            .text_size(px(14.))
-            .text_color(theme::text_label())
-            .child("#"),
+            .child(icon(Glyph::Channel, px(14.), theme::text_label())),
         Lead::Chip {
             initials,
             tone,
@@ -366,7 +365,7 @@ fn search_field() -> impl IntoElement {
             .border_1()
             .border_color(theme::border())
             .cursor_pointer()
-            .child(search_glyph())
+            .child(icon(Glyph::Search, px(14.), theme::text_label()))
             .child(
                 div()
                     .text_size(px(13.))
@@ -381,56 +380,6 @@ fn search_field() -> impl IntoElement {
                     .child("⌘K"),
             ),
     )
-}
-
-fn search_glyph() -> impl IntoElement {
-    div()
-        .relative()
-        .flex_none()
-        .w(px(14.))
-        .h(px(14.))
-        .child(
-            div()
-                .w(px(11.))
-                .h(px(11.))
-                .rounded_full()
-                .border_1()
-                .border_color(theme::text_label()),
-        )
-        .child(
-            div()
-                .absolute()
-                .right(px(0.))
-                .bottom(px(1.))
-                .w(px(4.))
-                .h(px(1.5))
-                .rounded(px(1.))
-                .bg(theme::text_label()),
-        )
-}
-
-fn agents_glyph() -> impl IntoElement {
-    div()
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(3.))
-        .w(px(16.))
-        .h(px(13.))
-        .rounded(px(4.))
-        .border_1()
-        .border_color(theme::text_secondary())
-        .child(eye())
-        .child(eye())
-}
-
-fn eye() -> Div {
-    div()
-        .w(px(2.5))
-        .h(px(2.5))
-        .rounded_full()
-        .bg(theme::text_secondary())
 }
 
 fn footer() -> impl IntoElement {
@@ -481,25 +430,11 @@ fn footer() -> impl IntoElement {
 }
 
 fn gear() -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .w(px(15.))
-        .h(px(15.))
-        .rounded_full()
-        .border_1()
-        .border_color(theme::text_secondary())
-        .cursor_pointer()
-        .child(
-            div()
-                .w(px(5.))
-                .h(px(5.))
-                .rounded_full()
-                .border_1()
-                .border_color(theme::text_secondary()),
-        )
+    div().flex_none().cursor_pointer().child(icon(
+        Glyph::Settings,
+        px(15.),
+        theme::text_secondary(),
+    ))
 }
 
 #[cfg(test)]

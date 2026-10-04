@@ -1,10 +1,11 @@
 use anyhow::Result;
 use gpui::{
-    App, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement, Render,
+    App, BoxShadow, Context, Entity, FocusHandle, Focusable, FontWeight, IntoElement, Render,
     SharedString, Subscription, Window, div, prelude::*, px,
 };
 use gpui_kit::base::input::{Enter, Textarea, TextareaState};
 
+use crate::icon::{Glyph, icon};
 use crate::theme;
 
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
@@ -108,15 +109,16 @@ impl Composer {
             .w(size)
             .h(size)
             .ml(px(7.))
-            .rounded_full()
-            .text_size(px(14.))
-            .font_weight(FontWeight::BOLD)
-            .child("↑");
+            .rounded_full();
         match sendable {
-            Sendable::Blank => button.bg(theme::sunken()).text_color(theme::text_muted()),
+            Sendable::Blank => {
+                button
+                    .bg(theme::sunken())
+                    .child(icon(Glyph::Send, px(16.), theme::text_muted()))
+            }
             Sendable::Ready => button
                 .bg(theme::accent())
-                .text_color(theme::chip_text())
+                .child(icon(Glyph::Send, px(16.), theme::chip_text()))
                 .cursor_pointer()
                 .shadow(vec![
                     BoxShadow::new(px(0.), px(3.), theme::shadow())
@@ -174,10 +176,10 @@ impl Composer {
                             .px(px(9.))
                             .pt(px(6.))
                             .pb(px(9.))
-                            .child(mention_icon())
-                            .child(attachment_icon())
-                            .child(emoji_icon())
-                            .child(format_icon())
+                            .child(tool(Glyph::Mention))
+                            .child(tool(Glyph::Attach))
+                            .child(tool(Glyph::Emoji))
+                            .child(tool(Glyph::Format))
                             .child(div().flex_1())
                             .child(hint())
                             .child(talk_chip())
@@ -198,7 +200,7 @@ impl Render for Composer {
     }
 }
 
-fn icon() -> Div {
+fn tool(glyph: Glyph) -> impl IntoElement {
     div()
         .flex()
         .flex_none()
@@ -207,54 +209,7 @@ fn icon() -> Div {
         .w(px(30.))
         .h(px(30.))
         .rounded(px(8.))
-        .text_color(theme::text_secondary())
-}
-
-fn mention_icon() -> impl IntoElement {
-    icon().text_size(px(15.)).child("@")
-}
-
-fn attachment_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .w(px(7.))
-            .h(px(15.))
-            .rounded(px(4.))
-            .border_1()
-            .border_color(theme::text_secondary()),
-    )
-}
-
-fn emoji_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(3.))
-            .w(px(15.))
-            .h(px(15.))
-            .rounded_full()
-            .border_1()
-            .border_color(theme::text_secondary())
-            .child(eye())
-            .child(eye()),
-    )
-}
-
-fn eye() -> Div {
-    div()
-        .w(px(2.))
-        .h(px(2.))
-        .rounded_full()
-        .bg(theme::text_secondary())
-}
-
-fn format_icon() -> impl IntoElement {
-    icon()
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .child("Aa")
+        .child(icon(glyph, px(16.), theme::text_secondary()))
 }
 
 fn hint() -> impl IntoElement {
@@ -281,14 +236,7 @@ fn talk_chip() -> impl IntoElement {
         .text_size(px(12.5))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::text_secondary())
-        .child(
-            div()
-                .flex_none()
-                .w(px(6.))
-                .h(px(11.))
-                .rounded(px(3.))
-                .bg(theme::accent()),
-        )
+        .child(icon(Glyph::Voice, px(13.), theme::accent()))
         .child("Talk")
 }
 

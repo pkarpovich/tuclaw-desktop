@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::agents::AgentsView;
 use crate::feed::Feed;
+use crate::icon::{Glyph, icon};
 use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
 use crate::link::Source;
 use crate::runlog::OnDisclose;
@@ -187,21 +188,7 @@ impl Shell {
             .on_click(cx.listener(|shell, _event, _window, cx| {
                 shell.state.update(cx, |state, cx| state.toggle_sidebar(cx));
             }))
-            .child(
-                div()
-                    .w(px(15.))
-                    .h(px(13.))
-                    .border_1()
-                    .rounded(px(3.5))
-                    .border_color(theme::text_secondary())
-                    .child(
-                        div()
-                            .w(px(4.5))
-                            .h_full()
-                            .border_r_1()
-                            .border_color(theme::text_secondary()),
-                    ),
-            )
+            .child(icon(Glyph::Sidebar, px(16.), theme::text_secondary()))
     }
 
     fn top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -225,8 +212,8 @@ impl Shell {
                     .pl(px(lights_end))
                     .text_color(theme::text_secondary())
                     .child(self.sidebar_toggle(cx))
-                    .child(arrow("‹", 1.0))
-                    .child(arrow("›", 0.4));
+                    .child(arrow(Glyph::Back, 1.0))
+                    .child(arrow(Glyph::Closed, 0.4));
                 match sidebar {
                     SidebarVisibility::Shown => controls.w(px(GUTTER + SIDEBAR_WIDTH + GUTTER)),
                     SidebarVisibility::Hidden => controls.pr(px(TRAFFIC_LIGHTS_GAP)),
@@ -352,34 +339,19 @@ fn card() -> Div {
         ])
 }
 
-fn arrow(glyph: &'static str, opacity: f32) -> impl IntoElement {
-    div()
-        .p(px(5.))
-        .rounded(px(7.))
-        .text_size(px(16.))
-        .opacity(opacity)
-        .child(SharedString::new_static(glyph))
+fn arrow(glyph: Glyph, opacity: f32) -> impl IntoElement {
+    div().p(px(5.)).rounded(px(7.)).opacity(opacity).child(icon(
+        glyph,
+        px(16.),
+        theme::text_secondary(),
+    ))
 }
 
 fn settings_affordance() -> impl IntoElement {
     div()
-        .flex()
-        .flex_col()
-        .items_end()
-        .gap(px(3.))
         .p(px(6.))
         .rounded(px(8.))
-        .child(rule(px(14.)))
-        .child(rule(px(9.)))
-        .child(rule(px(12.)))
-}
-
-fn rule(width: Pixels) -> Div {
-    div()
-        .w(width)
-        .h(px(1.5))
-        .rounded(px(1.))
-        .bg(theme::text_secondary())
+        .child(icon(Glyph::Adjust, px(15.), theme::text_secondary()))
 }
 
 #[cfg(test)]

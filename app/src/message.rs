@@ -10,6 +10,7 @@ use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
 use crate::audio::{PEAKS, Peaks, Waveform};
+use crate::icon::{Glyph, icon, spinner};
 use crate::rich::{self, Ink, Parts};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
@@ -177,10 +178,10 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
     let known = voice.duration.or(measured).unwrap_or(Duration::ZERO);
     let peaks = waveform.map(|waveform| waveform.peaks);
     let (glyph, elapsed, total, failure) = match player {
-        Player::Stopped => ("▶", None, known, None),
-        Player::Loading => ("…", None, known, None),
-        Player::Playing { position, total } => ("■", Some(position), total, None),
-        Player::Failed(reason) => ("▶", None, known, Some(reason)),
+        Player::Stopped => (Some(Glyph::Play), None, known, None),
+        Player::Loading => (None, None, known, None),
+        Player::Playing { position, total } => (Some(Glyph::Stop), Some(position), total, None),
+        Player::Failed(reason) => (Some(Glyph::Play), None, known, Some(reason)),
     };
     let button = div()
         .id(SharedString::from(selector.clone()))
@@ -200,11 +201,12 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
             spread_radius: px(-2.),
             inset: false,
         }])
-        .text_size(px(11.))
-        .text_color(theme::chip_text())
         .cursor_pointer()
         .on_click(move |_event, window, cx| on_play(id, window, cx))
-        .child(glyph);
+        .child(match glyph {
+            Some(glyph) => icon(glyph, px(13.), theme::chip_text()).into_any_element(),
+            None => spinner(px(14.), theme::chip_text()).into_any_element(),
+        });
     let label = match (failure, elapsed) {
         (Some(reason), _) => div()
             .text_color(theme::accent())
@@ -404,8 +406,8 @@ fn thinking_fold(id: MessageId, thinking: String, fold: Fold, on_toggle: OnToggl
     let MessageId(raw) = id;
     let selector = format!("thinking-{raw}");
     let marker = match fold {
-        Fold::Collapsed => "▸ Thinking",
-        Fold::Expanded => "▾ Thinking",
+        Fold::Collapsed => Glyph::Closed,
+        Fold::Expanded => Glyph::Open,
     };
     let toggle = div()
         .id(SharedString::from(selector.clone()))
@@ -416,7 +418,11 @@ fn thinking_fold(id: MessageId, thinking: String, fold: Fold, on_toggle: OnToggl
         .text_color(theme::text_muted())
         .cursor_pointer()
         .on_click(move |_event, window, cx| on_toggle(id, window, cx))
-        .child(marker);
+        .flex()
+        .items_center()
+        .gap(px(3.))
+        .child(icon(marker, px(12.), theme::text_muted()))
+        .child("Thinking");
     let fold_box = div().flex().flex_col().gap(px(2.)).child(toggle);
     match fold {
         Fold::Collapsed => fold_box,

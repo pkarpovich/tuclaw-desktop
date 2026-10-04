@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::{App, Div, FontWeight, SharedString, Window, div, prelude::*, px, relative};
+use gpui::{App, Div, FontWeight, Hsla, SharedString, Window, div, prelude::*, px, relative};
 use serde_json::Value;
 use time::OffsetDateTime;
 use tuclaw_core::model::{MessageId, RunOutcome, RunRef};
@@ -9,6 +9,7 @@ use tuclaw_core::v3::{
     ContextWindow, RowKind, Run, RunDetail, Step, StepKind, StepRow, ToolStatus, Usage,
 };
 
+use crate::icon::{Glyph, icon, spinner};
 use crate::live::tool_detail;
 use crate::rich::{self, Ink};
 use crate::theme;
@@ -841,7 +842,11 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
         .text_color(ink)
         .cursor_pointer()
         .on_click(move |_event, window, cx| toggle(Disclosure::Log(message), window, cx))
-        .child(if open { "▾" } else { "▸" })
+        .child(icon(
+            if open { Glyph::Open } else { Glyph::Closed },
+            px(12.),
+            ink,
+        ))
         .child(SharedString::from(text));
     let column = div().flex().flex_col().gap(px(4.)).pt(px(2.)).child(line);
     let card = match body {
@@ -855,13 +860,17 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
                 .id(SharedString::from(selector.clone()))
                 .debug_selector(move || selector)
                 .self_end()
+                .flex()
+                .items_center()
+                .gap(px(2.))
                 .cursor_pointer()
                 .text_size(px(11.5))
                 .text_color(theme::text_secondary())
                 .on_click(move |_event, window, cx| {
                     inspect(Disclosure::Inspect(message), window, cx)
                 })
-                .child("Open in panel →");
+                .child("Open in panel")
+                .child(icon(Glyph::Closed, px(12.), theme::text_secondary()));
             return column
                 .child(log_card(
                     Owner::Message(message),
@@ -1097,18 +1106,16 @@ fn step_line(line: gpui::Stateful<Div>, step: StepLine) -> gpui::Stateful<Div> {
         );
     }
     let mark = match (status, chevron) {
-        (_, Some(true)) => Some(("▾", theme::text_muted())),
-        (Some(StepStatus::Error), _) => Some(("✕", theme::accent())),
-        (Some(StepStatus::Running), _) => Some(("…", theme::text_muted())),
-        (Some(StepStatus::Ok), Some(false)) => Some(("›", theme::text_muted())),
-        (Some(StepStatus::Ok), None) => Some(("✓", theme::status_idle())),
-        (None, Some(false)) => Some(("›", theme::text_muted())),
+        (_, Some(true)) => Some(Mark::Icon(Glyph::Open, theme::text_muted())),
+        (Some(StepStatus::Error), _) => Some(Mark::Icon(Glyph::Close, theme::accent())),
+        (Some(StepStatus::Running), _) => Some(Mark::Busy),
+        (Some(StepStatus::Ok), Some(false)) => Some(Mark::Icon(Glyph::Closed, theme::text_muted())),
+        (Some(StepStatus::Ok), None) => Some(Mark::Icon(Glyph::Done, theme::status_idle())),
+        (None, Some(false)) => Some(Mark::Icon(Glyph::Closed, theme::text_muted())),
         (None, None) => None,
     };
     match mark {
-        Some((glyph, tone)) => {
-            line.child(div().flex_none().w(px(12.)).text_color(tone).child(glyph))
-        }
+        Some(mark) => line.child(mark_element(mark)),
         None => line,
     }
 }
@@ -1286,13 +1293,25 @@ fn footer_element(footer: Footer) -> Div {
     line
 }
 
+enum Mark {
+    Icon(Glyph, Hsla),
+    Busy,
+}
+
+fn mark_element(mark: Mark) -> Div {
+    let frame = div().flex_none().flex().justify_center().w(px(12.));
+    match mark {
+        Mark::Icon(glyph, tone) => frame.child(icon(glyph, px(12.), tone)),
+        Mark::Busy => frame.child(spinner(px(12.), theme::text_muted())),
+    }
+}
+
 fn task_mark(state: TaskState) -> Div {
-    let (glyph, tone) = match state {
-        TaskState::Running => ("…", theme::text_muted()),
-        TaskState::Done => ("✓", theme::status_idle()),
-        TaskState::Failed => ("✕", theme::accent()),
-    };
-    div().flex_none().w(px(12.)).text_color(tone).child(glyph)
+    mark_element(match state {
+        TaskState::Running => Mark::Busy,
+        TaskState::Done => Mark::Icon(Glyph::Done, theme::status_idle()),
+        TaskState::Failed => Mark::Icon(Glyph::Close, theme::accent()),
+    })
 }
 
 fn first_line(text: &str) -> String {
