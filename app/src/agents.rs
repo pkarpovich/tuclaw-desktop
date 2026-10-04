@@ -4,6 +4,7 @@ use gpui::{
 };
 use tuclaw_core::model::{Agent, AgentStatus};
 
+use crate::control::{AvatarSize, avatar};
 use crate::state::AppState;
 use crate::theme;
 
@@ -175,19 +176,7 @@ fn card_element(card: AgentCard) -> impl IntoElement {
 }
 
 fn chip(initials: SharedString, tone: usize) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .w(px(34.))
-        .h(px(34.))
-        .rounded(px(10.))
-        .bg(theme::agent_chip(tone))
-        .text_size(px(11.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::chip_text())
-        .child(initials)
+    avatar(initials, theme::agent_chip(tone), AvatarSize::Message)
 }
 
 fn status_element(status: Status) -> Div {

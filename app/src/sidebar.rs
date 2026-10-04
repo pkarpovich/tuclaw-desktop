@@ -5,7 +5,7 @@ use gpui::{
 use gpui_kit::base::Button;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
-use crate::control::row_button;
+use crate::control::{AvatarSize, avatar, row_button};
 use crate::icon::{Glyph, icon};
 use crate::state::{AppState, Segment, View};
 use crate::theme;
@@ -284,17 +284,7 @@ fn lead_element(lead: Lead) -> Div {
         } => div()
             .relative()
             .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .w(px(24.))
-            .h(px(24.))
-            .rounded(px(7.))
-            .bg(theme::agent_chip(tone))
-            .text_size(px(9.5))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(theme::chip_text())
-            .child(initials)
+            .child(avatar(initials, theme::agent_chip(tone), AvatarSize::Row))
             .child(status_dot(status)),
     }
 }
@@ -390,17 +380,7 @@ fn footer() -> impl IntoElement {
             div()
                 .relative()
                 .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(30.))
-                .h(px(30.))
-                .rounded(px(9.))
-                .bg(theme::accent())
-                .text_size(px(11.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::chip_text())
-                .child("YO")
+                .child(avatar("YO", theme::accent(), AvatarSize::Account))
                 .child(status_dot(Status::Idle)),
         )
         .child(

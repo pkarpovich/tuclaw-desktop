@@ -10,6 +10,7 @@ use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
 use crate::composer::Composer;
+use crate::control::{AvatarSize, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
@@ -510,21 +511,11 @@ fn header_element(header: Header) -> impl IntoElement {
             .items_center()
             .gap(px(10.))
             .min_w(px(0.))
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .w(px(26.))
-                    .h(px(26.))
-                    .rounded(px(8.))
-                    .bg(theme::agent_chip(tone))
-                    .text_size(px(10.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(theme::chip_text())
-                    .child(initials),
-            )
+            .child(avatar(
+                initials,
+                theme::agent_chip(tone),
+                AvatarSize::Header,
+            ))
             .child(
                 div()
                     .text_size(px(15.))

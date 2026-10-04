@@ -9,8 +9,10 @@ use time::OffsetDateTime;
 use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
+use gpui_kit::base::Avatar;
+
 use crate::audio::{PEAKS, Peaks, Waveform};
-use crate::control::{button, row_button};
+use crate::control::{self, AvatarSize, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::rich::{self, Ink, Parts};
 use crate::runlog::{self, OnDisclose, Pane};
@@ -517,25 +519,13 @@ pub fn writer(author: Author, agents: &[Agent]) -> Writer {
     }
 }
 
-pub fn avatar(writer: &Writer) -> Div {
+pub fn avatar(writer: &Writer) -> Avatar {
     let tone = match writer.tone {
         Tone::User => theme::accent(),
         Tone::Agent(index) => theme::agent_chip(index),
         Tone::System => theme::status_idle(),
     };
-    div()
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .w(px(34.))
-        .h(px(34.))
-        .rounded(px(10.))
-        .bg(tone)
-        .text_size(px(11.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::chip_text())
-        .child(writer.initials.clone())
+    control::avatar(writer.initials.clone(), tone, AvatarSize::Message)
 }
 
 fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Div {

@@ -1,5 +1,5 @@
-use gpui::{FontWeight, InteractiveElement, SharedString, Styled, phi};
-use gpui_kit::base::{Button, Toggle, ToggleGroup};
+use gpui::{FontWeight, Hsla, InteractiveElement, ParentElement, SharedString, Styled, phi, px};
+use gpui_kit::base::{Avatar, AvatarFallback, Button, Toggle, ToggleGroup};
 
 use crate::theme;
 
@@ -33,4 +33,37 @@ pub fn segment(selector: &'static str, pressed: bool) -> Toggle {
         .styles(|styles| {
             styles.pressed(|style| style.bg(theme::raised()).text_color(theme::text_primary()))
         })
+}
+
+#[derive(Clone, Copy)]
+pub enum AvatarSize {
+    Row,
+    Header,
+    Account,
+    Message,
+}
+
+pub fn avatar(initials: impl Into<SharedString>, color: Hsla, size: AvatarSize) -> Avatar {
+    let (side, radius, text) = match size {
+        AvatarSize::Row => (24., 7., 9.5),
+        AvatarSize::Header => (26., 8., 10.),
+        AvatarSize::Account => (30., 9., 11.),
+        AvatarSize::Message => (34., 10., 11.),
+    };
+    Avatar::new()
+        .flex_none()
+        .size(px(side))
+        .rounded(px(radius))
+        .bg(color)
+        .fallback(
+            AvatarFallback::new()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(text))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::chip_text())
+                .child(initials.into()),
+        )
 }
