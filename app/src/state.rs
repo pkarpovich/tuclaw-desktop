@@ -810,20 +810,58 @@ impl AppState {
                 agent,
                 change,
                 demoted,
-            } => {
-                if let Some(previous) = demoted {
-                    let back = v3::WiringChange {
-                        role: v3::Role::Lead,
-                        listens: self
-                            .topic_row(previous, surface)
-                            .is_some_and(|row| row.listens),
-                    };
-                    self.wire(previous, surface, back, None, cx);
-                }
-                self.wire(agent, surface, change, None, cx);
-            }
+            } => self.restore_lead(surface, agent, change, demoted, cx),
         }
         cx.notify();
+    }
+
+    fn restore_lead(
+        &mut self,
+        surface: v3::SurfaceId,
+        agent: AgentId,
+        change: v3::WiringChange,
+        demoted: Option<AgentId>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(previous) = demoted else {
+            self.wire(agent, surface, change, None, cx);
+            return;
+        };
+        let back = v3::WiringChange {
+            role: v3::Role::Lead,
+            listens: self
+                .topic_row(previous, surface)
+                .is_some_and(|row| row.listens),
+        };
+        self.saving = Saving::Saving;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let promoted = client
+                .set_wiring(surface, link::v3_agent_id(previous), back)
+                .await;
+            let answer = match promoted {
+                Ok(_) => {
+                    client
+                        .set_wiring(surface, link::v3_agent_id(agent), change)
+                        .await
+                }
+                Err(error) => Err(error),
+            };
+            this.update(cx, |state, cx| match answer {
+                Ok(updated) => {
+                    state.store_surface(updated);
+                    state.saving = Saving::Saved;
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn wire(
@@ -848,6 +886,71 @@ impl AppState {
                     if let Some((text, undo)) = toast {
                         state.show_toast(text, undo, cx);
                     }
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn view_run(&mut self, agent: AgentId, cx: &mut Context<Self>) {
+        let Some(live) = self
+            .directory_agent(agent)
+            .and_then(|known| known.live_run.clone())
+        else {
+            return;
+        };
+        self.settings = None;
+        let v3::SurfaceId(raw) = live.surface_id;
+        self.select(ChannelId(raw), cx);
+    }
+
+    pub fn upload_avatar(&mut self, agent: AgentId, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        let Some(kind) = v3::ImageKind::sniff(&bytes) else {
+            self.saving = Saving::Failed("not a png, jpeg or webp image".into());
+            cx.notify();
+            return;
+        };
+        let request = self.client.set_avatar(
+            v3::AvatarOwner::Agent(link::v3_agent_id(agent)),
+            kind,
+            bytes,
+        );
+        self.after_avatar_write(async move { request.await.map(|_url| ()) }, cx);
+    }
+
+    pub fn clear_avatar(&mut self, agent: AgentId, cx: &mut Context<Self>) {
+        let request = self
+            .client
+            .clear_avatar(v3::AvatarOwner::Agent(link::v3_agent_id(agent)));
+        self.after_avatar_write(request, cx);
+    }
+
+    fn after_avatar_write(
+        &mut self,
+        write: impl std::future::Future<Output = Result<(), v3::ApiError>> + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.saving = Saving::Saving;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let written = write.await;
+            let agents = match written {
+                Ok(()) => client.agents().await,
+                Err(error) => Err(error),
+            };
+            this.update(cx, |state, cx| match agents {
+                Ok(agents) => {
+                    state.directory = agents;
+                    state.refresh_agents();
+                    state.fill_pictures(cx);
+                    state.saving = Saving::Saved;
                     cx.notify();
                 }
                 Err(error) => {

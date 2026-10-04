@@ -205,3 +205,18 @@ Agreed 2026-10-04 with the desktop. tuclaw owns the pictures of its agents and o
 - `PATCH /me` `{"name": "Pavel"}` renames the user and answers like `GET /me`; an empty name = `400 invalid_request`.
 - A changed picture shows up on the next `GET /agents` or `GET /me`; there is no socket event for it.
 - The writes go through the daemon's operations (`avatar.set`, `avatar.clear`, `user.rename`), so an agent tool can later take the same path; today they are user-only.
+
+## v3.3 additions: agent settings
+
+Agreed 2026-10-04 with the desktop (its agent settings panel: description, model and topic wiring, each saved as it changes). Additive only. The writes go through the daemon's operations `agent.update`, `surface.wire` and `surface.unwire`, user-only.
+
+- `PATCH /agents/{id}` `{"description"?: string, "model"?: string|null}`. An absent field stays as it is.
+  - `description` is at most 140 characters (runes); an empty one clears it. An existing longer description is still returned as it is.
+  - `model` is a spec like `/model` takes (`opus[1m]:high`); `null` or `""` clears the session override, so the agent runs the daemon default. A connected agent switches at once (`set_model` control). Nothing is posted to any chat.
+  - Answers `200` with the agent in the `GET /agents` shape. Unknown agent = `404 not_found`; a malformed body or a description over the limit = `400 invalid_request`.
+- `PUT /surfaces/{sid}/agents/{aid}` `{"role": "lead"|"mention", "listens": bool}` adds the agent to the surface or changes its wiring; both fields are required.
+  - `role: lead` demotes the current lead to `mention` in the same transaction.
+  - Answers `200` with the surface in the `GET /surfaces` shape.
+  - Unknown surface or agent = `404`. Another role, or a missing or non-boolean `listens` = `400`. Turning the current lead into a mention = `409 conflict`: a surface always has a lead, so another agent becomes lead first.
+- `DELETE /surfaces/{sid}/agents/{aid}` answers `204`. Removing the lead = `409 conflict`. An agent that is not wired there = `204` (idempotent). An unknown surface or agent = `404`.
+- No socket events: the client refetches `GET /surfaces` and `GET /agents` after a write. An agent's topics come from `surfaces[].agents[]`, its home topic from `home_surface_id`; Undo is the client replaying the previous wiring with `PUT`.

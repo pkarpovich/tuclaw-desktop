@@ -1431,7 +1431,7 @@ impl World {
             }
             Role::Mention => {
                 if target.lead_agent_id == Some(agent) {
-                    target.lead_agent_id = None;
+                    return Err(ApiError::Conflict);
                 }
             }
             Role::Unknown => return Err(ApiError::Invalid("role must be lead or mention".into())),
@@ -2709,6 +2709,15 @@ mod tests {
             block_on(client.remove_wiring(surface, fresh)),
             Err(ApiError::Conflict)
         );
+        let demoted = block_on(client.set_wiring(
+            surface,
+            fresh,
+            WiringChange {
+                role: Role::Mention,
+                listens: true,
+            },
+        ));
+        assert_eq!(demoted, Err(ApiError::Conflict));
         block_on(client.remove_wiring(surface, old_lead)).expect("the demoted lead leaves");
         block_on(client.remove_wiring(surface, old_lead)).expect("removing twice is fine");
         let after = block_on(client.surfaces()).expect("surfaces");
