@@ -8,7 +8,7 @@ use gpui::{
 };
 use time::OffsetDateTime;
 use tuclaw_core::grouping::day_title;
-use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message, MessageId};
+use tuclaw_core::model::{Agent, AgentId, Channel, ChannelKind, Message, MessageId};
 use tuclaw_core::v3;
 
 use crate::automation::{FireRow, OnTask, fire_row, trigger_tag};
@@ -66,11 +66,6 @@ enum Header {
         name: SharedString,
         role: SharedString,
     },
-}
-
-struct Busy {
-    name: SharedString,
-    task: SharedString,
 }
 
 impl Feed {
@@ -349,11 +344,7 @@ impl Render for Feed {
             }
             Focus::Taken => {}
         }
-        let state = self.state.read(cx);
-        let header = header(state);
-        let agents = state.agents();
-        let busy = busy_agents(agents);
-        let total = agents.len();
+        let header = header(self.state.read(cx));
         div()
             .flex()
             .flex_col()
@@ -362,7 +353,6 @@ impl Render for Feed {
             .child(header_element(header))
             .child(self.body())
             .child(self.composer.clone())
-            .child(status_bar(busy, total))
     }
 }
 
@@ -588,29 +578,6 @@ fn agent_count(agents: usize) -> String {
     }
 }
 
-fn busy_agents(agents: &[Agent]) -> Vec<Busy> {
-    let mut busy = Vec::new();
-    for Agent {
-        id: _,
-        name,
-        initials: _,
-        role: _,
-        status,
-        sort_index: _,
-        picture: _,
-    } in agents
-    {
-        let AgentStatus::Busy(task) = status else {
-            continue;
-        };
-        busy.push(Busy {
-            name: SharedString::from(name.clone()),
-            task: SharedString::from(task.clone()),
-        });
-    }
-    busy
-}
-
 fn header_element(header: Header) -> impl IntoElement {
     let lead = match header {
         Header::Channel { name, agents } => div()
@@ -746,77 +713,19 @@ fn empty_state() -> impl IntoElement {
         )
 }
 
-fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
-    let count = busy.len();
-    let mut left = div().flex().items_center().gap(px(14.)).min_w(px(0.));
-    for Busy { name, task } in busy {
-        left = left.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .w(px(6.))
-                        .h(px(6.))
-                        .flex_none()
-                        .rounded_full()
-                        .bg(theme::status_busy()),
-                )
-                .child(
-                    div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme::text_secondary())
-                        .child(name),
-                )
-                .child(div().text_color(theme::text_muted()).child(task)),
-        );
-    }
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(12.))
-        .h(px(30.))
-        .px(px(20.))
-        .border_t_1()
-        .border_color(theme::hairline())
-        .text_size(px(11.5))
-        .child(left)
-        .child(div().flex_1())
-        .child(
-            div()
-                .flex_none()
-                .text_color(theme::text_muted())
-                .child(format!("{count} of {total} agents busy")),
-        )
-}
-
 #[cfg(test)]
 mod tests {
-    use gpui::{Entity, SharedString, TestAppContext, VisualTestContext};
-    use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Span};
+    use gpui::{Entity, TestAppContext, VisualTestContext};
+    use tuclaw_core::model::{AgentId, Author, Span};
     use tuclaw_core::v3::MockTransport;
 
     use tuclaw_core::v3::RunState;
 
-    use super::{Busy, Feed, Header, Item, busy_agents, header};
+    use super::{Feed, Header, Item, header};
     use crate::live::RunView;
     use crate::runlog::{Row, StepStatus};
     use crate::state::{AppState, Recording};
     use crate::testing::{FakeRecorder, channel_named, loaded, play};
-
-    fn agent(id: i64, status: AgentStatus) -> Agent {
-        Agent {
-            id: AgentId(id),
-            name: format!("agent {id}"),
-            initials: "AG".to_string(),
-            role: "role".to_string(),
-            status,
-            sort_index: id,
-            picture: None,
-        }
-    }
 
     fn feed(
         cx: &mut TestAppContext,
@@ -1053,34 +962,6 @@ mod tests {
 
     fn typed(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> String {
         feed.read_with(cx, |feed, cx| feed.composer.read(cx).text(cx).to_string())
-    }
-
-    #[test]
-    fn the_status_bar_lists_only_the_busy_agents() {
-        let agents = vec![
-            agent(1, AgentStatus::Busy("Syncing subtitles".to_string())),
-            agent(2, AgentStatus::Idle),
-            agent(3, AgentStatus::Busy("Downloading".to_string())),
-        ];
-        let busy = busy_agents(&agents);
-        let mut named = Vec::new();
-        for Busy { name, task } in &busy {
-            named.push((name.clone(), task.clone()));
-        }
-        assert_eq!(
-            named,
-            vec![
-                (
-                    SharedString::new_static("agent 1"),
-                    SharedString::new_static("Syncing subtitles")
-                ),
-                (
-                    SharedString::new_static("agent 3"),
-                    SharedString::new_static("Downloading")
-                ),
-            ]
-        );
-        assert!(busy_agents(&[agent(4, AgentStatus::Idle)]).is_empty());
     }
 
     #[test]

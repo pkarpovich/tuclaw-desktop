@@ -720,6 +720,22 @@ impl AppState {
         runs
     }
 
+    pub fn working(&self, channel: ChannelId) -> Vec<String> {
+        let surface = link::surface_id(channel);
+        let mut names = Vec::new();
+        for run in self.runs.values() {
+            if run.surface_id != Some(surface) || run.state.is_finished() {
+                continue;
+            }
+            for agent in &self.directory {
+                if agent.id == run.agent_id && !names.contains(&agent.name) {
+                    names.push(agent.name.clone());
+                }
+            }
+        }
+        names
+    }
+
     pub fn wired_agents(&self, channel: ChannelId) -> usize {
         let surface = link::surface_id(channel);
         let mut count = 0;

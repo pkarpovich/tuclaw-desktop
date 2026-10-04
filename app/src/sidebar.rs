@@ -29,6 +29,7 @@ struct Row {
     name: SharedString,
     lead: Lead,
     unread: usize,
+    working: Vec<String>,
     highlight: Highlight,
 }
 
@@ -98,9 +99,11 @@ impl Sidebar {
             name,
             lead,
             unread,
+            working,
             highlight,
         } = row;
         let selector = format!("sidebar-row-{name}");
+        let selector_name = name.clone();
         let element = row_frame(selector)
             .py(px(5.))
             .on_click(cx.listener(move |sidebar, _event, _window, cx| {
@@ -124,6 +127,11 @@ impl Sidebar {
                     .child(name),
             )
             .child(div().flex_1());
+        let element = if working.is_empty() {
+            element
+        } else {
+            element.child(working_dot(&selector_name))
+        };
         let element = if unread > 0 {
             element.child(unread_badge(unread))
         } else {
@@ -228,6 +236,7 @@ fn sections(state: &AppState) -> Vec<Section> {
             name: SharedString::from(name.clone()),
             lead,
             unread: *unread,
+            working: state.working(*id),
             highlight,
         });
     }
@@ -308,6 +317,18 @@ fn status_dot(status: Status) -> Div {
         .bg(tone)
         .border_2()
         .border_color(theme::window())
+}
+
+fn working_dot(channel: &SharedString) -> impl IntoElement {
+    let selector = format!("sidebar-working-{channel}");
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .flex_none()
+        .size(px(8.))
+        .mr(px(4.))
+        .rounded_full()
+        .bg(theme::status_busy())
 }
 
 fn unread_badge(unread: usize) -> impl IntoElement {
@@ -449,6 +470,14 @@ mod tests {
         let built = state.clone();
         let (_sidebar, cx) = cx.add_window_view(move |_window, cx| Sidebar::new(built, cx));
         (state, cx)
+    }
+
+    #[gpui::test]
+    fn a_channel_with_a_working_agent_carries_a_dot(cx: &mut TestAppContext) {
+        let (_state, cx) = sidebar(cx);
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("sidebar-working-Magnet Feed").is_some());
+        assert!(cx.debug_bounds("sidebar-working-General").is_none());
     }
 
     #[gpui::test]
