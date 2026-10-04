@@ -192,3 +192,16 @@ Agreed 2026-10-04 (daemon plan `docs/plans/completed/20261004-v3.1-voice-attachm
   `id` is an integer (int64) like every other v3 id; `kind` is `voice` in v3.1; `mime` is the stored object's type (`audio/ogg` for Telegram voice, `audio/mp4` for the watch); `duration_ms` is `null` when unknown, never `0`.
 - `GET /attachments/{id}` (bearer like every v3 route) streams the original: `200` with `Content-Type` = the attachment's `mime` and `Content-Length`; `Range: bytes=a-b` or `bytes=a-` answers `206` with `Content-Range: bytes a-b/<size>` and the range's length as `Content-Length`; `Accept-Ranges: bytes` on both. Any other range (several ranges, a suffix `bytes=-n`, a start past the end) answers `416` with `Content-Range: bytes */<size>`. Unknown id = `404 not_found`; the object missing from storage = `404 not_found` with message "attachment object missing"; storage unreachable = `503 unavailable`.
 - Capabilities: unchanged (`capabilities.ops` lists client frame types, not REST routes; a route's presence is its capability).
+
+## v3.2 additions: avatars and the user profile
+
+Agreed 2026-10-04 with the desktop. tuclaw owns the pictures of its agents and of the user; Telegram is at most a one-time seed (`tuclawd --seed-avatars`), never a source the contract knows about. Additive only.
+
+- Every agent in `GET /agents` gains `avatar_url`: a relative, versioned path such as `/api/v3/agents/1/avatar?v=AQADbVsx`, fetched with the same bearer as every v3 call, or `null` when the agent has no picture (the client draws initials). `v` is opaque to the client. A new picture is a new `v`, so a versioned URL may be cached for good.
+- `GET /me` -> `{"name": "Pavel", "avatar_url": "/api/v3/me/avatar?v=AgADq2wx"}`. Before anything is set it is `{"name": "You", "avatar_url": null}`, never a 404.
+- `GET /agents/{id}/avatar` and `GET /me/avatar` stream the picture with its stored `Content-Type` (`image/png`, `image/jpeg` or `image/webp`) and `Content-Length`. With the current `?v=` the answer carries `Cache-Control: private, max-age=31536000, immutable`, without one `no-cache`. No picture, an unknown agent or a `v` that is no longer current = `404 not_found`: the client keeps the initials, it is never an error banner.
+- `PUT /agents/{id}/avatar` and `PUT /me/avatar` take the raw image as the body (png, jpeg or webp, sniffed from the bytes, at most 2 MiB) and answer `200 {"avatar_url": "..."}`. Not an image or too large = `400 invalid_request`; unknown agent = `404 not_found`.
+- `DELETE /agents/{id}/avatar` and `DELETE /me/avatar` answer `204`; the agent or the user is back to initials.
+- `PATCH /me` `{"name": "Pavel"}` renames the user and answers like `GET /me`; an empty name = `400 invalid_request`.
+- A changed picture shows up on the next `GET /agents` or `GET /me`; there is no socket event for it.
+- The writes go through the daemon's operations (`avatar.set`, `avatar.clear`, `user.rename`), so an agent tool can later take the same path; today they are user-only.
