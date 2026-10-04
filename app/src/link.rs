@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const VOICE_HEADER: &str = "[Voice message";
+const SILENT: &str = "[SILENT]";
 
 pub fn channel(surface: &v3::Surface) -> Channel {
     let v3::SurfaceId(id) = surface.id;
@@ -81,6 +82,15 @@ pub fn message(message: &v3::Message) -> Message {
         Some(_) => transcript(&message.text),
         None => message.text.as_str(),
     };
+    let text = match message.kind {
+        v3::MessageKind::Answer if text.trim() == SILENT => "",
+        v3::MessageKind::Answer => text,
+        v3::MessageKind::User => text,
+        v3::MessageKind::Post => text,
+        v3::MessageKind::Notice => text,
+        v3::MessageKind::A2a => text,
+        v3::MessageKind::Unknown => text,
+    };
     Message {
         id: MessageId(id),
         author,
@@ -92,6 +102,14 @@ pub fn message(message: &v3::Message) -> Message {
 }
 
 fn run_ref(message: &v3::Message) -> Option<RunRef> {
+    match message.kind {
+        v3::MessageKind::Answer => {}
+        v3::MessageKind::User => return None,
+        v3::MessageKind::Post => return None,
+        v3::MessageKind::Notice => return None,
+        v3::MessageKind::A2a => return None,
+        v3::MessageKind::Unknown => return None,
+    }
     let v3::RunId(id) = message.run_id.as_ref()?;
     let v3::RunSummary {
         status,
@@ -465,6 +483,31 @@ mod tests {
             source_key(&Source::Daemon("http://192.168.1.10:9090".into())),
             "192-168-1-10-9090"
         );
+    }
+
+    fn of_run(kind: &str, text: &str) -> v3::Message {
+        serde_json::from_value(serde_json::json!({
+            "id": 9300, "surface_id": 1, "kind": kind,
+            "author": {"kind": "agent", "agent_id": 1}, "text": text,
+            "run_id": "f61ac42e", "created_at": "2026-10-04T11:20:00Z",
+            "run_summary": {"status": "ok", "step_count": 53, "tool_count": 30, "duration_ms": 328567}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn only_the_answer_carries_its_run_and_a_bare_silent_answer_has_no_text() {
+        let post = message(&of_run("post", "Ответы на 5 из 6 вопросов готовы."));
+        assert_eq!(post.run, None);
+        assert_eq!(
+            post.body,
+            vec![Span::Text("Ответы на 5 из 6 вопросов готовы.".into())]
+        );
+        let silent = message(&of_run("answer", "[SILENT]\n"));
+        assert_eq!(silent.body, vec![Span::Text(String::new())]);
+        assert_eq!(silent.run.map(|run| run.tools), Some(30));
+        let spoken = message(&of_run("answer", "Готово."));
+        assert_eq!(spoken.body, vec![Span::Text("Готово.".into())]);
     }
 
     #[test]
