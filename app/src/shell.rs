@@ -4,6 +4,7 @@ use gpui::{
 };
 
 use crate::agents::AgentsView;
+use crate::control::button;
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
 use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
@@ -178,12 +179,10 @@ impl Shell {
     }
 
     fn sidebar_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("sidebar-toggle")
-            .debug_selector(|| "sidebar-toggle".to_string())
+        button("sidebar-toggle")
+            .accessibility_label("Toggle the sidebar")
             .p(px(5.))
             .rounded(px(7.))
-            .cursor_pointer()
             .hover(|style| style.bg(theme::sunken()))
             .on_click(cx.listener(|shell, _event, _window, cx| {
                 shell.state.update(cx, |state, cx| state.toggle_sidebar(cx));

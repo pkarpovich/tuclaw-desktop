@@ -2,8 +2,10 @@ use gpui::{
     Context, Div, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window, div,
     prelude::*, px,
 };
+use gpui_kit::base::Button;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
+use crate::control::row_button;
 use crate::icon::{Glyph, icon};
 use crate::state::{AppState, Segment, View};
 use crate::theme;
@@ -63,9 +65,7 @@ impl Sidebar {
         highlight: Highlight,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let row = row_frame()
-            .id("sidebar-agents")
-            .debug_selector(|| "sidebar-agents".to_string())
+        let row = row_frame("sidebar-agents")
             .py(px(6.))
             .on_click(cx.listener(|sidebar, _event, _window, cx| {
                 sidebar
@@ -103,9 +103,7 @@ impl Sidebar {
             highlight,
         } = row;
         let selector = format!("sidebar-row-{name}");
-        let element = row_frame()
-            .id(SharedString::from(selector.clone()))
-            .debug_selector(move || selector)
+        let element = row_frame(selector)
             .py(px(5.))
             .on_click(cx.listener(move |sidebar, _event, _window, cx| {
                 sidebar
@@ -262,15 +260,12 @@ fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
     }
 }
 
-fn row_frame() -> Div {
-    div()
-        .flex()
-        .items_center()
+fn row_frame(selector: impl Into<SharedString>) -> Button {
+    row_button(selector)
         .gap(px(10.))
         .px(px(10.))
         .rounded(px(8.))
         .text_size(px(13.5))
-        .cursor_pointer()
         .hover(|style| style.bg(theme::sunken()))
 }
 

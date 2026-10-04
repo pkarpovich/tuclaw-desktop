@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{App, Div, FontWeight, Hsla, SharedString, Window, div, prelude::*, px, relative};
+use gpui_kit::base::Button;
 use serde_json::Value;
 use time::OffsetDateTime;
 use tuclaw_core::model::{MessageId, RunOutcome, RunRef};
@@ -9,6 +10,7 @@ use tuclaw_core::v3::{
     ContextWindow, RowKind, Run, RunDetail, Step, StepKind, StepRow, ToolStatus, Usage,
 };
 
+use crate::control::{button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::live::tool_detail;
 use crate::rich::{self, Ink};
@@ -832,15 +834,11 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
         Tone::Failed => theme::accent(),
         Tone::Stopped => theme::text_muted(),
     };
-    let line = div()
-        .id(SharedString::from(selector.clone()))
-        .debug_selector(move || selector)
-        .flex()
-        .items_center()
+    let line = row_button(selector)
+        .self_start()
         .gap(px(6.))
         .text_size(px(12.))
         .text_color(ink)
-        .cursor_pointer()
         .on_click(move |_event, window, cx| toggle(Disclosure::Log(message), window, cx))
         .child(icon(
             if open { Glyph::Open } else { Glyph::Closed },
@@ -856,14 +854,9 @@ pub fn render(message: MessageId, pane: Pane, on_disclose: OnDisclose) -> Div {
         Body::Log { rows, footer } => {
             let selector = format!("runlog-{raw}-inspect");
             let inspect = on_disclose.clone();
-            let link = div()
-                .id(SharedString::from(selector.clone()))
-                .debug_selector(move || selector)
+            let link = button(selector)
                 .self_end()
-                .flex()
-                .items_center()
                 .gap(px(2.))
-                .cursor_pointer()
                 .text_size(px(11.5))
                 .text_color(theme::text_secondary())
                 .on_click(move |_event, window, cx| {
@@ -968,13 +961,9 @@ pub fn row_element(owner: &Owner, index: usize, row: RowView, on_disclose: OnDis
             let group_owner = owner.clone();
             let count = calls.len();
             let header = step_line(
-                div()
-                    .id(SharedString::from(selector.clone()))
-                    .debug_selector(move || selector)
-                    .cursor_pointer()
-                    .on_click(move |_event, window, cx| {
-                        toggle(Disclosure::Group(group_owner.clone(), seq), window, cx)
-                    }),
+                row_button(selector).on_click(move |_event, window, cx| {
+                    toggle(Disclosure::Group(group_owner.clone(), seq), window, cx)
+                }),
                 StepLine {
                     name,
                     badge: Some(format!("×{count}")),
@@ -1045,7 +1034,7 @@ struct StepLine {
     chevron: Option<bool>,
 }
 
-fn step_line(line: gpui::Stateful<Div>, step: StepLine) -> gpui::Stateful<Div> {
+fn step_line(line: Button, step: StepLine) -> Button {
     let StepLine {
         name,
         badge,
@@ -1143,13 +1132,9 @@ fn tool_element(
     let step_owner = owner.clone();
     let name_shown = name.clone();
     let header = step_line(
-        div()
-            .id(SharedString::from(selector.clone()))
-            .debug_selector(move || selector)
-            .cursor_pointer()
-            .on_click(move |_event, window, cx| {
-                toggle(Disclosure::Step(step_owner.clone(), seq), window, cx)
-            }),
+        row_button(selector).on_click(move |_event, window, cx| {
+            toggle(Disclosure::Step(step_owner.clone(), seq), window, cx)
+        }),
         StepLine {
             name,
             badge: None,
@@ -1201,10 +1186,7 @@ fn tool_element(
             let toggle = on_disclose.clone();
             let full_owner = owner.clone();
             meta = meta.child(
-                div()
-                    .id(SharedString::from(selector.clone()))
-                    .debug_selector(move || selector)
-                    .cursor_pointer()
+                button(selector)
                     .text_color(theme::text_secondary())
                     .on_click(move |_event, window, cx| {
                         toggle(Disclosure::FullResult(full_owner.clone(), seq), window, cx)

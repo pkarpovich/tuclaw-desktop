@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod audio;
 pub mod composer;
+pub mod control;
 pub mod failure;
 pub mod feed;
 pub mod icon;

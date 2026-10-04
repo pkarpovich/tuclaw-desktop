@@ -6,6 +6,7 @@ use gpui::{App, Div, FontWeight, SharedString, Stateful, Window, div, prelude::*
 use tuclaw_core::model::{Agent, Message, RunOutcome, RunRef};
 use tuclaw_core::v3::RunDetail;
 
+use crate::control::button;
 use crate::icon::{Glyph, icon};
 use crate::message::{avatar, writer};
 use crate::rich;
@@ -154,12 +155,10 @@ pub fn render(input: InspectorInput, actions: InspectorActions) -> Stateful<Div>
                 ),
         )
         .child(
-            div()
-                .id("inspector-close")
-                .debug_selector(|| "inspector-close".to_string())
+            button("inspector-close")
+                .accessibility_label("Close the run")
                 .p(px(4.))
                 .rounded(px(6.))
-                .cursor_pointer()
                 .hover(|style| style.bg(theme::sunken()))
                 .on_click(move |_event, window, cx| close(window, cx))
                 .child(icon(Glyph::Close, px(14.), theme::text_secondary())),

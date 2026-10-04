@@ -5,6 +5,7 @@ use serde_json::Value;
 use tuclaw_core::model::{Agent, Author};
 use tuclaw_core::v3::{Run, RunId, RunState};
 
+use crate::control::button;
 use crate::icon::{Glyph, icon};
 use crate::link;
 use crate::message::{agent_badge, avatar, writer};
@@ -184,12 +185,9 @@ fn stop_button(view: &RunView, on_stop: OnStop) -> Option<impl IntoElement> {
     let RunId(raw) = &run;
     let selector = format!("run-stop-{raw}");
     Some(
-        div()
-            .id(SharedString::from(selector.clone()))
-            .debug_selector(move || selector)
+        button(selector)
+            .accessibility_label("Stop the run")
             .flex_none()
-            .flex()
-            .items_center()
             .gap(px(5.))
             .px(px(8.))
             .py(px(2.))
@@ -198,7 +196,6 @@ fn stop_button(view: &RunView, on_stop: OnStop) -> Option<impl IntoElement> {
             .border_color(theme::border())
             .text_size(px(11.5))
             .text_color(theme::text_secondary())
-            .cursor_pointer()
             .hover(|style| style.bg(theme::sunken()))
             .on_click(move |_event, window, cx| on_stop(&run, window, cx))
             .child(icon(Glyph::Stop, px(10.), theme::text_secondary()))

@@ -5,6 +5,7 @@ use gpui::{
 };
 use gpui_kit::base::input::{Enter, Textarea, TextareaState};
 
+use crate::control::button;
 use crate::icon::{Glyph, icon};
 use crate::theme;
 
@@ -98,34 +99,29 @@ impl Composer {
     }
 
     fn send_button(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        let (selector, size) = ("composer-send-feed", px(32.));
-        let button = div()
-            .id(selector)
-            .debug_selector(move || selector.to_string())
-            .flex()
+        let size = px(32.);
+        let send = button("composer-send-feed")
+            .accessibility_label("Send")
             .flex_none()
-            .items_center()
-            .justify_center()
             .w(size)
             .h(size)
             .ml(px(7.))
-            .rounded_full();
+            .rounded_full()
+            .on_click(cx.listener(|composer, _event, window, cx| composer.submit(window, cx)));
         match sendable {
-            Sendable::Blank => {
-                button
-                    .bg(theme::sunken())
-                    .child(icon(Glyph::Send, px(16.), theme::text_muted()))
-            }
-            Sendable::Ready => button
+            Sendable::Blank => send
+                .disabled(true)
+                .cursor_default()
+                .bg(theme::sunken())
+                .child(icon(Glyph::Send, px(16.), theme::text_muted())),
+            Sendable::Ready => send
                 .bg(theme::accent())
-                .child(icon(Glyph::Send, px(16.), theme::chip_text()))
-                .cursor_pointer()
                 .shadow(vec![
                     BoxShadow::new(px(0.), px(3.), theme::shadow())
                         .blur_radius(px(8.))
                         .spread_radius(px(-3.)),
                 ])
-                .on_click(cx.listener(|composer, _event, window, cx| composer.submit(window, cx))),
+                .child(icon(Glyph::Send, px(16.), theme::chip_text())),
         }
     }
 

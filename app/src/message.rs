@@ -10,6 +10,7 @@ use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
 use crate::audio::{PEAKS, Peaks, Waveform};
+use crate::control::{button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::rich::{self, Ink, Parts};
 use crate::runlog::{self, OnDisclose, Pane};
@@ -183,13 +184,14 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         Player::Playing { position, total } => (Some(Glyph::Stop), Some(position), total, None),
         Player::Failed(reason) => (Some(Glyph::Play), None, known, Some(reason)),
     };
-    let button = div()
-        .id(SharedString::from(selector.clone()))
-        .debug_selector(move || selector)
+    let label = match glyph {
+        Some(Glyph::Stop) => "Stop the recording",
+        Some(_) => "Play the recording",
+        None => "Loading the recording",
+    };
+    let play = button(selector)
+        .accessibility_label(label)
         .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
         .w(px(30.))
         .h(px(30.))
         .rounded_full()
@@ -201,7 +203,6 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
             spread_radius: px(-2.),
             inset: false,
         }])
-        .cursor_pointer()
         .on_click(move |_event, window, cx| on_play(id, window, cx))
         .child(match glyph {
             Some(glyph) => icon(glyph, px(13.), theme::chip_text()).into_any_element(),
@@ -223,7 +224,7 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         .gap(px(12.))
         .px(px(13.))
         .py(px(11.))
-        .child(button)
+        .child(play)
         .child(wave_bars(
             voice.recording,
             peaks,
@@ -409,17 +410,13 @@ fn thinking_fold(id: MessageId, thinking: String, fold: Fold, on_toggle: OnToggl
         Fold::Collapsed => Glyph::Closed,
         Fold::Expanded => Glyph::Open,
     };
-    let toggle = div()
-        .id(SharedString::from(selector.clone()))
-        .debug_selector(move || selector)
+    let toggle = row_button(selector)
         .flex_none()
+        .self_start()
         .text_size(px(12.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::text_muted())
-        .cursor_pointer()
         .on_click(move |_event, window, cx| on_toggle(id, window, cx))
-        .flex()
-        .items_center()
         .gap(px(3.))
         .child(icon(marker, px(12.), theme::text_muted()))
         .child("Thinking");
