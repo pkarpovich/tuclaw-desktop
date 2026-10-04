@@ -53,7 +53,16 @@ pub enum StateEvent {
     MessageAppended,
     RunsChanged,
     FoldToggled,
+    OlderLoaded,
     SendFailed(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum History {
+    Unknown,
+    More,
+    Loading,
+    Complete,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +99,7 @@ pub struct AppState {
     channels: Vec<Channel>,
     selected: Option<ChannelId>,
     messages: Vec<Message>,
+    history: History,
     runs: BTreeMap<RunId, Run>,
     queued: Vec<Run>,
     early: HashMap<RunId, Vec<TextDelta>>,
@@ -125,6 +135,7 @@ impl AppState {
             channels: Vec::new(),
             selected: None,
             messages: Vec::new(),
+            history: History::Unknown,
             runs: BTreeMap::new(),
             queued: Vec::new(),
             early: HashMap::new(),
@@ -450,6 +461,7 @@ impl AppState {
             self.selected = Some(channel);
             self.halt();
             self.messages.clear();
+            self.history = History::Unknown;
             self.pending.clear();
             self.forget_finished_runs();
             self.send_focus();
@@ -603,6 +615,86 @@ impl AppState {
         cx.notify();
     }
 
+    pub fn history(&self) -> History {
+        self.history
+    }
+
+    pub fn load_older(&mut self, cx: &mut Context<Self>) {
+        match self.history {
+            History::More => {}
+            History::Unknown => return,
+            History::Loading => return,
+            History::Complete => return,
+        }
+        let Some(channel) = self.selected else {
+            return;
+        };
+        let mut oldest = None;
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 {
+                oldest = Some(oldest.map_or(raw, |current: i64| current.min(raw)));
+            }
+        }
+        let Some(oldest) = oldest else {
+            return;
+        };
+        self.history = History::Loading;
+        let request =
+            self.client
+                .messages_before(link::surface_id(channel), v3::MessageId(oldest), PAGE);
+        cx.spawn(async move |this, cx| {
+            let page = request.await;
+            this.update(cx, |state, cx| state.older_loaded(channel, page, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    fn older_loaded(
+        &mut self,
+        channel: ChannelId,
+        page: Result<v3::MessagesPage, v3::ApiError>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected != Some(channel) {
+            return;
+        }
+        let page = match page {
+            Ok(page) => page,
+            Err(_error) => {
+                self.history = History::More;
+                return;
+            }
+        };
+        let mut older = Vec::new();
+        for message in &page.messages {
+            let mapped = link::message(message);
+            let mut known = false;
+            for candidate in &self.messages {
+                if candidate.id == mapped.id {
+                    known = true;
+                }
+            }
+            if !known {
+                older.push(mapped);
+            }
+        }
+        self.history = if page.has_more {
+            History::More
+        } else {
+            History::Complete
+        };
+        if older.is_empty() {
+            return;
+        }
+        older.append(&mut self.messages);
+        self.messages = older;
+        self.fill_waveforms(cx);
+        cx.emit(StateEvent::OlderLoaded);
+        cx.notify();
+    }
+
     fn load_page(&self, channel: ChannelId, cx: &mut Context<Self>) {
         let request = self.client.messages(link::surface_id(channel), PAGE);
         cx.spawn(async move |this, cx| {
@@ -646,6 +738,11 @@ impl AppState {
             }
         }
         self.messages = messages;
+        self.history = if page.has_more {
+            History::More
+        } else {
+            History::Complete
+        };
         self.fill_waveforms(cx);
         cx.emit(StateEvent::MessagesLoaded);
         cx.notify();
@@ -1377,5 +1474,39 @@ mod tests {
         let peaks = again.read_with(cx, |state, _cx| state.peaks(recording));
         assert_eq!(peaks, Some(crate::audio::Peaks(levels)));
         std::fs::remove_dir_all(directory).ok();
+    }
+
+    fn ids(state: &Entity<AppState>, cx: &mut TestAppContext) -> (usize, i64) {
+        state.read_with(cx, |state, _cx| {
+            let tuclaw_core::model::MessageId(first) = state.messages()[0].id;
+            (state.messages().len(), first)
+        })
+    }
+
+    #[gpui::test]
+    fn older_pages_load_until_the_history_is_complete(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, crate::testing::long_world(120));
+        assert_eq!(ids(&state, cx), (50, 71));
+        assert_eq!(
+            state.read_with(cx, |state, _cx| state.history()),
+            super::History::More
+        );
+        state.update(cx, |state, cx| state.load_older(cx));
+        assert_eq!(
+            state.read_with(cx, |state, _cx| state.history()),
+            super::History::Loading
+        );
+        cx.run_until_parked();
+        assert_eq!(ids(&state, cx), (100, 21));
+        state.update(cx, |state, cx| state.load_older(cx));
+        cx.run_until_parked();
+        assert_eq!(ids(&state, cx), (120, 1));
+        assert_eq!(
+            state.read_with(cx, |state, _cx| state.history()),
+            super::History::Complete
+        );
+        state.update(cx, |state, cx| state.load_older(cx));
+        cx.run_until_parked();
+        assert_eq!(ids(&state, cx), (120, 1));
     }
 }

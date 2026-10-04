@@ -120,3 +120,30 @@ pub fn channel_named(state: &Entity<AppState>, cx: &mut TestAppContext, name: &s
         found.expect("the mock world carries that channel")
     })
 }
+
+pub fn long_world(count: i64) -> Seed {
+    let surfaces = serde_json::from_str(include_str!("../../core/testdata/v3/surfaces.json"))
+        .expect("surfaces");
+    let agents =
+        serde_json::from_str(include_str!("../../core/testdata/v3/agents.json")).expect("agents");
+    let start = time::macros::datetime!(2026-10-01 00:00 UTC);
+    let mut messages = Vec::new();
+    for id in 1..=count {
+        let created = start + time::Duration::hours(id);
+        let created = created
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("formats");
+        let message = serde_json::json!({
+            "id": id, "surface_id": 1, "kind": "user", "author": {"kind": "user"},
+            "text": format!("message {id}"), "created_at": created
+        });
+        messages.push(serde_json::from_value(message).expect("message"));
+    }
+    Seed {
+        surfaces,
+        agents,
+        messages,
+        runs: Vec::new(),
+        media: Vec::new(),
+    }
+}

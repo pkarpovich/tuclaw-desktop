@@ -7,7 +7,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::dto::{
-    Agent, AttachmentId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId,
+    Agent, AttachmentId, MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface,
+    SurfaceId,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -76,6 +77,21 @@ impl Client {
         let request = self
             .transport
             .get(&format!("/surfaces/{surface}/messages?limit={limit}"));
+        async move { body(request.await?) }
+    }
+
+    /// Fetches the page of a surface's messages just older than `before`, oldest first.
+    pub fn messages_before(
+        &self,
+        surface: SurfaceId,
+        before: MessageId,
+        limit: u32,
+    ) -> impl Future<Output = Result<MessagesPage, ApiError>> + Send + 'static {
+        let SurfaceId(surface) = surface;
+        let MessageId(before) = before;
+        let request = self.transport.get(&format!(
+            "/surfaces/{surface}/messages?before={before}&limit={limit}"
+        ));
         async move { body(request.await?) }
     }
 

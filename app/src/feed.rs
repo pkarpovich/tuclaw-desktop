@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, Context, Div, Entity, FollowMode, FontWeight, IntoElement, ListAlignment,
-    ListState, Render, SharedString, Subscription, Window, div, list, prelude::*, px,
+    ListOffset, ListScrollEvent, ListState, Render, SharedString, Subscription, Window, div, list,
+    prelude::*, px,
 };
 use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
@@ -11,7 +12,9 @@ use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Mess
 use crate::composer::Composer;
 use crate::live::{OnStop, RunView, run_card, run_view};
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
-use crate::state::{AppState, StateEvent};
+use crate::state::{AppState, History, StateEvent};
+
+const PREFETCH: usize = 3;
 use crate::theme;
 
 pub struct Feed {
@@ -79,6 +82,7 @@ impl Feed {
                 feed.list.remeasure();
                 cx.notify();
             }
+            StateEvent::OlderLoaded => feed.keep_position(cx),
             StateEvent::SendFailed(text) => {
                 let text = text.clone();
                 feed.composer
@@ -88,6 +92,20 @@ impl Feed {
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
         list.set_follow_mode(FollowMode::Tail);
+        let pager = state.downgrade();
+        list.set_scroll_handler(move |event: &ListScrollEvent, _window, cx| {
+            if !near_top(event) {
+                return;
+            }
+            pager
+                .update(cx, |state, cx| match state.history() {
+                    History::More => state.load_older(cx),
+                    History::Unknown => {}
+                    History::Loading => {}
+                    History::Complete => {}
+                })
+                .ok();
+        });
         let placeholder = placeholder(state.read(cx));
         let sender = state.clone();
         let composer = cx.new(|cx| {
@@ -112,6 +130,38 @@ impl Feed {
         let placeholder = placeholder(self.state.read(cx));
         self.composer
             .update(cx, |composer, cx| composer.set_placeholder(placeholder, cx));
+    }
+
+    fn keep_position(&mut self, cx: &mut Context<Self>) {
+        let ListOffset {
+            item_ix,
+            offset_in_item,
+        } = self.list.logical_scroll_top();
+        let (anchor, offset_in_item) = match anchor_from(&self.items, item_ix) {
+            Some((anchor, moved)) if moved => (Some(anchor), px(0.)),
+            Some((anchor, _)) => (Some(anchor), offset_in_item),
+            None => (None, offset_in_item),
+        };
+        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let mut found = None;
+        if let Some(anchor) = anchor {
+            for (index, item) in items.iter().enumerate() {
+                if key(item) == anchor {
+                    found = Some(index);
+                    break;
+                }
+            }
+        }
+        let count = items.len();
+        self.items = Rc::new(items);
+        self.list.reset(count);
+        if let Some(index) = found {
+            self.list.scroll_to(ListOffset {
+                item_ix: index,
+                offset_in_item,
+            });
+        }
+        cx.notify();
     }
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
@@ -231,6 +281,36 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
         items.push(Item::Run(run_view(run)));
     }
     items
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Key {
+    Separator(SharedString),
+    Message(tuclaw_core::model::MessageId),
+    Run(Option<tuclaw_core::v3::RunId>),
+}
+
+fn key(item: &Item) -> Key {
+    match item {
+        Item::Separator(title) => Key::Separator(title.clone()),
+        Item::Message(message) => Key::Message(message.id),
+        Item::Run(run) => Key::Run(run.id.clone()),
+    }
+}
+
+fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
+    for (index, item) in items.iter().enumerate().skip(from) {
+        match item {
+            Item::Message(message) => return Some((Key::Message(message.id), index != from)),
+            Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
+            Item::Separator(_) => {}
+        }
+    }
+    None
+}
+
+fn near_top(event: &ListScrollEvent) -> bool {
+    event.is_scrolled && event.visible_range.start <= PREFETCH
 }
 
 fn first_run(items: &[Item]) -> usize {
@@ -905,5 +985,54 @@ mod tests {
             cx.debug_bounds("voice-7").is_none(),
             "a message without a recording has no player"
         );
+    }
+
+    #[test]
+    fn only_a_scroll_near_the_top_asks_for_older_messages() {
+        let event = |start: usize, is_scrolled: bool| gpui::ListScrollEvent {
+            visible_range: start..start + 10,
+            count: 10,
+            is_scrolled,
+            is_following_tail: false,
+        };
+        assert!(super::near_top(&event(0, true)));
+        assert!(super::near_top(&event(super::PREFETCH, true)));
+        assert!(!super::near_top(&event(super::PREFETCH + 1, true)));
+        assert!(!super::near_top(&event(0, false)));
+    }
+
+    #[gpui::test]
+    fn loading_older_messages_keeps_the_visible_message_in_place(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, crate::testing::long_world(120));
+        let built = state.clone();
+        let (feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
+        cx.run_until_parked();
+        let anchored = tuclaw_core::model::MessageId(75);
+        feed.update(cx, |feed, _cx| {
+            let mut index = None;
+            for (position, item) in feed.items.iter().enumerate() {
+                if super::key(item) == super::Key::Message(anchored) {
+                    index = Some(position);
+                }
+            }
+            feed.list.scroll_to(gpui::ListOffset {
+                item_ix: index.expect("message 75 is on the first page"),
+                offset_in_item: gpui::px(4.),
+            });
+        });
+        state.update(cx, |state, cx| state.load_older(cx));
+        cx.run_until_parked();
+        feed.read_with(cx, |feed, _cx| {
+            let gpui::ListOffset {
+                item_ix,
+                offset_in_item,
+            } = feed.list.logical_scroll_top();
+            assert_eq!(
+                feed.items.get(item_ix).map(super::key),
+                Some(super::Key::Message(anchored))
+            );
+            assert_eq!(offset_in_item, gpui::px(4.));
+            assert!(feed.items.len() > 100);
+        });
     }
 }

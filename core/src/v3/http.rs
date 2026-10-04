@@ -345,6 +345,22 @@ mod tests {
     }
 
     #[test]
+    fn older_pages_ask_with_the_before_cursor() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "GET",
+            "/api/v3/surfaces/1/messages",
+            json_reply(200, include_str!("../../testdata/v3/messages_page.json")),
+        );
+        within(client(&daemon).messages_before(SurfaceId(1), MessageId(9100), 50))
+            .expect("the page loads");
+        assert_eq!(
+            daemon.requests()[0].target,
+            "/api/v3/surfaces/1/messages?before=9100&limit=50"
+        );
+    }
+
+    #[test]
     fn error_statuses_map_to_api_errors() {
         let daemon = FakeDaemon::start();
         let cases = [
