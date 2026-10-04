@@ -10,6 +10,7 @@ use crate::icon::{Glyph, icon};
 use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
 use crate::link::Source;
 use crate::runlog::OnDisclose;
+use crate::settings_panel::{self, SettingsPanel};
 use crate::sidebar::Sidebar;
 use crate::state::{AppState, Link, Segment, SidebarVisibility, View};
 use crate::theme;
@@ -37,6 +38,7 @@ pub struct Shell {
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
     agents: Entity<AgentsView>,
+    settings: Option<Entity<SettingsPanel>>,
     _observation: Subscription,
 }
 
@@ -54,24 +56,63 @@ impl Shell {
             sidebar,
             feed,
             agents,
+            settings: None,
             _observation: observation,
         }
+    }
+
+    fn sync_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let wanted = self
+            .state
+            .read(cx)
+            .settings()
+            .map(|settings| settings.agent);
+        let current = self.settings.as_ref().map(|panel| panel.read(cx).agent());
+        if wanted == current {
+            return;
+        }
+        self.settings = match wanted {
+            Some(agent) => {
+                let state = self.state.clone();
+                Some(cx.new(|cx| SettingsPanel::new(state, agent, window, cx)))
+            }
+            None => None,
+        };
+    }
+
+    fn settings_card(&self) -> Option<AnyElement> {
+        let panel = self.settings.clone()?;
+        Some(
+            card()
+                .id("settings-card")
+                .flex_none()
+                .w(px(settings_panel::WIDTH))
+                .overflow_hidden()
+                .child(panel)
+                .into_any_element(),
+        )
     }
 
     fn body(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let state = self.state.read(cx);
         let view = state.view();
         match view {
-            View::Agents => vec![
-                card()
-                    .id("content-card")
-                    .debug_selector(|| "content-card".to_string())
-                    .flex_1()
-                    .min_w(px(0.))
-                    .overflow_hidden()
-                    .child(self.agents.clone())
-                    .into_any_element(),
-            ],
+            View::Agents => {
+                let mut cards = vec![
+                    card()
+                        .id("content-card")
+                        .debug_selector(|| "content-card".to_string())
+                        .flex_1()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .child(self.agents.clone())
+                        .into_any_element(),
+                ];
+                if let Some(panel) = self.settings_card() {
+                    cards.push(panel);
+                }
+                cards
+            }
             View::Conversation => {
                 let mut cards = vec![
                     card()
@@ -83,7 +124,9 @@ impl Shell {
                         .child(self.feed.clone())
                         .into_any_element(),
                 ];
-                if let Some(panel) = self.inspector_card(cx) {
+                if let Some(panel) = self.settings_card() {
+                    cards.push(panel);
+                } else if let Some(panel) = self.inspector_card(cx) {
                     cards.push(panel);
                 }
                 cards
@@ -248,7 +291,8 @@ impl Shell {
 }
 
 impl Render for Shell {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_settings(window, cx);
         let body = self.body(cx);
         let mut columns = div()
             .flex()

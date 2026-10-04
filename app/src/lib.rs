@@ -14,6 +14,7 @@ pub mod message;
 pub mod people;
 pub mod rich;
 pub mod runlog;
+pub mod settings_panel;
 pub mod shell;
 pub mod sidebar;
 pub mod state;

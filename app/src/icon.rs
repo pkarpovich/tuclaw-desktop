@@ -16,16 +16,20 @@ icon_assets!(
         Ellipsis,
         Hash,
         LoaderCircle,
+        Lock,
         Mic,
         PanelLeft,
         Paperclip,
         Play,
+        Plus,
+        RotateCcw,
         Search,
         Settings,
         SlidersHorizontal,
         FaceSlightlySmiling,
         Square,
         Type,
+        Upload,
         X,
     ]
 );
@@ -53,10 +57,14 @@ pub enum Glyph {
     Stop,
     Format,
     Close,
+    Lock,
+    Upload,
+    Reset,
+    Add,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 21] = [
+    pub const ALL: [Glyph; 25] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -78,6 +86,10 @@ impl Glyph {
         Glyph::Stop,
         Glyph::Format,
         Glyph::Close,
+        Glyph::Lock,
+        Glyph::Upload,
+        Glyph::Reset,
+        Glyph::Add,
     ];
 
     fn name(self) -> IconName {
@@ -103,6 +115,10 @@ impl Glyph {
             Glyph::Stop => IconName::Square,
             Glyph::Format => IconName::Type,
             Glyph::Close => IconName::X,
+            Glyph::Lock => IconName::Lock,
+            Glyph::Upload => IconName::Upload,
+            Glyph::Reset => IconName::RotateCcw,
+            Glyph::Add => IconName::Plus,
         }
     }
 }

@@ -16,7 +16,7 @@ use crate::live::tool_detail;
 use crate::rich::{self, Ink};
 use crate::theme;
 
-const MONO: &str = "Menlo";
+pub const MONO: &str = "Menlo";
 
 pub type OnDisclose = Rc<dyn Fn(Disclosure, &mut Window, &mut App)>;
 

@@ -3,7 +3,9 @@ use std::sync::Arc;
 use gpui::{
     FontWeight, Hsla, Image, InteractiveElement, ParentElement, SharedString, Styled, phi, px,
 };
-use gpui_kit::base::{Avatar, AvatarFallback, AvatarImage, Button, Toggle, ToggleGroup};
+use gpui_kit::base::{
+    Avatar, AvatarFallback, AvatarImage, Button, Switch, SwitchThumb, Toggle, ToggleGroup,
+};
 
 use crate::theme;
 
@@ -45,6 +47,7 @@ pub enum AvatarSize {
     Header,
     Account,
     Message,
+    Profile,
 }
 
 pub struct Face {
@@ -64,6 +67,7 @@ pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
         AvatarSize::Header => (26., 8., 10.),
         AvatarSize::Account => (30., 9., 11.),
         AvatarSize::Message => (34., 10., 11.),
+        AvatarSize::Profile => (56., 15., 17.),
     };
     let avatar = Avatar::new()
         .flex_none()
@@ -85,4 +89,29 @@ pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
             .text_color(theme::chip_text())
             .child(initials),
     )
+}
+
+pub fn switch(selector: impl Into<SharedString>, checked: bool) -> Switch {
+    let selector = selector.into();
+    let id = selector.clone();
+    Switch::new(id)
+        .debug_selector(move || selector.to_string())
+        .checked(checked)
+        .flex_none()
+        .flex()
+        .items_center()
+        .w(px(28.))
+        .h(px(16.))
+        .p(px(2.))
+        .rounded_full()
+        .cursor_pointer()
+        .bg(theme::border())
+        .styles(|styles| styles.checked(|style| style.bg(theme::status_idle())))
+        .child(
+            SwitchThumb::new(checked)
+                .size(px(12.))
+                .rounded_full()
+                .bg(theme::raised())
+                .styles(|styles| styles.checked(|style| style.ml(px(12.)))),
+        )
 }
