@@ -1424,10 +1424,19 @@ impl World {
                 duration_ms: 900,
                 error: None,
             });
+            let mut agent = None;
             if let Some(index) = self.task_index(&id) {
                 self.tasks[index].last_run_at = Some(at);
                 self.tasks[index].last_outcome = Some(outcome);
+                agent = self.tasks[index].agent_id;
             }
+            let message_id = match outcome {
+                Outcome::Ran => self.answer_after(SurfaceId(surface), agent, at),
+                Outcome::Silent => None,
+                Outcome::Skipped => None,
+                Outcome::Failed => None,
+                Outcome::Unknown => None,
+            };
             self.fires.push((
                 SurfaceId(surface),
                 FireMark {
@@ -1435,11 +1444,30 @@ impl World {
                     at: Some(at),
                     outcome,
                     run_id: None,
-                    message_id: None,
+                    message_id,
                     error: None,
                 },
             ));
         }
+    }
+
+    fn answer_after(
+        &self,
+        surface: SurfaceId,
+        agent: Option<AgentId>,
+        at: OffsetDateTime,
+    ) -> Option<MessageId> {
+        let mut found = None;
+        for message in &self.messages {
+            if message.surface_id != surface || message.created_at < at {
+                continue;
+            }
+            if agent.is_some() && message.author.agent_id == agent {
+                found = Some(message.id);
+                break;
+            }
+        }
+        found
     }
 
     fn me_view(&self) -> Me {

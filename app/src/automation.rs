@@ -157,6 +157,24 @@ pub fn fire_row(row: &FireRow, on_open: OnTask) -> Div {
     )
 }
 
+pub fn trigger_tag(row: &FireRow, on_open: OnTask) -> gpui_kit::base::Button {
+    let selector = format!("trigger-{}-{}", row.task.0, row.last.unix_timestamp());
+    let task = row.task.clone();
+    row_button(selector)
+        .accessibility_label(format!("Open the automation {}", row.label))
+        .gap(px(4.))
+        .px(px(6.))
+        .py(px(1.))
+        .rounded(px(6.))
+        .bg(theme::sunken())
+        .hover(|style| style.text_color(theme::text_secondary()))
+        .text_size(px(11.5))
+        .text_color(theme::text_muted())
+        .on_click(move |_event, window, cx| on_open(&task, window, cx))
+        .child(icon(Glyph::Automation, px(11.), outcome_tone(row.outcome)))
+        .child(SharedString::from(row.label.clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use time::macros::datetime;

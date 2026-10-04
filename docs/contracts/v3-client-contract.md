@@ -220,3 +220,43 @@ Agreed 2026-10-04 with the desktop (its agent settings panel: description, model
   - Unknown surface or agent = `404`. Another role, or a missing or non-boolean `listens` = `400`. Turning the current lead into a mention = `409 conflict`: a surface always has a lead, so another agent becomes lead first.
 - `DELETE /surfaces/{sid}/agents/{aid}` answers `204`. Removing the lead = `409 conflict`. An agent that is not wired there = `204` (idempotent). An unknown surface or agent = `404`.
 - No socket events: the client refetches `GET /surfaces` and `GET /agents` after a write. An agent's topics come from `surfaces[].agents[]`, its home topic from `home_surface_id`; Undo is the client replaying the previous wiring with `PUT`.
+
+## v3.4 additions: the user's profile, automations, fire marks
+
+Agreed 2026-10-04 with the desktop (Pavel's asks: his own profile, the mini-app's triggers page as an Automations tab, and a visible mark in a channel when an automation fired). Additive only.
+
+- **Profile.** `GET /me` gains `description` (`""` when unset). `PATCH /me` takes `{name?, description?}`: an absent field stays, the name must not be empty, the description is at most 280 characters (an empty one clears it). It answers like `GET /me`. The write goes through the `user.update` operation.
+- **Automations** are the scheduled tasks the agents create. The client controls them; it does not create or edit them.
+  - `GET /tasks` lists the active and paused tasks; `?status=all` adds the completed and cancelled ones last run (or created) in the past 7 days. Each task:
+
+    ```json
+    {"id": "task-1759500000000000000-1a2b3c4d", "agent_id": 3, "surface_id": 4,
+     "prompt": "Check the feeds for new releases",
+     "schedule": {"type": "cron", "value": "0 9 * * *"}, "recurring": false,
+     "condition": "check-feeds.sh", "status": "active",
+     "next_run_at": "2026-10-05T07:00:00Z", "last_run_at": "2026-10-04T07:00:00Z",
+     "last_outcome": "skipped", "active_from": null, "active_until": null,
+     "created_at": "2026-09-20T10:00:00Z"}
+    ```
+
+    `id` is a string, the one exception to the integer ids: agents name tasks by it. `schedule.type` is `once`, `cron`, `interval`, `poll_until` or `event`. `agent_id` is the task's session's agent, `null` when that session is gone. `surface_id` is `null` when the task has no surface. `condition` is the pre-check command or `null`. `status` is `active`, `paused`, `completed` or `cancelled`. `last_outcome` is the newest attempt's `ran`, `failed` or `skipped`, or `null` before the first.
+  - `GET /tasks/{id}` is one task.
+  - `GET /tasks/{id}/runs?limit=20` (at most 200) lists its attempts, newest first: `[{"at", "outcome": "ran"|"failed"|"skipped", "duration_ms", "error"?}]`. An attempt is one try; a fire that failed and was re-run is two attempts.
+  - `POST /tasks/{id}/pause` and `POST /tasks/{id}/resume` answer `200` with the task. Pausing a task that is not active, or resuming one that is not paused, is `409 conflict`.
+  - `DELETE /tasks/{id}` cancels the task and keeps its history: `204`, also for a task already finished.
+  - An unknown id is `404` on every route.
+- **Fire marks.** After each fire's final outcome (once per fire, never per attempt) the daemon records a persisted `task.fired` event on the task's surface. It is sent as a frame of the same type, with `run_id` `null` in the envelope:
+
+  ```json
+  {"v": 1, "seq": 1290, "type": "task.fired", "surface_id": 4, "run_id": null, "at": "2026-10-04T07:00:19Z",
+   "payload": {"task_id": "task-1759500000000000000-1a2b3c4d", "outcome": "ran", "run_id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d", "message_id": 9301}}
+  ```
+
+  - `outcome` is one of:
+    - `ran`: `message_id` is the answer it posted, so the client attaches the mark to that answer instead of adding a row;
+    - `silent`: it answered `[SILENT]` or nothing visible;
+    - `skipped`: its condition said no. A condition task polled every few minutes marks every poll, so the client collapses a task's consecutive skipped marks into one row;
+    - `failed`: `message_id` is the failure notice when one was posted, and `error` is the reason.
+  - `run_id`, `message_id` and `error` are omitted when absent.
+  - A fire cut short by a daemon shutdown leaves no mark. Neither does a run handed over to the agent across a restart: its answer arrives on its own.
+- **Marks in history.** Every messages page gains `automations`, the fires of the time the page covers. That time runs from its oldest message (from the beginning when nothing older exists) to just before the oldest message of the next newer page (to now on the newest page), so consecutive pages cover the history with no gap. Each entry is `{task_id, at, outcome, run_id?, message_id?}`, in time order. They come from the event log, which keeps 30 days, so older pages have none.

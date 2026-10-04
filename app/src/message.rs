@@ -39,6 +39,7 @@ pub struct Look {
     pub player: Player,
     pub waveform: Option<Waveform>,
     pub run: Option<Pane>,
+    pub trigger: Option<AnyElement>,
 }
 
 struct Controls {
@@ -97,6 +98,7 @@ pub fn message_row(
         player,
         waveform,
         run: pane,
+        trigger,
     } = look;
     let writer = writer(*author, people);
     let MessageId(raw) = *id;
@@ -117,6 +119,9 @@ pub fn message_row(
     let mut line = byline(&writer, *sent_at, quick);
     if voice.is_some() {
         line = line.child(voice_tag());
+    }
+    if let Some(trigger) = trigger {
+        line = line.child(trigger);
     }
     let mut column = div()
         .flex()

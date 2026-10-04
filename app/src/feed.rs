@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
@@ -7,9 +8,10 @@ use gpui::{
 };
 use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::day_title;
-use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
+use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message, MessageId};
+use tuclaw_core::v3;
 
-use crate::automation::{FireRow, OnTask, fire_row};
+use crate::automation::{FireRow, OnTask, fire_row, trigger_tag};
 use crate::card;
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
@@ -40,7 +42,7 @@ enum Focus {
 
 enum Item {
     Separator(SharedString),
-    Message(Message),
+    Message(Message, Option<FireRow>),
     Fire(FireRow),
     Run(RunView),
 }
@@ -239,7 +241,7 @@ impl Feed {
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
                 Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
-                Item::Message(message) => {
+                Item::Message(message, trigger) => {
                     let state = state.read(cx);
                     let fold = if state.is_expanded(message.id) {
                         Fold::Expanded
@@ -272,6 +274,9 @@ impl Feed {
                         player: state.player(message.id),
                         waveform,
                         run,
+                        trigger: trigger
+                            .as_ref()
+                            .map(|row| trigger_tag(row, on_task.clone()).into_any_element()),
                     };
                     message_row(message, &state.people(), look, &actions).into_any_element()
                 }
@@ -325,15 +330,33 @@ impl Render for Feed {
 
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     let today = now.to_offset(UtcOffset::UTC).date();
-    let mut timeline = Vec::new();
-    for message in state.messages() {
-        timeline.push((message.sent_at, Item::Message(message.clone())));
-    }
+    let mut triggers: HashMap<MessageId, FireRow> = HashMap::new();
+    let mut loose = Vec::new();
     for mark in state.fires() {
         let Some(at) = mark.at else {
             continue;
         };
-        timeline.push((at, Item::Fire(FireRow::new(mark, at, state.tasks()))));
+        let row = FireRow::new(mark, at, state.tasks());
+        let answer = match mark.outcome {
+            v3::Outcome::Ran => mark.message_id.map(|v3::MessageId(id)| MessageId(id)),
+            v3::Outcome::Silent => None,
+            v3::Outcome::Skipped => None,
+            v3::Outcome::Failed => None,
+            v3::Outcome::Unknown => None,
+        };
+        let Some(answer) = answer.filter(|answer| has_message(state, *answer)) else {
+            loose.push((at, row));
+            continue;
+        };
+        triggers.insert(answer, row);
+    }
+    let mut timeline = Vec::new();
+    for message in state.messages() {
+        let trigger = triggers.remove(&message.id);
+        timeline.push((message.sent_at, Item::Message(message.clone(), trigger)));
+    }
+    for (at, row) in loose {
+        timeline.push((at, Item::Fire(row)));
     }
     timeline.sort_by_key(|(at, _item)| *at);
     let mut items: Vec<Item> = Vec::new();
@@ -359,6 +382,17 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     items
 }
 
+fn has_message(state: &AppState, id: MessageId) -> bool {
+    let mut found = false;
+    for message in state.messages() {
+        if message.id == id {
+            found = true;
+            break;
+        }
+    }
+    found
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Key {
     Separator(SharedString),
@@ -370,7 +404,7 @@ enum Key {
 fn key(item: &Item) -> Key {
     match item {
         Item::Separator(title) => Key::Separator(title.clone()),
-        Item::Message(message) => Key::Message(message.id),
+        Item::Message(message, _trigger) => Key::Message(message.id),
         Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
         Item::Run(run) => Key::Run(run.id.clone()),
     }
@@ -379,7 +413,9 @@ fn key(item: &Item) -> Key {
 fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
     for (index, item) in items.iter().enumerate().skip(from) {
         match item {
-            Item::Message(message) => return Some((Key::Message(message.id), index != from)),
+            Item::Message(message, _trigger) => {
+                return Some((Key::Message(message.id), index != from));
+            }
             Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
             Item::Fire(row) => {
                 return Some((
@@ -406,7 +442,7 @@ fn first_run(items: &[Item]) -> usize {
                 break;
             }
             Item::Separator(_) => {}
-            Item::Message(_) => {}
+            Item::Message(_, _) => {}
             Item::Fire(_) => {}
         }
     }
@@ -817,17 +853,20 @@ mod tests {
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         feed.read_with(cx, |feed, _cx| {
             assert_eq!(feed.list.item_count(), feed.items.len());
-            let mut fires = 0;
+            let mut fires = Vec::new();
+            let mut triggered = 0;
             for item in feed.items.iter() {
                 match item {
-                    Item::Fire(_) => fires += 1,
+                    Item::Fire(row) => fires.push(row.outcome),
+                    Item::Message(_, Some(_)) => triggered += 1,
+                    Item::Message(_, None) => {}
                     Item::Separator(_) => {}
-                    Item::Message(_) => {}
                     Item::Run(_) => {}
                 }
             }
-            assert_eq!(fires, 2);
-            assert_eq!(feed.items.len(), 31 + fires);
+            assert_eq!(fires, vec![tuclaw_core::v3::Outcome::Silent]);
+            assert_eq!(triggered, 1);
+            assert_eq!(feed.items.len(), 31 + fires.len());
         });
     }
 
@@ -905,7 +944,7 @@ mod tests {
                 match item {
                     Item::Run(run) => runs.push(run.clone()),
                     Item::Separator(_) => {}
-                    Item::Message(_) => {}
+                    Item::Message(_, _) => {}
                     Item::Fire(_) => {}
                 }
             }
