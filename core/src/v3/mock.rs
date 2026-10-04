@@ -1056,18 +1056,18 @@ impl World {
         if self.unavailable() {
             return Err(ApiError::Unavailable);
         }
-        let route = match path.split_once('?') {
-            Some((route, _query)) => route,
-            None => path,
+        let (route, query) = match path.split_once('?') {
+            Some((route, query)) => (route, query),
+            None => (path, ""),
         };
         let segments = segments(route);
         let id = match segments.as_slice() {
             ["attachments", id] => id,
             ["agents", id, "avatar"] => {
                 let owner = AvatarOwner::Agent(parse_agent(id)?);
-                return self.avatar_bytes(owner);
+                return self.avatar_bytes(owner, query);
             }
-            ["me", "avatar"] => return self.avatar_bytes(AvatarOwner::Me),
+            ["me", "avatar"] => return self.avatar_bytes(AvatarOwner::Me, query),
             [..] => return Err(ApiError::NotFound),
         };
         let Ok(id) = id.parse::<i64>() else {
@@ -1235,10 +1235,18 @@ impl World {
         }
     }
 
-    fn avatar_bytes(&self, owner: AvatarOwner) -> Result<Vec<u8>, ApiError> {
+    fn avatar_bytes(&self, owner: AvatarOwner, query: &str) -> Result<Vec<u8>, ApiError> {
         let Some(avatar) = self.avatars.get(&owner) else {
             return Err(ApiError::NotFound);
         };
+        for pair in query.split('&') {
+            let Some(("v", version)) = pair.split_once('=') else {
+                continue;
+            };
+            if version != avatar.version {
+                return Err(ApiError::NotFound);
+            }
+        }
         Ok(avatar.bytes.clone())
     }
 
@@ -2411,6 +2419,8 @@ mod tests {
         ))
         .expect("stored");
         assert_ne!(replaced, first);
+        assert_eq!(block_on(client.avatar(&first)), Err(ApiError::NotFound));
+        assert!(block_on(client.avatar(&replaced)).is_ok());
         assert_eq!(
             block_on(client.agents()).expect("agents")[0].avatar_url,
             Some(replaced)
