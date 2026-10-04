@@ -193,7 +193,7 @@ pub fn opens_by_default(run: &RunRef) -> bool {
     }
 }
 
-fn count(value: u32, one: &str, many: &str) -> String {
+pub fn count(value: u32, one: &str, many: &str) -> String {
     if value == 1 {
         format!("1 {one}")
     } else {

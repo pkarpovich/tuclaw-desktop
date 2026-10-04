@@ -268,10 +268,7 @@ fn status_block(run: &RunRef, log: Option<&RunLog>) -> Div {
                     div()
                         .text_size(px(11.5))
                         .text_color(theme::text_muted())
-                        .child(SharedString::from(format!(
-                            "{steps} steps · {tools} tools · {}",
-                            duration_label(*duration)
-                        ))),
+                        .child(SharedString::from(totals(*steps, *tools, *duration))),
                 ),
         );
     let Some(RunLog::Loaded(detail)) = log else {
@@ -335,6 +332,15 @@ fn status_block(run: &RunRef, log: Option<&RunLog>) -> Div {
     )
 }
 
+fn totals(steps: u32, tools: u32, duration: Duration) -> String {
+    format!(
+        "{} · {} · {}",
+        runlog::count(steps, "step", "steps"),
+        runlog::count(tools, "tool", "tools"),
+        duration_label(duration)
+    )
+}
+
 fn filters(active: Filter, on_filter: OnFilter) -> ToggleGroup {
     let mut group = control::segments("inspector-filters")
         .gap(px(2.))
@@ -375,6 +381,18 @@ fn note(text: &'static str) -> Div {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_totals_agree_in_number() {
+        assert_eq!(
+            super::totals(1, 0, std::time::Duration::from_secs(5)),
+            "1 step · 0 tools · 5 s"
+        );
+        assert_eq!(
+            super::totals(4, 1, std::time::Duration::from_secs(5)),
+            "4 steps · 1 tool · 5 s"
+        );
+    }
+
     use super::*;
 
     fn call(seq: i64, name: &str, status: StepStatus) -> ToolCall {
