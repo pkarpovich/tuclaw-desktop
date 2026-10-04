@@ -20,6 +20,7 @@ fn main() {
     let profile = std::env::args().any(|arg| arg == "--profile");
     let automations = std::env::args().any(|arg| arg == "--automations");
     let recording = std::env::args().any(|arg| arg == "--recording");
+    let picture = std::env::args().any(|arg| arg == "--picture");
     let mut settings = None;
     let mut task = None;
     for arg in std::env::args() {
@@ -127,6 +128,24 @@ fn main() {
         cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
         cx.run_until_parked();
     }
+    if picture {
+        mock.serve_public(
+            "https://media.example.test/turtle.png",
+            include_bytes!("../../core/testdata/v3/media/avatar_agent.png").to_vec(),
+        );
+        cx.update(|cx| {
+            let Some(selected) = state.read(cx).selected() else {
+                return;
+            };
+            mock.agent_posts(
+                tuclaw_desktop::link::surface_id(selected),
+                tuclaw_core::v3::AgentId(1),
+                "Готово, сэр, вот новая черепашка:\n\n![Little turtle on the beach](https://media.example.test/turtle.png)",
+            );
+        });
+        while mock.step() {}
+        cx.run_until_parked();
+    }
     if recording {
         cx.update(|cx| {
             state.update(cx, |state, cx| {
@@ -174,6 +193,8 @@ fn main() {
     std::fs::create_dir_all(&directory).expect("the directory exists");
     let name = if automations || task.is_some() {
         "Automations".to_string()
+    } else if picture {
+        format!("{}-picture", channel.replace(' ', "-"))
     } else if recording {
         format!("{}-recording", channel.replace(' ', "-"))
     } else {

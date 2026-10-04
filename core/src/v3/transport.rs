@@ -8,6 +8,43 @@ use serde_json::Value;
 use super::dto::{AudioKind, ClientMessageId, ErrorBody, ErrorDetail, ImageKind, Seq, SurfaceId};
 use super::frames::{ClientFrame, Frame};
 
+/// An `https://` URL outside the daemon, the only kind of picture a message may link.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::PublicUrl;
+///
+/// assert!(PublicUrl::parse("https://s3-hub.example/media/a.jpg").is_some());
+/// assert!(PublicUrl::parse("http://s3-hub.example/media/a.jpg").is_none());
+/// assert!(PublicUrl::parse("file:///etc/passwd").is_none());
+/// assert!(PublicUrl::parse("https://").is_none());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PublicUrl(String);
+
+impl PublicUrl {
+    /// Accepts an `https://` URL with a host and no whitespace, and nothing else.
+    pub fn parse(url: &str) -> Option<PublicUrl> {
+        let rest = url.strip_prefix("https://")?;
+        let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        if host.is_empty() {
+            return None;
+        }
+        for character in url.chars() {
+            if character.is_whitespace() || character.is_control() {
+                return None;
+            }
+        }
+        Some(PublicUrl(url.to_string()))
+    }
+
+    /// Returns the URL as written.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Why a call to the daemon failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
@@ -176,6 +213,9 @@ pub trait Transport: Send + Sync {
 
     /// Sends `GET /api/v3{path}` and returns the raw body, for media.
     fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>>;
+
+    /// Fetches a public picture an agent linked, without the daemon's token.
+    fn fetch_public(&self, url: &PublicUrl) -> BoxFuture<'static, Result<Vec<u8>, ApiError>>;
 
     /// Opens the event socket, replaying after `since` when given.
     fn connect(&self, since: Option<Seq>) -> BoxFuture<'static, Result<Connection, ApiError>>;

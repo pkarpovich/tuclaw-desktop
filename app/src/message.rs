@@ -3,12 +3,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, IntoElement,
-    Pixels, SharedString, Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px,
-    relative, size,
+    AnyElement, App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, ImageSource,
+    IntoElement, ObjectFit, Pixels, SharedString, Stateful, StyledText, Window, canvas, div, fill,
+    img, point, prelude::*, px, relative, size,
 };
 use time::OffsetDateTime;
 use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
+use tuclaw_core::v3::PublicUrl;
 
 use gpui_kit::base::Avatar;
 
@@ -19,7 +20,8 @@ use crate::icon::{Glyph, icon, spinner};
 use crate::link;
 use crate::local::clock;
 use crate::people::People;
-use crate::rich::{self, Ink, Parts};
+use crate::pictures::{MAX_WIDTH, Remote, Shelf, fit};
+use crate::rich::{self, Ink, Parts, Picture, Segment};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
 use crate::theme;
@@ -84,6 +86,7 @@ pub fn message_row(
     people: &People,
     look: Look,
     actions: &Actions,
+    shelf: &Shelf,
 ) -> impl IntoElement {
     let Message {
         id,
@@ -147,17 +150,104 @@ pub fn message_row(
             actions.on_toggle.clone(),
         ));
     }
-    if !answer.is_empty() {
-        column = column.child(div().text_size(px(14.5)).child(rich::markdown(
-            SharedString::from(format!("{selector}-md")),
-            answer,
-            Ink::Body,
-        )));
+    for (index, segment) in rich::split_pictures(&answer).into_iter().enumerate() {
+        let key = match index {
+            0 => format!("{selector}-md"),
+            index => format!("{selector}-md-{index}"),
+        };
+        column = match segment {
+            Segment::Text(text) => column.child(div().text_size(px(14.5)).child(rich::markdown(
+                SharedString::from(key),
+                text,
+                Ink::Body,
+            ))),
+            Segment::Picture(picture) => column.child(picture_block(&key, &picture, shelf)),
+        };
     }
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
     row(selector, face, column)
+}
+
+fn picture_block(key: &str, picture: &Picture, shelf: &Shelf) -> AnyElement {
+    let Picture { alt, url } = picture;
+    let caption = if alt.is_empty() {
+        url.clone()
+    } else {
+        alt.clone()
+    };
+    let Some(public) = PublicUrl::parse(url) else {
+        return picture_fallback(key, &caption, None);
+    };
+    match shelf.get(&public) {
+        Some(Remote::Ready(shown)) => {
+            let (width, height) = fit(shown.width, shown.height);
+            let opened = url.clone();
+            let mut block = div().flex().flex_col().gap(px(4.)).py(px(4.)).child(
+                row_button(format!("{key}-picture"))
+                    .accessibility_label(format!("Open {caption}"))
+                    .w(px(width))
+                    .h(px(height))
+                    .rounded(px(10.))
+                    .overflow_hidden()
+                    .border_1()
+                    .border_color(theme::hairline())
+                    .on_click(move |_event, _window, cx| cx.open_url(&opened))
+                    .child(
+                        img(ImageSource::Image(shown.image.clone()))
+                            .w(px(width))
+                            .h(px(height))
+                            .object_fit(ObjectFit::Cover),
+                    ),
+            );
+            if !alt.is_empty() {
+                block = block.child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(theme::text_muted())
+                        .child(SharedString::from(alt.clone())),
+                );
+            }
+            block.into_any_element()
+        }
+        Some(Remote::Failed) => picture_fallback(key, &caption, Some(url)),
+        Some(Remote::Loading) | None => div()
+            .id(SharedString::from(format!("{key}-loading")))
+            .debug_selector({
+                let key = format!("{key}-loading");
+                move || key
+            })
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .my(px(4.))
+            .w(px(MAX_WIDTH))
+            .h(px(96.))
+            .px(px(14.))
+            .rounded(px(10.))
+            .bg(theme::sunken())
+            .text_size(px(12.))
+            .text_color(theme::text_muted())
+            .child(spinner(px(13.), theme::text_muted()))
+            .child(SharedString::from(caption))
+            .into_any_element(),
+    }
+}
+
+fn picture_fallback(key: &str, caption: &str, link: Option<&String>) -> AnyElement {
+    let text = match link {
+        Some(url) => format!("Picture: [{caption}]({url})"),
+        None => format!("Picture: {caption}"),
+    };
+    div()
+        .text_size(px(13.))
+        .child(rich::markdown(
+            SharedString::from(format!("{key}-fallback")),
+            text,
+            Ink::Muted,
+        ))
+        .into_any_element()
 }
 
 fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {

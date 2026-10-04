@@ -18,6 +18,7 @@ pub mod menu;
 pub mod message;
 pub mod people;
 pub mod picture;
+pub mod pictures;
 pub mod profile_panel;
 pub mod recorder;
 pub mod rich;

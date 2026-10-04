@@ -107,6 +107,10 @@ impl Feed {
                         .update(cx, |composer, cx| composer.insert(&text, window, cx));
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
+                StateEvent::PicturesLoaded => {
+                    feed.list.remeasure();
+                    cx.notify();
+                }
             },
         );
         let items = items(state.read(cx), OffsetDateTime::now_utc());
@@ -289,7 +293,8 @@ impl Feed {
                             .as_ref()
                             .map(|row| trigger_tag(row, on_task.clone()).into_any_element()),
                     };
-                    message_row(message, &state.people(), look, &actions).into_any_element()
+                    message_row(message, &state.people(), look, &actions, state.pictures())
+                        .into_any_element()
                 }
                 Item::Run(run) => {
                     let state = state.read(cx);
@@ -769,6 +774,54 @@ mod tests {
         let built = state.clone();
         let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         (mock, state, feed, cx)
+    }
+
+    const TURTLE: &[u8] = include_bytes!("../../core/testdata/v3/media/avatar_agent.png");
+
+    fn posted_by_jarvis(
+        mock: &MockTransport,
+        state: &Entity<AppState>,
+        cx: &mut VisualTestContext,
+        text: &str,
+    ) -> i64 {
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(1),
+            tuclaw_core::v3::AgentId(1),
+            text,
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        last_agent_message(state, cx)
+    }
+
+    #[gpui::test]
+    fn a_linked_picture_loads_and_is_drawn_in_the_message(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.serve_public("https://media.example.test/turtle.png", TURTLE.to_vec());
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "Here it is:\n\n![A turtle](https://media.example.test/turtle.png)",
+        );
+        let selector: &'static str =
+            Box::leak(format!("message-{raw}-md-1-picture").into_boxed_str());
+        assert!(cx.debug_bounds(selector).is_some());
+    }
+
+    #[gpui::test]
+    fn a_picture_that_is_not_https_is_never_fetched(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.serve_public("http://media.example.test/turtle.png", TURTLE.to_vec());
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "![A turtle](http://media.example.test/turtle.png)",
+        );
+        state.read_with(cx, |state, _cx| assert!(state.pictures().is_empty()));
+        let picture: &'static str = Box::leak(format!("message-{raw}-md-picture").into_boxed_str());
+        assert!(cx.debug_bounds(picture).is_none());
     }
 
     #[gpui::test]

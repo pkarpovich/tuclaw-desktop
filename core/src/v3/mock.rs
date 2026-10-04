@@ -37,7 +37,7 @@ use super::frames::{
     RunSnapshot, RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
 };
 use super::runtime::handle;
-use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
+use super::transport::{ApiError, Body, Connection, Method, PublicUrl, Request, Transport};
 
 const RING: usize = 1000;
 const DELTA_DELAY: Duration = Duration::from_millis(50);
@@ -237,6 +237,7 @@ struct World {
     subscribers: Vec<Subscriber>,
     posted: HashMap<ClientMessageId, (SurfaceId, Posted)>,
     media: HashMap<AttachmentId, Media>,
+    public: HashMap<String, Vec<u8>>,
     my_name: String,
     my_description: String,
     tasks: Vec<Task>,
@@ -327,9 +328,39 @@ impl MockTransport {
         self.lock().fire(id, outcome);
     }
 
+    /// Serves `bytes` at a public `url`, as a picture host an agent links to would.
+    pub fn serve_public(&self, url: &str, bytes: Vec<u8>) {
+        self.lock().public.insert(url.to_string(), bytes);
+    }
+
     /// Applies the client frames sent so far (a `focus` sends snapshots right away).
     pub fn pump_control(&self) {
         self.lock().drain_control();
+    }
+
+    /// Queues a message an agent posts on a surface outside any run, e.g. a picture it linked.
+    pub fn agent_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
+        let mut world = self.lock();
+        let message = Message {
+            id: world.next_message(),
+            surface_id: surface,
+            kind: MessageKind::Post,
+            author: Author {
+                kind: AuthorKind::Agent,
+                agent_id: Some(agent),
+            },
+            addressed_agent_id: None,
+            reply_to_message_id: None,
+            text: text.to_string(),
+            run_id: None,
+            origin: "user".into(),
+            channel: None,
+            client_message_id: None,
+            created_at: world.now,
+            run_summary: None,
+            attachments: Vec::new(),
+        };
+        world.queue.push_back(Script::Created(message));
     }
 
     /// Queues a Telegram user message in General and the lead's run answering it.
@@ -453,6 +484,14 @@ impl Transport for MockTransport {
 
     fn fetch(&self, path: &str) -> BoxFuture<'static, Result<Vec<u8>, ApiError>> {
         let answer = self.lock().fetch(path);
+        ready(answer).boxed()
+    }
+
+    fn fetch_public(&self, url: &PublicUrl) -> BoxFuture<'static, Result<Vec<u8>, ApiError>> {
+        let answer = match self.lock().public.get(url.as_str()) {
+            Some(bytes) => Ok(bytes.clone()),
+            None => Err(ApiError::NotFound),
+        };
         ready(answer).boxed()
     }
 
@@ -599,6 +638,7 @@ impl World {
             subscribers: Vec::new(),
             posted: HashMap::new(),
             media: HashMap::new(),
+            public: HashMap::new(),
             my_name: DEFAULT_NAME.into(),
             my_description: String::new(),
             tasks: Vec::new(),
@@ -706,6 +746,7 @@ impl World {
             subscribers: Vec::new(),
             posted: HashMap::new(),
             media,
+            public: HashMap::new(),
             my_name,
             my_description,
             tasks,

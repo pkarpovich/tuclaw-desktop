@@ -12,6 +12,7 @@ gpui_platform.workspace = true
 gpui-kit.workspace = true
 time = { workspace = true }
 jiff = "0.2.37"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 tuclaw-core = { path = "../core" }
 opus-pure = "0.2.2"
 rodio = { version = "0.22.2", default-features = false, features = ["playback", "mp4"] }

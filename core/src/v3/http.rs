@@ -18,10 +18,12 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use super::dto::{ClientMessageId, Seq};
 use super::frames::{ClientFrame, Frame, decode, encode};
 use super::runtime::{handle, spawn};
-use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
+use super::transport::{ApiError, Body, Connection, Method, PublicUrl, Request, Transport};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIENT_MESSAGE_ID: &str = "X-Client-Message-Id";
+const PUBLIC_TIMEOUT: Duration = Duration::from_secs(20);
+const PUBLIC_LIMIT: usize = 16 * 1024 * 1024;
 const VOICE_TIMEOUT: Duration = Duration::from_secs(180);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT_DEADLINE: Duration = Duration::from_secs(60);
@@ -65,6 +67,7 @@ impl std::fmt::Debug for ClientToken {
 #[derive(Clone)]
 pub struct HttpTransport {
     client: reqwest::Client,
+    public: reqwest::Client,
     api: String,
     events: String,
     token: Option<ClientToken>,
@@ -92,8 +95,14 @@ impl HttpTransport {
             .no_proxy()
             .build()
             .map_err(|error| ApiError::Transport(error.to_string()))?;
+        let public = reqwest::Client::builder()
+            .timeout(PUBLIC_TIMEOUT)
+            .https_only(true)
+            .build()
+            .map_err(|error| ApiError::Transport(error.to_string()))?;
         Ok(HttpTransport {
             client,
+            public,
             api: format!("{base_url}/api/v3"),
             events: format!("ws://{authority}/api/v3/events"),
             token,
@@ -138,6 +147,13 @@ impl Transport for HttpTransport {
             &self.handle,
             async move { bytes(request.send().await).await },
         )
+    }
+
+    fn fetch_public(&self, url: &PublicUrl) -> BoxFuture<'static, Result<Vec<u8>, ApiError>> {
+        let request = self.public.get(url.as_str());
+        spawn(&self.handle, async move {
+            public_bytes(request.send().await).await
+        })
     }
 
     fn post(&self, path: &str, body: Option<Value>) -> BoxFuture<'static, Result<Value, ApiError>> {
@@ -234,6 +250,22 @@ async fn bytes(sent: reqwest::Result<Response>) -> Result<Vec<u8>, ApiError> {
         return Err(ApiError::from_status(status.as_u16(), &body));
     }
     Ok(body.to_vec())
+}
+
+async fn public_bytes(sent: reqwest::Result<Response>) -> Result<Vec<u8>, ApiError> {
+    let mut response = sent.map_err(request_error)?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(ApiError::Transport(format!("HTTP {}", status.as_u16())));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(request_error)? {
+        body.extend_from_slice(&chunk);
+        if body.len() > PUBLIC_LIMIT {
+            return Err(ApiError::Transport("the picture is over 16 MiB".into()));
+        }
+    }
+    Ok(body)
 }
 
 fn request_error(error: reqwest::Error) -> ApiError {

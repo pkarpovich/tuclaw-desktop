@@ -14,7 +14,7 @@ use super::dto::{
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
-use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
+use super::transport::{ApiError, Body, Connection, Method, PublicUrl, Request, Transport};
 
 /// The typed `/api/v3` client: every call of the contract over one [`Transport`].
 ///
@@ -180,6 +180,14 @@ impl Client {
     ) -> impl Future<Output = Result<Vec<u8>, ApiError>> + Send + 'static {
         let AttachmentId(attachment) = attachment;
         self.transport.fetch(&format!("/attachments/{attachment}"))
+    }
+
+    /// Fetches a public picture a message links to; the daemon's token is never sent.
+    pub fn public_picture(
+        &self,
+        url: &PublicUrl,
+    ) -> impl Future<Output = Result<Vec<u8>, ApiError>> + Send + 'static {
+        self.transport.fetch_public(url)
     }
 
     /// Fetches the person using the client.

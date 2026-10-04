@@ -7626,6 +7626,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-platform",
+ "image",
  "jiff",
  "objc2 0.6.4",
  "objc2-avf-audio",

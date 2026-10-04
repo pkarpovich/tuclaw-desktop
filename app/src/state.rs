@@ -22,6 +22,7 @@ use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
+use crate::pictures::{self, Remote, Shelf};
 use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
@@ -75,6 +76,7 @@ pub enum StateEvent {
     RunsChanged,
     FoldToggled,
     OlderLoaded,
+    PicturesLoaded,
     SendFailed(String),
     Mention(String),
     TasksLoaded,
@@ -161,6 +163,7 @@ pub struct AppState {
     run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
     recorder: Box<dyn Recorder>,
+    pictures: Shelf,
     recording: Recording,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
@@ -214,6 +217,7 @@ impl AppState {
             run_logs: HashMap::new(),
             speaker,
             recorder: Box::new(NoRecorder),
+            pictures: Shelf::new(),
             recording: Recording::Idle,
             playback: None,
             _playback: None,
@@ -236,6 +240,33 @@ impl AppState {
 
     pub fn set_recorder(&mut self, recorder: Box<dyn Recorder>) {
         self.recorder = recorder;
+    }
+
+    pub fn pictures(&self) -> &Shelf {
+        &self.pictures
+    }
+
+    fn fill_message_pictures(&mut self, cx: &mut Context<Self>) {
+        for url in pictures::wanted(&self.messages, &self.pictures) {
+            self.pictures.insert(url.clone(), Remote::Loading);
+            let request = self.client.public_picture(&url);
+            cx.spawn(async move |this, cx| {
+                let remote = match request.await {
+                    Ok(bytes) => match pictures::decode(bytes) {
+                        Some(shown) => Remote::Ready(shown),
+                        None => Remote::Failed,
+                    },
+                    Err(_) => Remote::Failed,
+                };
+                this.update(cx, |state, cx| {
+                    state.pictures.insert(url, remote);
+                    cx.emit(StateEvent::PicturesLoaded);
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
     }
 
     pub fn recording(&self) -> &Recording {
@@ -1794,6 +1825,7 @@ impl AppState {
         older.append(&mut self.messages);
         self.messages = older;
         self.fill_waveforms(cx);
+        self.fill_message_pictures(cx);
         self.open_failed_logs(cx);
         cx.emit(StateEvent::OlderLoaded);
         cx.notify();
@@ -1849,6 +1881,7 @@ impl AppState {
             History::Complete
         };
         self.fill_waveforms(cx);
+        self.fill_message_pictures(cx);
         self.open_failed_logs(cx);
         cx.emit(StateEvent::MessagesLoaded);
         cx.notify();
@@ -2111,6 +2144,7 @@ impl AppState {
         if !seen {
             self.messages.push(mapped);
             self.fill_waveforms(cx);
+            self.fill_message_pictures(cx);
             self.open_failed_logs(cx);
         }
         cx.emit(StateEvent::MessageAppended);
