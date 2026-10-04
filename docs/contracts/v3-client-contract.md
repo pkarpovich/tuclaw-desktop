@@ -260,3 +260,22 @@ Agreed 2026-10-04 with the desktop (Pavel's asks: his own profile, the mini-app'
   - `run_id`, `message_id` and `error` are omitted when absent.
   - A fire cut short by a daemon shutdown leaves no mark. Neither does a run handed over to the agent across a restart: its answer arrives on its own.
 - **Marks in history.** Every messages page gains `automations`, the fires of the time the page covers. That time runs from its oldest message (from the beginning when nothing older exists) to just before the oldest message of the next newer page (to now on the newest page), so consecutive pages cover the history with no gap. Each entry is `{task_id, at, outcome, run_id?, message_id?}`, in time order. They come from the event log, which keeps 30 days, so older pages have none.
+
+## v3.5 additions: voice messages from the client
+
+Agreed 2026-10-04 with the desktop (its Talk button records a voice message).
+
+- `POST /surfaces/{id}/voice` takes the raw recording as the body.
+  - `Content-Type` is `audio/mp4` (AAC, `.m4a`) or `audio/ogg` (Opus), the two formats the transcription is proven on. Anything else = `400`.
+  - The header `X-Client-Message-Id: <uuid>` is required and makes the post idempotent exactly like a text post.
+  - An optional `?addressed_agent_id=` routes it like a mention.
+- The daemon then does what it does for a Telegram voice message:
+  - stores the recording in its voice bucket;
+  - transcribes it;
+  - posts the transcript through `message.inbound{is_voice: true}`, with the recording as the message's `voice` attachment.
+
+  The message arrives like a Telegram voice: the text is the transcript with the `[Voice message]` header, plus the attachment (`duration_ms` is `null`; the daemon does not parse the recording).
+- The call blocks until the transcript exists and the message is posted, then answers `202 {message_id, input_id, agent_id}` like a text post.
+- A failed or empty transcription = `502` with the code `transcription_failed` and no message stored. A retry with the same id transcribes again, while a retry after a `202` answers with the first ids.
+- An empty body = `400`. A body over 20 MiB = `413` with the code `too_large`. The duration cap (10 minutes) belongs to the client.
+- An unknown surface = `404`.
