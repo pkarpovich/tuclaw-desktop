@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{Image, ImageFormat};
-use tuclaw_core::model::{Agent, Picture};
-use tuclaw_core::v3::ImageKind;
+use tuclaw_core::model::{Agent, AgentId, Picture};
+use tuclaw_core::v3::{self, ImageKind};
+
+use crate::link;
 
 pub const DEFAULT_NAME: &str = "You";
 
@@ -27,6 +29,7 @@ pub type Gallery = HashMap<Picture, Arc<Image>>;
 #[derive(Clone, Copy)]
 pub struct People<'a> {
     pub agents: &'a [Agent],
+    pub directory: &'a [v3::Agent],
     pub me: &'a Me,
     pub gallery: &'a Gallery,
 }
@@ -34,6 +37,29 @@ pub struct People<'a> {
 impl People<'_> {
     pub fn picture(&self, picture: Option<&Picture>) -> Option<Arc<Image>> {
         self.gallery.get(picture?).cloned()
+    }
+
+    pub fn agent(&self, agent: AgentId) -> Option<&Agent> {
+        let mut found = None;
+        for candidate in self.agents {
+            if candidate.id == agent {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found
+    }
+
+    pub fn wire(&self, agent: AgentId) -> Option<&v3::Agent> {
+        let wanted = link::v3_agent_id(agent);
+        let mut found = None;
+        for candidate in self.directory {
+            if candidate.id == wanted {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found
     }
 }
 
@@ -69,6 +95,7 @@ mod tests {
         let me = Me::default();
         let people = People {
             agents: &[],
+            directory: &[],
             me: &me,
             gallery: &gallery,
         };

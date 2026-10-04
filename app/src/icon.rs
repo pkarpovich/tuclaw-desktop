@@ -17,6 +17,7 @@ icon_assets!(
         Hash,
         LoaderCircle,
         Lock,
+        MessageSquare,
         Mic,
         PanelLeft,
         Paperclip,
@@ -61,10 +62,11 @@ pub enum Glyph {
     Upload,
     Reset,
     Add,
+    Message,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 25] = [
+    pub const ALL: [Glyph; 26] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -90,6 +92,7 @@ impl Glyph {
         Glyph::Upload,
         Glyph::Reset,
         Glyph::Add,
+        Glyph::Message,
     ];
 
     fn name(self) -> IconName {
@@ -119,6 +122,7 @@ impl Glyph {
             Glyph::Upload => IconName::Upload,
             Glyph::Reset => IconName::RotateCcw,
             Glyph::Add => IconName::Plus,
+            Glyph::Message => IconName::MessageSquare,
         }
     }
 }

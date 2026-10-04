@@ -1,6 +1,7 @@
 pub mod agent_settings;
 pub mod agents;
 pub mod audio;
+pub mod card;
 pub mod composer;
 pub mod control;
 pub mod failure;

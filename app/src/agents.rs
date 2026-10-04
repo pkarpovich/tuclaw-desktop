@@ -2,9 +2,11 @@ use gpui::{
     Context, Div, Entity, FontWeight, Hsla, IntoElement, Render, SharedString, Subscription,
     Window, div, prelude::*, px,
 };
-use tuclaw_core::model::{Agent, AgentStatus};
+use tuclaw_core::model::{Agent, AgentId, AgentStatus};
 
-use crate::control::{AvatarSize, Face, avatar};
+use crate::card::{self, CardActions, with_card};
+use crate::control::{AvatarSize, Face, avatar, button};
+use crate::icon::{Glyph, icon};
 use crate::people::People;
 use crate::state::AppState;
 use crate::theme;
@@ -15,6 +17,7 @@ pub struct AgentsView {
 }
 
 pub struct AgentCard {
+    pub agent: AgentId,
     pub name: SharedString,
     pub face: Face,
     pub role: SharedString,
@@ -39,10 +42,14 @@ impl AgentsView {
 
 impl Render for AgentsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let cards = agent_cards(&self.state.read(cx).people());
+        let state = self.state.read(cx);
+        let people = state.people();
+        let cards = agent_cards(&people);
+        let actions = card::actions(&self.state);
         let total = cards.len();
         let mut busy = 0;
         for AgentCard {
+            agent: _,
             name: _,
             face: _,
             role: _,
@@ -65,7 +72,7 @@ impl Render for AgentsView {
             .px(px(14.))
             .py(px(12.));
         for card in cards {
-            list = list.child(card_element(card));
+            list = list.child(card_element(card, &people, &actions));
         }
         div()
             .flex()
@@ -85,7 +92,7 @@ pub fn agent_cards(people: &People) -> Vec<AgentCard> {
     ordered.sort_by_key(|agent| (agent.sort_index, agent.id.0));
     let mut cards = Vec::new();
     for Agent {
-        id: _,
+        id,
         name,
         initials,
         role,
@@ -99,6 +106,7 @@ pub fn agent_cards(people: &People) -> Vec<AgentCard> {
             AgentStatus::Busy(task) => Status::Busy(SharedString::from(task.clone())),
         };
         cards.push(AgentCard {
+            agent: *id,
             name: SharedString::from(name.clone()),
             face: Face {
                 initials: SharedString::from(initials.clone()),
@@ -136,13 +144,17 @@ fn header(total: usize, busy: usize) -> impl IntoElement {
         )
 }
 
-fn card_element(card: AgentCard) -> impl IntoElement {
+fn card_element(card: AgentCard, people: &People, actions: &CardActions) -> impl IntoElement {
     let AgentCard {
+        agent,
         name,
         face,
         role,
         status,
     } = card;
+    let AgentId(raw) = agent;
+    let open = actions.on_settings.clone();
+    let name_label = name.clone();
     div()
         .flex()
         .flex_none()
@@ -153,7 +165,13 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         .bg(theme::raised())
         .border_1()
         .border_color(theme::border())
-        .child(avatar(face, AvatarSize::Message))
+        .child(with_card(
+            format!("agents-card-{raw}"),
+            agent,
+            avatar(face, AvatarSize::Message),
+            people,
+            actions,
+        ))
         .child(
             div()
                 .flex()
@@ -175,6 +193,15 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         )
         .child(div().flex_1())
         .child(status_element(status))
+        .child(
+            button(format!("agents-settings-{raw}"))
+                .accessibility_label(format!("Settings for {name_label}"))
+                .p(px(5.))
+                .rounded(px(7.))
+                .hover(|style| style.bg(theme::sunken()))
+                .on_click(move |_event, window, cx| open(agent, window, cx))
+                .child(icon(Glyph::Adjust, px(15.), theme::text_secondary())),
+        )
 }
 
 fn status_element(status: Status) -> Div {
@@ -216,6 +243,7 @@ mod tests {
         let gallery = Gallery::new();
         agent_cards(&People {
             agents,
+            directory: &[],
             me: &me,
             gallery: &gallery,
         })
@@ -228,6 +256,7 @@ mod tests {
         let mut names = Vec::new();
         let mut statuses = Vec::new();
         for AgentCard {
+            agent: _,
             name,
             face: _,
             role: _,
@@ -325,6 +354,24 @@ mod tests {
         });
         cx.run_until_parked();
         state.read_with(cx, |state, _cx| assert_eq!(state.view(), View::Agents));
+    }
+
+    #[gpui::test]
+    fn the_gear_on_a_row_opens_the_agent_settings(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_view, cx) = cx.add_window_view(move |_window, cx| AgentsView::new(built, cx));
+        cx.run_until_parked();
+        let gear = cx
+            .debug_bounds("agents-settings-3")
+            .expect("the gear of agent 3 is drawn");
+        cx.simulate_click(gear.center(), Modifiers::default());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.settings().map(|settings| settings.agent),
+                Some(AgentId(3))
+            );
+        });
     }
 
     #[gpui::test]

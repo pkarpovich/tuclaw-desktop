@@ -74,6 +74,13 @@ impl Composer {
         });
     }
 
+    pub fn insert(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.input.update(cx, |input, cx| {
+            input.insert(text.to_string(), window, cx);
+            input.focus_handle(cx).focus(window, cx);
+        });
+    }
+
     fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         let Enter {
             secondary: _,

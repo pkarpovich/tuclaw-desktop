@@ -50,6 +50,7 @@ pub enum AvatarSize {
     Profile,
 }
 
+#[derive(Clone)]
 pub struct Face {
     pub initials: SharedString,
     pub color: Hsla,

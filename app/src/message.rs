@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, IntoElement, Pixels,
-    SharedString, Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px, relative,
-    size,
+    AnyElement, App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, IntoElement,
+    Pixels, SharedString, Stateful, StyledText, Window, canvas, div, fill, point, prelude::*, px,
+    relative, size,
 };
 use time::OffsetDateTime;
 use time::macros::format_description;
@@ -14,6 +14,7 @@ use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId
 use gpui_kit::base::Avatar;
 
 use crate::audio::{PEAKS, Peaks, Waveform};
+use crate::card::{CardActions, with_card};
 use crate::control::{self, AvatarSize, Face, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::link;
@@ -50,6 +51,7 @@ pub struct Actions {
     pub on_toggle: OnToggle,
     pub on_play: OnPlay,
     pub on_disclose: OnDisclose,
+    pub card: CardActions,
 }
 
 pub enum Fold {
@@ -99,6 +101,17 @@ pub fn message_row(
     let writer = writer(*author, people);
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
+    let face = match author {
+        Author::Agent(agent) => with_card(
+            format!("card-{raw}"),
+            *agent,
+            avatar(&writer),
+            people,
+            &actions.card,
+        ),
+        Author::User => avatar(&writer).into_any_element(),
+        Author::System => avatar(&writer).into_any_element(),
+    };
     let Parts { thinking, answer } = rich::split_thinking(&source(body));
     let quick = run.as_ref().and_then(runlog::quick_duration);
     let mut line = byline(&writer, *sent_at, quick);
@@ -119,7 +132,7 @@ pub fn message_row(
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
-        return row(selector, &writer, column);
+        return row(selector, face, column);
     }
     if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
@@ -139,19 +152,20 @@ pub fn message_row(
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
-    row(selector, &writer, column)
+    row(selector, face, column)
 }
 
-fn row(selector: String, writer: &Writer, column: Div) -> Stateful<Div> {
+fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {
     div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
         .w_full()
         .flex()
+        .items_start()
         .gap(px(12.))
         .px(px(20.))
         .py(px(8.))
-        .child(avatar(writer))
+        .child(face)
         .child(column)
 }
 

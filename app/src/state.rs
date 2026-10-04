@@ -62,6 +62,7 @@ pub enum StateEvent {
     FoldToggled,
     OlderLoaded,
     SendFailed(String),
+    Mention(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -285,6 +286,7 @@ impl AppState {
     pub fn people(&self) -> People<'_> {
         People {
             agents: &self.agents,
+            directory: &self.directory,
             me: &self.me,
             gallery: &self.gallery,
         }
@@ -896,6 +898,16 @@ impl AppState {
             .ok();
         })
         .detach();
+    }
+
+    pub fn mention(&mut self, agent: AgentId, cx: &mut Context<Self>) {
+        let Some(known) = self.directory_agent(agent) else {
+            return;
+        };
+        let ident = known.ident.clone();
+        self.view = View::Conversation;
+        cx.emit(StateEvent::Mention(format!("@{ident} ")));
+        cx.notify();
     }
 
     pub fn view_run(&mut self, agent: AgentId, cx: &mut Context<Self>) {

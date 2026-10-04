@@ -9,6 +9,7 @@ use time::{OffsetDateTime, UtcOffset};
 use tuclaw_core::grouping::{DaySection, group_by_day};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
+use crate::card;
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
@@ -93,6 +94,11 @@ impl Feed {
                     let text = text.clone();
                     feed.composer
                         .update(cx, |composer, cx| composer.restore(text, window, cx));
+                }
+                StateEvent::Mention(text) => {
+                    let text = text.clone();
+                    feed.composer
+                        .update(cx, |composer, cx| composer.insert(&text, window, cx));
                 }
             },
         );
@@ -213,6 +219,7 @@ impl Feed {
             on_toggle,
             on_play,
             on_disclose,
+            card: card::actions(&self.state),
         };
         let stopper = self.state.clone();
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
@@ -682,6 +689,54 @@ mod tests {
         let built = state.clone();
         let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         (mock, state, feed, cx)
+    }
+
+    fn last_agent_message(state: &Entity<AppState>, cx: &mut VisualTestContext) -> i64 {
+        state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if let Author::Agent(_) = message.author {
+                    let tuclaw_core::model::MessageId(raw) = message.id;
+                    found = Some(raw);
+                }
+            }
+            found.expect("the surface has an agent message")
+        })
+    }
+
+    fn click(cx: &mut VisualTestContext, selector: String) {
+        let bounds = cx
+            .debug_bounds(Box::leak(selector.clone().into_boxed_str()))
+            .unwrap_or_else(|| panic!("{selector} is drawn"));
+        cx.simulate_click(bounds.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn the_avatar_card_mentions_the_agent_in_the_composer(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        cx.run_until_parked();
+        let raw = last_agent_message(&state, cx);
+        click(cx, format!("card-{raw}-trigger"));
+        assert!(cx.debug_bounds("agent-card").is_some());
+        click(cx, "card-mention".to_string());
+        assert_eq!(typed(&feed, cx), "@tuclaw ");
+        assert!(cx.debug_bounds("agent-card").is_none());
+    }
+
+    #[gpui::test]
+    fn the_avatar_card_opens_the_agent_settings(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        cx.run_until_parked();
+        let raw = last_agent_message(&state, cx);
+        click(cx, format!("card-{raw}-trigger"));
+        click(cx, "card-settings".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.settings().map(|settings| settings.agent),
+                Some(tuclaw_core::model::AgentId(1))
+            );
+        });
     }
 
     fn typed(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> String {
