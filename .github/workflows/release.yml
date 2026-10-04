@@ -1,0 +1,193 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Tag matches the workspace version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$tag" != "$version" ]; then
+            echo "tag $tag does not match Cargo.toml $version" >&2
+            exit 1
+          fi
+
+      - run: mise run fmt-check
+      - run: mise run lint
+      - run: mise run test
+
+      - run: brew install fish
+
+      - uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_CERT_PASSWORD }}
+
+      - name: Bundle and sign
+        env:
+          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          identity=$(security find-identity -v -p codesigning |
+            grep "Developer ID Application" | grep "($TEAM_ID)" |
+            head -n 1 | awk '{print $2}')
+          if [ -z "$identity" ]; then
+            echo "no Developer ID Application identity for team $TEAM_ID" >&2
+            exit 1
+          fi
+          mise exec -- fish script/bundle-mac.fish --sign "$identity"
+          mkdir -p dist
+          ditto target/release/bundle/Tuclaw.app dist/Tuclaw.app
+
+      - name: The bundle carries the microphone entitlement
+        run: |
+          codesign -d --entitlements - --xml dist/Tuclaw.app | grep -q com.apple.security.device.audio-input
+
+      - name: Notarize and staple
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          KEY_P8: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          key=$(mktemp)
+          printf '%s\n' "$KEY_P8" > "$key"
+          ditto -c -k --keepParent dist/Tuclaw.app dist/notarize.zip
+          submission=$(xcrun notarytool submit dist/notarize.zip \
+            --key "$key" --key-id "$KEY_ID" --issuer "$ISSUER_ID" \
+            --wait --timeout 30m --output-format json)
+          echo "$submission"
+          id=$(echo "$submission" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          status=$(echo "$submission" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+          if [ "$status" != "Accepted" ]; then
+            xcrun notarytool log "$id" --key "$key" --key-id "$KEY_ID" --issuer "$ISSUER_ID" >&2
+            rm -f "$key"
+            exit 1
+          fi
+          rm -f "$key" dist/notarize.zip
+          xcrun stapler staple dist/Tuclaw.app
+
+      - name: Gatekeeper accepts the bundle
+        run: |
+          verdict=$(spctl --assess --type exec --verbose=2 dist/Tuclaw.app 2>&1)
+          echo "$verdict"
+          if ! echo "$verdict" | grep -q "Notarized Developer ID"; then
+            echo "the bundle is not notarized" >&2
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ditto -c -k --keepParent dist/Tuclaw.app "dist/Tuclaw-arm64-$version.zip"
+          rm -rf dist/Tuclaw.app
+          cd dist && shasum -a 256 *.zip > checksums.txt && cat checksums.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.zip
+            dist/checksums.txt
+          generate_release_notes: true
+
+  cask:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Read the version and the checksum
+        id: facts
+        run: |
+          {
+            version="${GITHUB_REF_NAME#v}"
+            echo "version=$version"
+            echo "sha=$(shasum -a 256 "dist/Tuclaw-arm64-$version.zip" | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          repository: pkarpovich/homebrew-apps
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Write the cask
+        env:
+          VERSION: ${{ steps.facts.outputs.version }}
+          SHA: ${{ steps.facts.outputs.sha }}
+        run: |
+          mkdir -p tap/Casks
+          cat > tap/Casks/tuclaw.rb <<CASK
+          cask "tuclaw" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/pkarpovich/tuclaw-desktop/releases/download/v#{version}/Tuclaw-arm64-#{version}.zip"
+            name "Tuclaw"
+            desc "Desktop client for the tuclaw agent daemon"
+            homepage "https://github.com/pkarpovich/tuclaw-desktop"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on arch: :arm64
+            depends_on macos: :sonoma
+
+            app "Tuclaw.app"
+
+            zap trash: [
+              "~/Library/Application Support/tuclaw-desktop",
+              "~/Library/Caches/tuclaw-desktop",
+            ]
+          end
+          CASK
+
+      - name: Commit and push
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.facts.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "tuclaw ${VERSION}"
+          git push
