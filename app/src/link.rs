@@ -163,43 +163,59 @@ pub enum Source {
     Daemon(String),
 }
 
-pub struct Config {
-    pub daemon_url: Option<String>,
-    pub token: Option<String>,
-    pub world: Option<PathBuf>,
+pub const DEFAULT_DAEMON_URL: &str = "http://192.168.199.72:9090";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Config {
+    Daemon { url: String, token: Option<String> },
+    Mock,
+    World(PathBuf),
 }
 
 impl Config {
     pub fn from_env() -> Config {
-        let world = match std::env::var("TUCLAW_MOCK_WORLD") {
-            Ok(path) => Some(PathBuf::from(path)),
-            Err(_) => default_world(),
-        };
-        Config {
-            daemon_url: std::env::var("TUCLAW_DAEMON_URL").ok(),
-            token: std::env::var("TUCLAW_CLIENT_TOKEN").ok(),
-            world,
+        Config::from_vars(|name| std::env::var(name).ok())
+    }
+
+    fn from_vars(lookup: impl Fn(&str) -> Option<String>) -> Config {
+        if let Some(path) = lookup("TUCLAW_MOCK_WORLD") {
+            return Config::World(PathBuf::from(path));
+        }
+        if lookup("TUCLAW_MOCK").as_deref() == Some("1") {
+            return Config::Mock;
+        }
+        Config::Daemon {
+            url: lookup("TUCLAW_DAEMON_URL").unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string()),
+            token: lookup("TUCLAW_CLIENT_TOKEN"),
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Config::Daemon { url, token: _ } => url.clone(),
+            Config::Mock => "the mock daemon".to_string(),
+            Config::World(path) => path.display().to_string(),
         }
     }
 
     pub fn client(self) -> Result<(v3::Client, Source), String> {
-        let Config {
-            daemon_url,
-            token,
-            world,
-        } = self;
-        let Some(url) = daemon_url else {
-            let Some(world) = world else {
+        match self {
+            Config::Daemon { url, token } => {
+                let token = token.map(v3::ClientToken);
+                let client = v3::Client::http(&url, token).map_err(|error| error.to_string())?;
+                Ok((client, Source::Daemon(url)))
+            }
+            Config::Mock => {
                 let mock = v3::MockTransport::new(v3::Scenario::default(), v3::Pace::Realtime);
-                return Ok((v3::Client::mock(&mock), Source::Mock));
-            };
-            let seed = load_seed(&world)?;
-            let mock = v3::MockTransport::seeded(seed, v3::Scenario::default(), v3::Pace::Realtime);
-            return Ok((v3::Client::mock(&mock), Source::Snapshot));
-        };
-        let token = token.map(v3::ClientToken);
-        let client = v3::Client::http(&url, token).map_err(|error| error.to_string())?;
-        Ok((client, Source::Daemon(url)))
+                Ok((v3::Client::mock(&mock), Source::Mock))
+            }
+            Config::World(world) => {
+                let seed = load_seed(&world)?;
+                let mock =
+                    v3::MockTransport::seeded(seed, v3::Scenario::default(), v3::Pace::Realtime);
+                Ok((v3::Client::mock(&mock), Source::Snapshot))
+            }
+        }
     }
 }
 
@@ -230,16 +246,6 @@ fn source_key(source: &Source) -> String {
         }
     }
     key
-}
-
-fn default_world() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let path = PathBuf::from(home)
-        .join("Library")
-        .join("Application Support")
-        .join("tuclaw-desktop")
-        .join("world.json");
-    if path.is_file() { Some(path) } else { None }
 }
 
 pub fn load_seed(path: &Path) -> Result<v3::Seed, String> {
@@ -440,37 +446,83 @@ mod tests {
         assert_eq!(initials(""), "··");
     }
 
+    fn vars(pairs: &[(&str, &str)]) -> Config {
+        let mut owned = Vec::new();
+        for (name, value) in pairs {
+            owned.push((name.to_string(), value.to_string()));
+        }
+        let pairs = owned;
+        Config::from_vars(move |name| {
+            let mut found = None;
+            for (key, value) in &pairs {
+                if key == name {
+                    found = Some(value.clone());
+                }
+            }
+            found
+        })
+    }
+
     #[test]
-    fn the_source_follows_the_environment() {
-        let mock = Config {
-            daemon_url: None,
+    fn the_live_daemon_is_the_default_and_mocks_are_explicit() {
+        assert_eq!(
+            vars(&[]),
+            Config::Daemon {
+                url: DEFAULT_DAEMON_URL.into(),
+                token: None
+            }
+        );
+        assert_eq!(
+            vars(&[
+                ("TUCLAW_DAEMON_URL", "http://host:9090"),
+                ("TUCLAW_CLIENT_TOKEN", "t")
+            ]),
+            Config::Daemon {
+                url: "http://host:9090".into(),
+                token: Some("t".into())
+            }
+        );
+        assert_eq!(vars(&[("TUCLAW_MOCK", "1")]), Config::Mock);
+        assert_eq!(
+            vars(&[("TUCLAW_MOCK", "0")]),
+            Config::Daemon {
+                url: DEFAULT_DAEMON_URL.into(),
+                token: None
+            }
+        );
+        assert_eq!(
+            vars(&[
+                ("TUCLAW_MOCK", "1"),
+                ("TUCLAW_MOCK_WORLD", "/tmp/world.json"),
+                ("TUCLAW_DAEMON_URL", "http://host:9090")
+            ]),
+            Config::World(PathBuf::from("/tmp/world.json"))
+        );
+        assert_eq!(
+            vars(&[
+                ("TUCLAW_MOCK", "1"),
+                ("TUCLAW_DAEMON_URL", "http://host:9090")
+            ]),
+            Config::Mock
+        );
+    }
+
+    #[test]
+    fn each_config_builds_its_source() {
+        let Ok((_client, Source::Mock)) = Config::Mock.client() else {
+            panic!("the mock starts");
+        };
+        let daemon = Config::Daemon {
+            url: "http://192.168.1.10:9090".into(),
             token: None,
-            world: None,
-        };
-        let Ok((_client, Source::Mock)) = mock.client() else {
-            panic!("no daemon URL means the mock");
-        };
-        let daemon = Config {
-            daemon_url: Some("http://192.168.1.10:9090".into()),
-            token: Some("t".into()),
-            world: None,
         };
         let Ok((_client, Source::Daemon(url))) = daemon.client() else {
-            panic!("a URL and a token mean the daemon");
+            panic!("an open daemon needs no token");
         };
         assert_eq!(url, "http://192.168.1.10:9090");
-        let tokenless = Config {
-            daemon_url: Some("http://host:9090".into()),
+        let bad = Config::Daemon {
+            url: "ftp://host".into(),
             token: None,
-            world: None,
-        };
-        let Ok((_client, Source::Daemon(_))) = tokenless.client() else {
-            panic!("a URL without a token is an open daemon");
-        };
-        let bad = Config {
-            daemon_url: Some("ftp://host".into()),
-            token: Some("t".into()),
-            world: None,
         };
         assert!(bad.client().is_err());
     }
@@ -487,20 +539,12 @@ mod tests {
             format!(r#"{{"surfaces": {surfaces}, "agents": {agents}}}"#),
         )
         .expect("the world is written");
-        let seeded = Config {
-            daemon_url: None,
-            token: None,
-            world: Some(world.clone()),
-        };
+        let seeded = Config::World(world.clone());
         let Ok((_client, Source::Snapshot)) = seeded.client() else {
             panic!("a world file means the snapshot");
         };
         std::fs::write(&world, "not json").expect("the world is overwritten");
-        let broken = Config {
-            daemon_url: None,
-            token: None,
-            world: Some(world.clone()),
-        };
+        let broken = Config::World(world.clone());
         let Err(error) = broken.client() else {
             panic!("a broken world fails to start");
         };

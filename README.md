@@ -4,7 +4,7 @@ A native macOS client for the tuclaw agent system, written in Rust on
 [GPUI](https://github.com/zed-industries/zed) — Zed's GPU-accelerated UI framework. It is the first
 step toward replacing Telegram as the interface to a set of AI agents.
 
-The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Until the daemon ships the API it runs on the built-in mock daemon; set `TUCLAW_DAEMON_URL` (`http://host:9090`) to talk to the real one, plus `TUCLAW_CLIENT_TOKEN` only when the daemon requires a bearer (it does not by default). Threads and direct messages are not in v3.0 and are hidden until they are.
+The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Every launch path (Finder, `mise run preview`, `mise run install`, `mise run dev`) talks to the live daemon on bravo, `http://192.168.199.72:9090`, with no token. `TUCLAW_DAEMON_URL` points it at another daemon and `TUCLAW_CLIENT_TOKEN` adds a bearer for a daemon that requires one. The mock runs only when asked for: `TUCLAW_MOCK=1` for the built-in world, `TUCLAW_MOCK_WORLD=<path>` for a snapshot world (the second wins when both are set). An app opened through LaunchServices sees none of these variables, so the bundle always uses the default daemon; the first launch asks for Local Network access, which it needs to reach bravo. Threads and direct messages are not in v3.0 and are hidden until they are.
 
 The window draws its own chrome. The titlebar is transparent, the traffic lights are positioned
 inside the app's own top bar, and the feed is a rounded card floating on a warm
@@ -28,11 +28,11 @@ shown in UTC, not in the local zone.
 
 ## The daemon client
 
-`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with an optional bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the app runs against until the daemon ships the API. The UI is not wired to it yet; that comes as separate tasks.
+`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with an optional bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the tests run against and the app runs on only when asked for.
 
-### Real data before the daemon serves v3
+### A snapshot world for the mock
 
-Until `/api/v3` is live, the mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; when that file exists the app starts on it (the toolbar says `snapshot`), otherwise on the built-in world. `TUCLAW_MOCK_WORLD` points at another file. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run. Voice recordings come along when `attachments/` sits next to `world.json`: `attachments.json` lists `{id, message_id, kind, mime, size_bytes, duration_ms}` per recording and `<id>.<ext>` holds its bytes, shaped like the v3.1 draft's `attachments` field and `GET /api/v3/attachments/{id}`.
+The mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; `TUCLAW_MOCK_WORLD=<that path> mise run dev` starts the app on it (the toolbar says `snapshot`). It is never picked up on its own. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run. Voice recordings come along when `attachments/` sits next to `world.json`: `attachments.json` lists `{id, message_id, kind, mime, size_bytes, duration_ms}` per recording and `<id>.<ext>` holds its bytes, shaped like the v3.1 draft's `attachments` field and `GET /api/v3/attachments/{id}`.
 
 ## Building
 
@@ -46,7 +46,6 @@ running anything else.
 ```
 mise run build       # cargo build --workspace --all-targets
 mise run dev         # cargo run -p tuclaw-desktop
-mise run dev-bravo   # the same against the live daemon on bravo (TUCLAW_DAEMON_URL, no token)
 mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all

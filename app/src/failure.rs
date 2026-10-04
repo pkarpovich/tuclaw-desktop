@@ -18,12 +18,7 @@ pub struct FailureView {
 }
 
 pub fn start(config: Config) -> Startup {
-    let source = SharedString::from(
-        config
-            .daemon_url
-            .clone()
-            .unwrap_or_else(|| "the mock daemon".to_string()),
-    );
+    let source = SharedString::from(config.label());
     match config.client() {
         Ok((client, source)) => {
             let peaks = link::peak_directory(&source);
@@ -120,12 +115,8 @@ mod tests {
     use crate::link::{Config, Source};
 
     #[test]
-    fn no_daemon_url_starts_on_the_mock() {
-        let startup = start(Config {
-            daemon_url: None,
-            token: None,
-            world: None,
-        });
+    fn the_mock_config_starts_on_the_mock() {
+        let startup = start(Config::Mock);
         let Startup::Ready(state) = startup else {
             panic!("the mock always starts");
         };
@@ -134,10 +125,9 @@ mod tests {
 
     #[test]
     fn a_daemon_url_without_a_token_starts_on_the_open_daemon() {
-        let startup = start(Config {
-            daemon_url: Some("http://host:9090".into()),
+        let startup = start(Config::Daemon {
+            url: "http://host:9090".into(),
             token: None,
-            world: None,
         });
         let Startup::Ready(state) = startup else {
             panic!("an open daemon needs no token");
@@ -147,10 +137,9 @@ mod tests {
 
     #[test]
     fn a_daemon_url_that_is_not_http_produces_the_failure_state() {
-        let startup = start(Config {
-            daemon_url: Some("ftp://host".into()),
+        let startup = start(Config::Daemon {
+            url: "ftp://host".into(),
             token: None,
-            world: None,
         });
         let Startup::Failed(FailureView { source, error: _ }) = startup else {
             panic!("a non-http URL must not start");
