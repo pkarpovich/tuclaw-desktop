@@ -186,6 +186,7 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         (None, Some(elapsed)) => div()
             .text_color(theme::text_label())
             .child(timing(elapsed, total)),
+        (None, None) if total.is_zero() => div(),
         (None, None) => div().text_color(theme::text_label()).child(minutes(total)),
     };
     let top = div()

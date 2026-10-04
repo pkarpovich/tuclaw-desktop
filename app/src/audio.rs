@@ -29,8 +29,27 @@ pub fn decode(mime: &str, bytes: Vec<u8>) -> Result<Pcm, String> {
         "audio/mp4" | "audio/m4a" | "audio/x-m4a" | "audio/aac" => decode_with_rodio(bytes, "m4a"),
         "audio/mpeg" | "audio/mp3" => decode_with_rodio(bytes, "mp3"),
         "audio/wav" | "audio/x-wav" => decode_with_rodio(bytes, "wav"),
-        other => Err(format!("cannot play {other}")),
+        other => match sniff(&bytes) {
+            Some(Container::Ogg) => decode_opus(bytes),
+            Some(Container::Mp4) => decode_with_rodio(bytes, "m4a"),
+            None => Err(format!("cannot play {other}")),
+        },
     }
+}
+
+enum Container {
+    Ogg,
+    Mp4,
+}
+
+fn sniff(bytes: &[u8]) -> Option<Container> {
+    if bytes.starts_with(b"OggS") {
+        return Some(Container::Ogg);
+    }
+    if bytes.get(4..8) == Some(b"ftyp".as_slice()) {
+        return Some(Container::Mp4);
+    }
+    None
 }
 
 fn decode_opus(bytes: Vec<u8>) -> Result<Pcm, String> {
@@ -175,9 +194,17 @@ mod tests {
 
     #[test]
     fn unknown_or_broken_media_is_an_error() {
-        assert!(decode("video/webm", TONE_OGG.to_vec()).is_err());
+        assert!(decode("video/webm", b"not a recording".to_vec()).is_err());
         assert!(decode("audio/ogg", b"not an ogg".to_vec()).is_err());
         assert!(decode("audio/mp4", b"not an mp4".to_vec()).is_err());
+    }
+
+    #[test]
+    fn an_untyped_recording_is_recognised_by_its_container() {
+        let ogg = decode("application/octet-stream", TONE_OGG.to_vec()).expect("ogg sniffed");
+        assert_eq!(ogg.rate, 48_000);
+        let m4a = decode("application/octet-stream", TONE_M4A.to_vec()).expect("m4a sniffed");
+        assert_eq!(m4a.rate, 44_100);
     }
 
     #[test]
