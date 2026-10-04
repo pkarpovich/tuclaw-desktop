@@ -195,11 +195,8 @@ impl Config {
             let mock = v3::MockTransport::seeded(seed, v3::Scenario::default(), v3::Pace::Realtime);
             return Ok((v3::Client::mock(&mock), Source::Snapshot));
         };
-        let Some(token) = token else {
-            return Err("TUCLAW_DAEMON_URL is set but TUCLAW_CLIENT_TOKEN is not".to_string());
-        };
-        let client =
-            v3::Client::http(&url, v3::ClientToken(token)).map_err(|error| error.to_string())?;
+        let token = token.map(v3::ClientToken);
+        let client = v3::Client::http(&url, token).map_err(|error| error.to_string())?;
         Ok((client, Source::Daemon(url)))
     }
 }
@@ -435,7 +432,9 @@ mod tests {
             token: None,
             world: None,
         };
-        assert!(tokenless.client().is_err());
+        let Ok((_client, Source::Daemon(_))) = tokenless.client() else {
+            panic!("a URL without a token is an open daemon");
+        };
         let bad = Config {
             daemon_url: Some("ftp://host".into()),
             token: Some("t".into()),

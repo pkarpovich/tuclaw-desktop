@@ -133,17 +133,29 @@ mod tests {
     }
 
     #[test]
-    fn a_daemon_url_without_a_token_produces_the_failure_state() {
+    fn a_daemon_url_without_a_token_starts_on_the_open_daemon() {
         let startup = start(Config {
             daemon_url: Some("http://host:9090".into()),
             token: None,
             world: None,
         });
-        let Startup::Failed(FailureView { source, error }) = startup else {
-            panic!("a tokenless daemon must not start");
+        let Startup::Ready(state) = startup else {
+            panic!("an open daemon needs no token");
         };
-        assert_eq!(source, SharedString::from("http://host:9090"));
-        assert!(error.contains("TUCLAW_CLIENT_TOKEN"), "{error}");
+        assert_eq!(state.source(), &Source::Daemon("http://host:9090".into()));
+    }
+
+    #[test]
+    fn a_daemon_url_that_is_not_http_produces_the_failure_state() {
+        let startup = start(Config {
+            daemon_url: Some("ftp://host".into()),
+            token: None,
+            world: None,
+        });
+        let Startup::Failed(FailureView { source, error: _ }) = startup else {
+            panic!("a non-http URL must not start");
+        };
+        assert_eq!(source, SharedString::from("ftp://host"));
     }
 
     #[gpui::test]

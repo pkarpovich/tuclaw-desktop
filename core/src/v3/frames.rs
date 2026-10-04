@@ -17,6 +17,28 @@ use super::dto::{
 /// The envelope version this build speaks.
 pub const VERSION: u32 = 1;
 
+/// Whether the server wants a bearer token, as `hello.capabilities.auth` says.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::AuthMode;
+///
+/// assert_eq!(AuthMode::default(), AuthMode::Unknown);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthMode {
+    /// No header is needed; any `Authorization` header is ignored.
+    None,
+    /// Every request must carry `Authorization: Bearer <token>`.
+    Bearer,
+    /// The server did not say, or said something this build does not know.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
 /// The event types and operations the server announces in `hello`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Capabilities {
@@ -26,6 +48,9 @@ pub struct Capabilities {
     /// The operations it accepts.
     #[serde(default)]
     pub ops: Vec<String>,
+    /// Whether it wants a bearer token.
+    #[serde(default)]
+    pub auth: AuthMode,
 }
 
 /// The first frame of every connection.
@@ -630,6 +655,19 @@ mod tests {
                 .contains(&"text.delta".to_string())
         );
         assert_eq!(hello.capabilities.ops, vec!["focus".to_string()]);
+        assert_eq!(hello.capabilities.auth, AuthMode::None);
+    }
+
+    #[test]
+    fn an_absent_or_unknown_auth_mode_is_unknown() {
+        for (raw, mode) in [
+            (r#"{"events": [], "ops": []}"#, AuthMode::Unknown),
+            (r#"{"auth": "oidc"}"#, AuthMode::Unknown),
+            (r#"{"auth": "bearer"}"#, AuthMode::Bearer),
+        ] {
+            let capabilities: Capabilities = serde_json::from_str(raw).expect("decodes");
+            assert_eq!(capabilities.auth, mode);
+        }
     }
 
     #[test]

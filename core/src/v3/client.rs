@@ -24,7 +24,7 @@ use super::transport::{ApiError, Connection, Transport};
 /// ```
 /// use tuclaw_core::v3::{Client, ClientToken};
 ///
-/// let client = Client::http("http://192.168.1.10:9090", ClientToken("t".into())).unwrap();
+/// let client = Client::http("http://192.168.1.10:9090", Some(ClientToken("t".into()))).unwrap();
 /// let _surfaces = client.surfaces();
 /// ```
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl Client {
     /// # Errors
     ///
     /// Returns the [`ApiError`] of [`HttpTransport::new`].
-    pub fn http(base_url: &str, token: ClientToken) -> Result<Client, ApiError> {
+    pub fn http(base_url: &str, token: Option<ClientToken>) -> Result<Client, ApiError> {
         Ok(Client::new(Arc::new(HttpTransport::new(base_url, token)?)))
     }
 

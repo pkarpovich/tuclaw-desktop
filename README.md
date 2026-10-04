@@ -4,7 +4,7 @@ A native macOS client for the tuclaw agent system, written in Rust on
 [GPUI](https://github.com/zed-industries/zed) — Zed's GPU-accelerated UI framework. It is the first
 step toward replacing Telegram as the interface to a set of AI agents.
 
-The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Until the daemon ships the API it runs on the built-in mock daemon; set `TUCLAW_DAEMON_URL` (`http://host:9090`) and `TUCLAW_CLIENT_TOKEN` to talk to the real one. Threads and direct messages are not in v3.0 and are hidden until they are.
+The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Until the daemon ships the API it runs on the built-in mock daemon; set `TUCLAW_DAEMON_URL` (`http://host:9090`) to talk to the real one, plus `TUCLAW_CLIENT_TOKEN` only when the daemon requires a bearer (it does not by default). Threads and direct messages are not in v3.0 and are hidden until they are.
 
 The window draws its own chrome. The titlebar is transparent, the traffic lights are positioned
 inside the app's own top bar, and the feed is a rounded card floating on a warm
@@ -28,7 +28,7 @@ shown in UTC, not in the local zone.
 
 ## The daemon client
 
-`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with a bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the app runs against until the daemon ships the API. The UI is not wired to it yet; that comes as separate tasks.
+`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with an optional bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the app runs against until the daemon ships the API. The UI is not wired to it yet; that comes as separate tasks.
 
 ### Real data before the daemon serves v3
 
@@ -103,7 +103,7 @@ Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appea
 
 ## Data
 
-Nothing is stored locally. On start the app connects to the event socket, then fetches the surfaces, the agents and the selected surface's newest page; everything after that arrives on the socket. A dropped socket reconnects with backoff and replays from the last event it applied. If the daemon URL is set without a token, or is not `http://`, the window opens on a failure view naming the URL and the error.
+The only thing stored locally is the voice waveform cache (`~/Library/Caches/tuclaw-desktop/waveforms/`, 64 bytes per recording). On start the app connects to the event socket, then fetches the surfaces, the agents and the selected surface's newest page; everything after that arrives on the socket. A dropped socket reconnects with backoff and replays from the last event it applied. If the daemon URL is not `http://`, the window opens on a failure view naming the URL and the error.
 
 ## Tests
 

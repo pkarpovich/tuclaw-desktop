@@ -9,7 +9,7 @@ Acceptance scenario this contract must carry: a conversation in an existing Tele
 ## Transport and auth
 
 - Base: `http://<daemon>:9090/api/v3` (the existing `TUCLAW_HTTP_ADDR` server), event socket `ws://<daemon>:9090/api/v3/events`. LAN and Tailscale only.
-- Every v3 request, REST and WebSocket upgrade, carries `Authorization: Bearer <token>`. The token is the daemon's `TUCLAW_CLIENT_TOKEN` (one static token in v1). Unset token = v3 is not mounted at all (404), so a deployment without it changes nothing. Wrong or missing header = `401`.
+- `/api/v3` is always mounted and open to the LAN and Tailscale (decided by Pavel 2026-10-04: no token for now; Authelia may front it later). The daemon keeps one optional knob, `TUCLAW_CLIENT_TOKEN`: when it is set, every v3 request, REST and WebSocket upgrade, must carry `Authorization: Bearer <token>` and a missing or wrong header is `401`; when it is unset, no header is needed and any `Authorization` header is ignored. A client sends the bearer when it has a token configured, and learns the mode from `hello.capabilities.auth`.
 - `/health`, `/api/v1`, `/api/v2` and the mini-app stay as they are, unauthenticated, for one release.
 
 ## Conventions
@@ -139,7 +139,7 @@ Every frame is one JSON text message:
 
 `seq` is absent on ephemeral frames. Connect sequence:
 
-1. `hello` `{head, floor, server_time, capabilities: {events: [...], ops: [...]}}` - `head` the newest seq, `floor` the oldest still kept (30-day retention).
+1. `hello` `{head, floor, server_time, capabilities: {events: [...], ops: [...], auth: "none" | "bearer"}}` - `head` the newest seq, `floor` the oldest still kept (30-day retention).
 2. if `since < floor`: `gap {floor}` - the client refetches `GET /surfaces` and the message pages it shows, then continues from `head`; else every persisted event with `since < seq <= head`, in order.
 3. one `run.snapshot` per live run: `{run_id, agent_id, surface_id, started_at, as_of_seq, text, steps: [...]}` - `steps` as in `GET /runs/{id}`; `as_of_seq` is the newest event seq whose effects the `steps` already contain (the server reads both in one database snapshot), and the client ignores that run's persisted frames with `seq <= as_of_seq` so no step is applied twice; `text` is the IN-PROGRESS text segment only (the agent streams every assistant text block and records each finished block as a `step.text`, so a client renders the text steps plus this one current segment, and clears its current segment on every `step.text` and on `run.reset`).
 4. live events.

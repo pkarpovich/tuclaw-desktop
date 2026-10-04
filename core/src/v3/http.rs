@@ -23,7 +23,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT_DEADLINE: Duration = Duration::from_secs(60);
 
-/// The bearer token the daemon's `TUCLAW_CLIENT_TOKEN` holds.
+/// The bearer token the daemon's optional `TUCLAW_CLIENT_TOKEN` holds.
 ///
 /// # Examples
 ///
@@ -54,28 +54,30 @@ impl std::fmt::Debug for ClientToken {
 /// ```
 /// use tuclaw_core::v3::{ClientToken, HttpTransport};
 ///
-/// let transport = HttpTransport::new("http://192.168.1.10:9090", ClientToken("t".into()));
+/// let transport = HttpTransport::new("http://192.168.1.10:9090", Some(ClientToken("t".into())));
 /// assert!(transport.is_ok());
-/// assert!(HttpTransport::new("ftp://example", ClientToken("t".into())).is_err());
+/// assert!(HttpTransport::new("http://192.168.1.10:9090", None).is_ok());
+/// assert!(HttpTransport::new("ftp://example", None).is_err());
 /// ```
 #[derive(Clone)]
 pub struct HttpTransport {
     client: reqwest::Client,
     api: String,
     events: String,
-    token: ClientToken,
+    token: Option<ClientToken>,
     handle: Handle,
     heartbeat_deadline: Duration,
 }
 
 impl HttpTransport {
-    /// Creates a transport for the daemon at `base_url` (`http://host:port`).
+    /// Creates a transport for the daemon at `base_url` (`http://host:port`); every request carries
+    /// `token` as a bearer when one is given, and no `Authorization` header otherwise.
     ///
     /// # Errors
     ///
     /// Returns [`ApiError::Invalid`] when `base_url` is not an `http://` URL, and
     /// [`ApiError::Transport`] when the HTTP client cannot be built.
-    pub fn new(base_url: &str, token: ClientToken) -> Result<HttpTransport, ApiError> {
+    pub fn new(base_url: &str, token: Option<ClientToken>) -> Result<HttpTransport, ApiError> {
         let base_url = base_url.trim_end_matches('/');
         let Some(authority) = base_url.strip_prefix("http://") else {
             return Err(ApiError::Invalid(format!(
@@ -111,7 +113,9 @@ impl HttpTransport {
     }
 
     fn authorized(&self, request: RequestBuilder) -> RequestBuilder {
-        let ClientToken(token) = &self.token;
+        let Some(ClientToken(token)) = &self.token else {
+            return request;
+        };
         request.bearer_auth(token)
     }
 }
@@ -150,16 +154,18 @@ impl Transport for HttpTransport {
             Some(Seq(since)) => format!("{}?since={since}", self.events),
             None => self.events.clone(),
         };
-        let ClientToken(token) = self.token.clone();
+        let token = self.token.clone();
         let deadline = self.heartbeat_deadline;
         spawn(&self.handle, async move {
             let mut request = url
                 .as_str()
                 .into_client_request()
                 .map_err(handshake_error)?;
-            let bearer = HeaderValue::from_str(&format!("Bearer {token}"))
-                .map_err(|error| ApiError::Invalid(error.to_string()))?;
-            request.headers_mut().insert(AUTHORIZATION, bearer);
+            if let Some(ClientToken(token)) = token {
+                let bearer = HeaderValue::from_str(&format!("Bearer {token}"))
+                    .map_err(|error| ApiError::Invalid(error.to_string()))?;
+                request.headers_mut().insert(AUTHORIZATION, bearer);
+            }
             let Ok(connected) = timeout(CONNECT_TIMEOUT, connect_async(request)).await else {
                 return Err(ApiError::Transport(
                     "timed out opening the event socket".into(),
@@ -281,7 +287,8 @@ mod tests {
     }
 
     fn transport(daemon: &FakeDaemon) -> HttpTransport {
-        HttpTransport::new(&daemon.url(), ClientToken(TOKEN.into())).expect("the URL is valid")
+        HttpTransport::new(&daemon.url(), Some(ClientToken(TOKEN.into())))
+            .expect("the URL is valid")
     }
 
     fn client(daemon: &FakeDaemon) -> Client {
@@ -510,6 +517,23 @@ mod tests {
     }
 
     #[test]
+    fn without_a_token_no_authorization_header_is_sent() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "GET",
+            "/api/v3/surfaces",
+            json_reply(200, include_str!("../../testdata/v3/surfaces.json")),
+        );
+        let open = Client::new(Arc::new(
+            HttpTransport::new(&daemon.url(), None).expect("the URL is valid"),
+        ));
+        within(open.surfaces()).expect("the surfaces load");
+        assert_eq!(daemon.requests()[0].authorization, None);
+        within(open.connect(None)).expect("the socket opens");
+        assert_eq!(daemon.upgrades()[0].authorization, None);
+    }
+
+    #[test]
     fn a_rejected_upgrade_maps_its_status() {
         let daemon = FakeDaemon::start();
         daemon.events(Events::Reject(401));
@@ -592,12 +616,13 @@ mod tests {
     fn only_http_urls_are_accepted() {
         let cases = ["https://example", "ws://example", "example:9090"];
         for url in cases {
-            let Err(ApiError::Invalid(_)) = HttpTransport::new(url, ClientToken(TOKEN.into()))
+            let Err(ApiError::Invalid(_)) =
+                HttpTransport::new(url, Some(ClientToken(TOKEN.into())))
             else {
                 panic!("{url} should be rejected");
             };
         }
-        let trailing = HttpTransport::new("http://host:9090/", ClientToken(TOKEN.into()))
+        let trailing = HttpTransport::new("http://host:9090/", Some(ClientToken(TOKEN.into())))
             .expect("a trailing slash is fine");
         assert_eq!(trailing.api, "http://host:9090/api/v3");
         assert_eq!(trailing.events, "ws://host:9090/api/v3/events");

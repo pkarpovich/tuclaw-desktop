@@ -29,8 +29,8 @@ use super::dto::{
     Usage, Wiring,
 };
 use super::frames::{
-    Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished, RunSnapshot,
-    RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
+    AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
+    RunSnapshot, RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
 };
 use super::runtime::handle;
 use super::transport::{ApiError, Connection, Transport};
@@ -1267,6 +1267,7 @@ impl World {
                     "input.accepted".into(),
                 ],
                 ops: vec!["focus".into()],
+                auth: AuthMode::None,
             },
         };
         self.deliver_to(&subscriber, &self.line("hello", None, None, None, &hello));
