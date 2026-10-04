@@ -92,7 +92,7 @@ One page, oldest first inside the page; without `before` it is the newest page. 
 - `kind`: `user`, `answer`, `post`, `notice`, `a2a` (B2's set; `prompt` rows are never returned).
 - `author.kind`: `user`, `agent`, `system`; `agent_id` present for `agent` (and for notices a bot posted for an agent).
 - `text` is the answer verbatim, Markdown, no Thinking fold.
-- `origin` is B2's `message.created` origin (what caused the message: `user`, `a2a`, `scheduled`, ...). `channel` is where a `user` message was typed: `telegram` or `desktop` (`null` for agent and system messages).
+- `origin` is B2's `message.created` origin (what caused the message: `user`, `a2a`, `scheduled`, ...); it is `null` on rows written before step B2 (the daemon did not record it then), so a client decodes it as optional. `channel` is where a `user` message was typed: `telegram` or `desktop` (`null` for agent and system messages).
 - `client_message_id` echoes the id a v3 client posted the message with (else `null`), so `message.created` can be matched to the client's optimistic row whether or not the `202` arrived first.
 - `run_summary` is present on a message with a `run_id` and lets the client draw "6 steps, 1 tool, 13 s" without fetching the run; it is `null` on a message without a run.
 

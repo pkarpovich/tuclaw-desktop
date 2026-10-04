@@ -468,7 +468,8 @@ pub struct Message {
     /// The run that produced it or that it started.
     #[serde(default)]
     pub run_id: Option<RunId>,
-    /// What caused it: `user`, `a2a`, `scheduled`, ...
+    /// What caused it: `user`, `a2a`, `scheduled`, ...; empty on rows written before step B2,
+    /// where the daemon sends `null`.
     #[serde(default, deserialize_with = "null_as_empty")]
     pub origin: String,
     /// Where a user message was typed.
