@@ -1,6 +1,6 @@
 use tuclaw_core::model::{
     Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId,
-    RecordingId, Span, Voice,
+    RecordingId, RunOutcome, RunRef, Span, Voice,
 };
 use tuclaw_core::v3;
 
@@ -87,7 +87,36 @@ pub fn message(message: &v3::Message) -> Message {
         body: vec![Span::Text(text.to_string())],
         sent_at: message.created_at,
         voice,
+        run: run_ref(message),
     }
+}
+
+fn run_ref(message: &v3::Message) -> Option<RunRef> {
+    let v3::RunId(id) = message.run_id.as_ref()?;
+    let v3::RunSummary {
+        status,
+        step_count,
+        tool_count,
+        duration_ms,
+    } = message.run_summary?;
+    let outcome = match status {
+        v3::RunStatus::Running => RunOutcome::Running,
+        v3::RunStatus::Ok => RunOutcome::Ok,
+        v3::RunStatus::Error => RunOutcome::Error,
+        v3::RunStatus::Interrupted => RunOutcome::Interrupted,
+        v3::RunStatus::Unknown => RunOutcome::Unknown,
+    };
+    Some(RunRef {
+        id: id.clone(),
+        outcome,
+        steps: step_count,
+        tools: tool_count,
+        duration: Duration::from_millis(duration_ms),
+    })
+}
+
+pub fn run_id(run: &RunRef) -> v3::RunId {
+    v3::RunId(run.id.clone())
 }
 
 fn voice(attachments: &[v3::Attachment]) -> Option<Voice> {

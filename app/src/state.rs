@@ -16,6 +16,7 @@ use tuclaw_core::v3::{
 
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
+use crate::runlog::{self, Disclosure, RunLog};
 
 const PAGE: u32 = 50;
 const TICK: Duration = Duration::from_millis(200);
@@ -110,6 +111,8 @@ pub struct AppState {
     view: View,
     sidebar: SidebarVisibility,
     expanded: HashSet<MessageId>,
+    toggled: HashSet<Disclosure>,
+    run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
@@ -146,6 +149,8 @@ impl AppState {
             view: View::Conversation,
             sidebar: SidebarVisibility::Shown,
             expanded: HashSet::new(),
+            toggled: HashSet::new(),
+            run_logs: HashMap::new(),
             speaker,
             playback: None,
             _playback: None,
@@ -438,6 +443,72 @@ impl AppState {
         true
     }
 
+    pub fn is_open(&self, disclosure: Disclosure, by_default: bool) -> bool {
+        by_default != self.toggled.contains(&disclosure)
+    }
+
+    pub fn run_log(&self, run: &str) -> Option<&RunLog> {
+        self.run_logs.get(run)
+    }
+
+    pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
+        if !self.toggled.remove(&disclosure) {
+            self.toggled.insert(disclosure);
+        }
+        if let Disclosure::Log(message) = disclosure {
+            self.ensure_log(message, cx);
+        }
+        cx.emit(StateEvent::FoldToggled);
+        cx.notify();
+    }
+
+    fn ensure_log(&mut self, message: MessageId, cx: &mut Context<Self>) {
+        let mut found = None;
+        for candidate in &self.messages {
+            if candidate.id == message {
+                found = candidate.run.clone();
+            }
+        }
+        let Some(run) = found else {
+            return;
+        };
+        if self.run_logs.contains_key(&run.id) {
+            return;
+        }
+        self.run_logs.insert(run.id.clone(), RunLog::Loading);
+        let request = self.client.run(&link::run_id(&run));
+        let id = run.id;
+        cx.spawn(async move |this, cx| {
+            let detail = request.await;
+            this.update(cx, |state, cx| {
+                let log = match detail {
+                    Ok(detail) => RunLog::Loaded(Box::new(detail)),
+                    Err(_error) => RunLog::Failed,
+                };
+                state.run_logs.insert(id, log);
+                cx.emit(StateEvent::FoldToggled);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn open_failed_logs(&mut self, cx: &mut Context<Self>) {
+        let mut failed = Vec::new();
+        for message in &self.messages {
+            if let Some(run) = &message.run
+                && runlog::opens_by_default(run)
+                && !self.run_logs.contains_key(&run.id)
+            {
+                failed.push(message.id);
+            }
+        }
+        for message in failed {
+            self.ensure_log(message, cx);
+        }
+    }
+
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.sidebar = match self.sidebar {
             SidebarVisibility::Shown => SidebarVisibility::Hidden,
@@ -503,6 +574,7 @@ impl AppState {
             body: vec![Span::Text(text.clone())],
             sent_at: OffsetDateTime::now_utc(),
             voice: None,
+            run: None,
         });
         self.pending.push(Pending {
             client_message_id: client_message_id.clone(),
@@ -691,6 +763,7 @@ impl AppState {
         older.append(&mut self.messages);
         self.messages = older;
         self.fill_waveforms(cx);
+        self.open_failed_logs(cx);
         cx.emit(StateEvent::OlderLoaded);
         cx.notify();
     }
@@ -744,6 +817,7 @@ impl AppState {
             History::Complete
         };
         self.fill_waveforms(cx);
+        self.open_failed_logs(cx);
         cx.emit(StateEvent::MessagesLoaded);
         cx.notify();
     }
@@ -983,6 +1057,7 @@ impl AppState {
         if !seen {
             self.messages.push(mapped);
             self.fill_waveforms(cx);
+            self.open_failed_logs(cx);
         }
         cx.emit(StateEvent::MessageAppended);
         cx.notify();
@@ -1520,5 +1595,64 @@ mod tests {
         state.update(cx, |state, cx| state.load_older(cx));
         cx.run_until_parked();
         assert_eq!(ids(&state, cx), (120, 1));
+    }
+
+    fn run_world() -> tuclaw_core::v3::Seed {
+        let mut world = crate::testing::long_world(0);
+        let ok: tuclaw_core::v3::RunDetail =
+            serde_json::from_str(include_str!("../../core/testdata/v3/run.json")).expect("run");
+        let mut failed = ok.clone();
+        failed.run.id = tuclaw_core::v3::RunId("failed-run".into());
+        failed.run.status = tuclaw_core::v3::RunStatus::Error;
+        let answer = |id: i64, run: &str, status: &str| {
+            serde_json::from_value(serde_json::json!({
+                "id": id, "surface_id": 1, "kind": "answer",
+                "author": {"kind": "agent", "agent_id": 1},
+                "text": "Готово.", "run_id": run, "created_at": "2026-10-03T15:26:13Z",
+                "run_summary": {"status": status, "step_count": 2, "tool_count": 1, "duration_ms": 13029}
+            }))
+            .expect("message")
+        };
+        world.messages = vec![
+            answer(1, "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "ok"),
+            answer(2, "failed-run", "error"),
+        ];
+        world.runs = vec![ok, failed];
+        world
+    }
+
+    #[gpui::test]
+    fn a_run_log_loads_when_opened_and_a_failed_one_is_open_at_once(cx: &mut TestAppContext) {
+        use crate::runlog::{Disclosure, RunLog};
+        let (_mock, state) = crate::testing::seeded(cx, run_world());
+        let ok = "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11";
+        state.read_with(cx, |state, _cx| {
+            assert!(state.run_log(ok).is_none(), "nothing loads until opened");
+            let Some(RunLog::Loaded(_)) = state.run_log("failed-run") else {
+                panic!("a failed run's log loads with the page");
+            };
+            assert!(state.is_open(Disclosure::Log(MessageId(2)), true));
+            assert!(!state.is_open(Disclosure::Log(MessageId(1)), false));
+        });
+        state.update(cx, |state, cx| {
+            state.toggle(Disclosure::Log(MessageId(1)), cx)
+        });
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.run_log(ok), Some(&RunLog::Loading));
+            assert!(state.is_open(Disclosure::Log(MessageId(1)), false));
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let Some(RunLog::Loaded(detail)) = state.run_log(ok) else {
+                panic!("the opened log loads");
+            };
+            assert_eq!(detail.steps.len(), 2);
+        });
+        state.update(cx, |state, cx| {
+            state.toggle(Disclosure::Log(MessageId(2)), cx)
+        });
+        state.read_with(cx, |state, _cx| {
+            assert!(!state.is_open(Disclosure::Log(MessageId(2)), true));
+        });
     }
 }

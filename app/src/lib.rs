@@ -9,6 +9,7 @@ pub mod live;
 pub mod menu;
 pub mod message;
 pub mod rich;
+pub mod runlog;
 pub mod shell;
 pub mod sidebar;
 pub mod state;

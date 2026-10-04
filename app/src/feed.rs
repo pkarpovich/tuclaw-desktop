@@ -12,6 +12,7 @@ use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Mess
 use crate::composer::Composer;
 use crate::live::{OnStop, RunView, run_card, run_view};
 use crate::message::{Actions, Fold, Look, OnPlay, OnToggle, message_row};
+use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
 
 const PREFETCH: usize = 3;
@@ -196,7 +197,15 @@ impl Feed {
         let on_play: OnPlay = Rc::new(move |message, _window, cx| {
             player.update(cx, |state, cx| state.toggle_voice(message, cx));
         });
-        let actions = Actions { on_toggle, on_play };
+        let discloser = self.state.clone();
+        let on_disclose: OnDisclose = Rc::new(move |disclosure, _window, cx| {
+            discloser.update(cx, |state, cx| state.toggle(disclosure, cx));
+        });
+        let actions = Actions {
+            on_toggle,
+            on_play,
+            on_disclose,
+        };
         let stopper = self.state.clone();
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
             stopper.update(cx, |state, cx| state.interrupt(run, cx));
@@ -218,10 +227,28 @@ impl Feed {
                         Some(voice) => state.waveform(voice.recording),
                         None => None,
                     };
+                    let run = match &message.run {
+                        Some(run) => {
+                            let answer =
+                                crate::rich::split_thinking(&crate::message::source(&message.body))
+                                    .answer;
+                            runlog::pane(
+                                runlog::PaneInput {
+                                    message: message.id,
+                                    run,
+                                    answer: &answer,
+                                    log: state.run_log(&run.id),
+                                },
+                                &|disclosure, by_default| state.is_open(disclosure, by_default),
+                            )
+                        }
+                        None => None,
+                    };
                     let look = Look {
                         fold,
                         player: state.player(message.id),
                         waveform,
+                        run,
                     };
                     message_row(message, state.agents(), look, &actions).into_any_element()
                 }

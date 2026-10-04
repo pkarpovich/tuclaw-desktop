@@ -11,6 +11,7 @@ use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, V
 
 use crate::audio::{PEAKS, Peaks, Waveform};
 use crate::rich::{self, Ink, Parts};
+use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
 use crate::theme;
 
@@ -28,6 +29,7 @@ pub struct Look {
     pub fold: Fold,
     pub player: Player,
     pub waveform: Option<Waveform>,
+    pub run: Option<Pane>,
 }
 
 struct Controls {
@@ -39,6 +41,7 @@ struct Controls {
 pub struct Actions {
     pub on_toggle: OnToggle,
     pub on_play: OnPlay,
+    pub on_disclose: OnDisclose,
 }
 
 pub enum Fold {
@@ -76,17 +79,20 @@ pub fn message_row(
         body,
         sent_at,
         voice,
+        run,
     } = message;
     let Look {
         fold,
         player,
         waveform,
+        run: pane,
     } = look;
     let writer = writer(*author, agents);
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
     let Parts { thinking, answer } = rich::split_thinking(&source(body));
-    let mut line = byline(&writer, *sent_at);
+    let quick = run.as_ref().and_then(runlog::quick_duration);
+    let mut line = byline(&writer, *sent_at, quick);
     if voice.is_some() {
         line = line.child(voice_tag());
     }
@@ -106,7 +112,7 @@ pub fn message_row(
         column = column.child(voice_card(*id, voice, answer, controls));
         return row(selector, &writer, column);
     }
-    if let Some(thinking) = thinking {
+    if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
             *id,
             thinking,
@@ -120,6 +126,9 @@ pub fn message_row(
             answer,
             Ink::Body,
         )));
+    }
+    if let Some(pane) = pane {
+        column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
     row(selector, &writer, column)
 }
@@ -526,7 +535,7 @@ pub fn avatar(writer: &Writer) -> Div {
         .child(writer.initials.clone())
 }
 
-fn byline(writer: &Writer, sent_at: OffsetDateTime) -> Div {
+fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Div {
     let line = div().flex().items_center().gap(px(8.)).child(
         div()
             .text_size(px(14.))
@@ -541,7 +550,10 @@ fn byline(writer: &Writer, sent_at: OffsetDateTime) -> Div {
         div()
             .text_size(px(11.5))
             .text_color(theme::text_muted())
-            .child(clock(sent_at)),
+            .child(match quick {
+                Some(took) => format!("{} · {took}", clock(sent_at)),
+                None => clock(sent_at),
+            }),
     )
 }
 

@@ -56,6 +56,10 @@ pub fn wave_rest() -> Hsla {
     rgb(0xc4bfb8).into()
 }
 
+pub fn failure_tint() -> Hsla {
+    rgba(0xb45c3c14).into()
+}
+
 pub fn field() -> Hsla {
     rgba(0xffffff99).into()
 }

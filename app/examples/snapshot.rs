@@ -5,6 +5,7 @@ use gpui::{AppContext, HeadlessAppContext, Size, px};
 use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario};
 use tuclaw_desktop::audio::{PeakCache, RodioSpeaker};
 use tuclaw_desktop::link::Source;
+use tuclaw_desktop::runlog::Disclosure;
 use tuclaw_desktop::shell::Shell;
 use tuclaw_desktop::state::AppState;
 
@@ -12,6 +13,11 @@ fn main() {
     let channel = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "Magnet Feed".to_string());
+    let open_logs = std::env::args().any(|arg| arg == "--open-logs");
+    let height = match std::env::var("SNAPSHOT_HEIGHT") {
+        Ok(height) => height.parse::<f32>().expect("a height in points"),
+        Err(_) => 820.,
+    };
     let platform = gpui_platform::current_platform(true);
     let mut cx = HeadlessAppContext::with_platform(
         platform.text_system(),
@@ -53,12 +59,28 @@ fn main() {
     };
     cx.update(|cx| state.update(cx, |state, cx| state.select(selected, cx)));
     cx.run_until_parked();
+    if open_logs {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let mut ids = Vec::new();
+                for message in state.messages() {
+                    if message.run.is_some() {
+                        ids.push(message.id);
+                    }
+                }
+                for id in ids {
+                    state.toggle(Disclosure::Log(id), cx);
+                }
+            })
+        });
+        cx.run_until_parked();
+    }
     let built = state.clone();
     let window = cx
         .open_window(
             Size {
                 width: px(1280.),
-                height: px(820.),
+                height: px(height),
             },
             move |_window, cx| cx.new(|cx| Shell::new(built, cx)),
         )

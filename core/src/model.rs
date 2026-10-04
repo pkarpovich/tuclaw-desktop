@@ -144,6 +144,62 @@ pub struct Message {
     pub sent_at: OffsetDateTime,
     /// The original recording, when the message was spoken.
     pub voice: Option<Voice>,
+    /// The run that produced the message, when it came from one.
+    pub run: Option<RunRef>,
+}
+
+/// How a run ended.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::RunOutcome;
+///
+/// assert_ne!(RunOutcome::Ok, RunOutcome::Error);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// It is still going.
+    Running,
+    /// It finished with an answer.
+    Ok,
+    /// It failed.
+    Error,
+    /// It was stopped.
+    Interrupted,
+    /// A status this build does not know.
+    Unknown,
+}
+
+/// The run behind a message, as its summary describes it.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use tuclaw_core::model::{RunOutcome, RunRef};
+///
+/// let run = RunRef {
+///     id: "6763eb02".to_string(),
+///     outcome: RunOutcome::Ok,
+///     steps: 6,
+///     tools: 1,
+///     duration: Duration::from_millis(13_029),
+/// };
+/// assert_eq!(run.tools, 1);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRef {
+    /// The run's identifier.
+    pub id: String,
+    /// How it ended.
+    pub outcome: RunOutcome,
+    /// How many steps it took.
+    pub steps: u32,
+    /// How many of those were tool calls.
+    pub tools: u32,
+    /// How long it ran.
+    pub duration: Duration,
 }
 
 /// Identifies a recording the daemon keeps.
