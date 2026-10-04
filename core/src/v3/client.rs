@@ -9,7 +9,8 @@ use serde_json::Value;
 
 use super::dto::{
     Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MePatch,
-    MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId, WiringChange,
+    MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId, Task, TaskId,
+    TaskRun, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -288,6 +289,65 @@ impl Client {
         }
     }
 
+    /// Fetches the automations: active and paused ones, or every one of the last 7 days too.
+    pub fn tasks(
+        &self,
+        everything: TaskScope,
+    ) -> impl Future<Output = Result<Vec<Task>, ApiError>> + Send + 'static {
+        let path = match everything {
+            TaskScope::Live => "/tasks",
+            TaskScope::Recent => "/tasks?status=all",
+        };
+        let request = self.transport.get(path);
+        async move { body(request.await?) }
+    }
+
+    /// Fetches an automation's newest attempts, newest first.
+    pub fn task_runs(
+        &self,
+        task: &TaskId,
+    ) -> impl Future<Output = Result<Vec<TaskRun>, ApiError>> + Send + 'static {
+        let TaskId(task) = task;
+        let request = self.transport.get(&format!("/tasks/{task}/runs?limit=20"));
+        async move { body(request.await?) }
+    }
+
+    /// Pauses or resumes an automation and returns it as stored.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Conflict`] when the automation is not in the state the change needs.
+    pub fn set_task_paused(
+        &self,
+        task: &TaskId,
+        paused: Pause,
+    ) -> impl Future<Output = Result<Task, ApiError>> + Send + 'static {
+        let TaskId(task) = task;
+        let verb = match paused {
+            Pause::Pause => "pause",
+            Pause::Resume => "resume",
+        };
+        let request = self.transport.post(&format!("/tasks/{task}/{verb}"), None);
+        async move { body(request.await?) }
+    }
+
+    /// Cancels an automation; its history stays.
+    pub fn cancel_task(
+        &self,
+        task: &TaskId,
+    ) -> impl Future<Output = Result<(), ApiError>> + Send + 'static {
+        let TaskId(task) = task;
+        let request = self.transport.send(Request {
+            method: Method::Delete,
+            path: format!("/tasks/{task}"),
+            body: Body::Empty,
+        });
+        async move {
+            request.await?;
+            Ok(())
+        }
+    }
+
     /// Opens the event socket, replaying after `since` when given.
     pub fn connect(
         &self,
@@ -295,6 +355,24 @@ impl Client {
     ) -> impl Future<Output = Result<Connection, ApiError>> + Send + 'static {
         self.transport.connect(since)
     }
+}
+
+/// Which automations `GET /tasks` lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskScope {
+    /// Active and paused ones.
+    Live,
+    /// Those plus the completed and cancelled ones of the last 7 days.
+    Recent,
+}
+
+/// Whether to pause or resume an automation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pause {
+    /// Stop firing.
+    Pause,
+    /// Fire again.
+    Resume,
 }
 
 /// Whose avatar a write changes.

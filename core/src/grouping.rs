@@ -74,7 +74,7 @@ pub fn group_by_day(
     sections
 }
 
-fn day_title(date: Date, today: Date) -> String {
+pub fn day_title(date: Date, today: Date) -> String {
     if date == today {
         return "Today".to_string();
     }

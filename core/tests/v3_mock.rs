@@ -163,6 +163,7 @@ impl Session {
                         .push(delta.clone());
                 }
             }
+            Frame::TaskFired(_) => {}
             Frame::MessageCreated(created) => {
                 let message = created.message.clone();
                 if let Some(run_id) = &message.run_id

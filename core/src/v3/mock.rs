@@ -26,10 +26,11 @@ use uuid::Uuid;
 use super::client::AvatarOwner;
 use super::dto::{
     Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
-    AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, ImageKind,
-    InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted,
-    Role, RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface,
-    SurfaceId, SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring, WiringChange,
+    AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, FireMark,
+    ImageKind, InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage, Mirror,
+    Outcome, Post, Posted, Role, RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary,
+    Schedule, ScheduleKind, Seq, StepRow, Surface, SurfaceId, SurfaceKind, SurfaceRun, Task,
+    TaskId, TaskRun, TaskStatus, ToolUseId, Usage, Wiring, WiringChange,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
@@ -71,6 +72,9 @@ pub struct Seed {
     /// The answer to `GET /me`; "You" with no avatar when absent.
     #[serde(default)]
     pub me: Option<Me>,
+    /// The answer to `GET /tasks`.
+    #[serde(default)]
+    pub tasks: Vec<Task>,
 }
 
 /// A local file serving one attachment of a [`Seed`].
@@ -234,6 +238,9 @@ struct World {
     media: HashMap<AttachmentId, Media>,
     my_name: String,
     my_description: String,
+    tasks: Vec<Task>,
+    task_runs: HashMap<TaskId, Vec<TaskRun>>,
+    fires: Vec<(SurfaceId, FireMark)>,
     avatars: HashMap<AvatarOwner, Avatar>,
     next_message: i64,
     next_input: i64,
@@ -312,6 +319,11 @@ impl MockTransport {
     /// Returns the newest seq in the mock's event log.
     pub fn head(&self) -> Seq {
         Seq(self.lock().head)
+    }
+
+    /// Fires an automation now: records the attempt and sends `task.fired` on its surface.
+    pub fn fire_task(&self, id: &TaskId, outcome: Outcome) {
+        self.lock().fire(id, outcome);
     }
 
     /// Applies the client frames sent so far (a `focus` sends snapshots right away).
@@ -584,6 +596,9 @@ impl World {
             media: HashMap::new(),
             my_name: DEFAULT_NAME.into(),
             my_description: String::new(),
+            tasks: Vec::new(),
+            task_runs: HashMap::new(),
+            fires: Vec::new(),
             avatars: HashMap::from([
                 (
                     AvatarOwner::Agent(AgentId(1)),
@@ -595,6 +610,7 @@ impl World {
             next_input: 40,
         };
         world.seed_messages(base);
+        world.seed_tasks(base);
         world.seed_live_run();
         world.seed_voice(base);
         world
@@ -608,6 +624,7 @@ impl World {
             runs,
             media: files,
             me,
+            tasks,
         } = seed;
         let (my_name, my_description) = match me {
             Some(Me {
@@ -686,6 +703,9 @@ impl World {
             media,
             my_name,
             my_description,
+            tasks,
+            task_runs: HashMap::new(),
+            fires: Vec::new(),
             avatars: HashMap::new(),
             next_message,
             next_input: 1,
@@ -1045,6 +1065,16 @@ impl World {
             ["surfaces"] => to_json(&self.surfaces_view()),
             ["agents"] => to_json(&self.agents_view()),
             ["me"] => to_json(&self.me_view()),
+            ["tasks"] => to_json(&self.tasks_view(query)),
+            ["tasks", id, "runs"] => {
+                let id = TaskId((*id).to_string());
+                if self.task_index(&id).is_none() {
+                    return Err(ApiError::NotFound);
+                }
+                let mut runs = self.task_runs.get(&id).cloned().unwrap_or_default();
+                runs.reverse();
+                to_json(&runs)
+            }
             ["surfaces", id, "messages"] => {
                 let surface = parse_surface(id)?;
                 self.page(surface, query)
@@ -1109,6 +1139,8 @@ impl World {
                 self.interrupt(&RunId((*id).to_string()))?;
                 Ok(Value::Null)
             }
+            ["tasks", id, "pause"] => self.transition(id, TaskStatus::Active, TaskStatus::Paused),
+            ["tasks", id, "resume"] => self.transition(id, TaskStatus::Paused, TaskStatus::Active),
             [..] => Err(ApiError::NotFound),
         }
     }
@@ -1232,6 +1264,184 @@ impl World {
         surfaces
     }
 
+    fn task_index(&self, id: &TaskId) -> Option<usize> {
+        let mut found = None;
+        for (index, task) in self.tasks.iter().enumerate() {
+            if task.id == *id {
+                found = Some(index);
+            }
+        }
+        found
+    }
+
+    fn tasks_view(&self, query: &str) -> Vec<Task> {
+        let all = query.split('&').any(|pair| pair == "status=all");
+        let mut tasks = Vec::new();
+        for task in &self.tasks {
+            let listed = match task.status {
+                TaskStatus::Active => true,
+                TaskStatus::Paused => true,
+                TaskStatus::Completed => all,
+                TaskStatus::Cancelled => all,
+                TaskStatus::Unknown => all,
+            };
+            if listed {
+                tasks.push(task.clone());
+            }
+        }
+        tasks
+    }
+
+    fn transition(
+        &mut self,
+        id: &str,
+        from: TaskStatus,
+        to: TaskStatus,
+    ) -> Result<Value, ApiError> {
+        let id = TaskId(id.to_string());
+        let Some(index) = self.task_index(&id) else {
+            return Err(ApiError::NotFound);
+        };
+        if self.tasks[index].status != from {
+            return Err(ApiError::Conflict);
+        }
+        self.tasks[index].status = to;
+        to_json(&self.tasks[index])
+    }
+
+    fn fire(&mut self, id: &TaskId, outcome: Outcome) {
+        let Some(index) = self.task_index(id) else {
+            return;
+        };
+        self.now += TimeDuration::seconds(1);
+        let at = self.now;
+        let task = &mut self.tasks[index];
+        task.last_run_at = Some(at);
+        task.last_outcome = Some(outcome);
+        let surface = task.surface_id;
+        self.task_runs.entry(id.clone()).or_default().push(TaskRun {
+            at,
+            outcome,
+            duration_ms: 1200,
+            error: None,
+        });
+        let mark = FireMark {
+            task_id: id.clone(),
+            at: Some(at),
+            outcome,
+            run_id: None,
+            message_id: None,
+            error: None,
+        };
+        if let Some(surface) = surface {
+            self.fires.push((surface, mark.clone()));
+        }
+        self.persist(
+            "task.fired",
+            surface,
+            None,
+            &json!({"task_id": mark.task_id, "outcome": mark.outcome}),
+        );
+    }
+
+    fn seed_tasks(&mut self, base: OffsetDateTime) {
+        let task =
+            |id: &str, agent: i64, surface: i64, prompt: &str, kind: ScheduleKind, value: &str| {
+                Task {
+                    id: TaskId(id.to_string()),
+                    agent_id: Some(AgentId(agent)),
+                    surface_id: Some(SurfaceId(surface)),
+                    prompt: prompt.to_string(),
+                    schedule: Schedule {
+                        kind,
+                        value: value.to_string(),
+                    },
+                    recurring: false,
+                    condition: None,
+                    status: TaskStatus::Active,
+                    next_run_at: None,
+                    last_run_at: None,
+                    last_outcome: None,
+                    active_from: None,
+                    active_until: None,
+                    created_at: Some(base - TimeDuration::days(12)),
+                }
+            };
+        let mut digest = task(
+            "task-weekly-releases",
+            3,
+            2,
+            "Check the trackers for new releases and post a short digest",
+            ScheduleKind::Cron,
+            "0 9 * * 1",
+        );
+        digest.next_run_at = Some(base + TimeDuration::days(2));
+        let mut poll = task(
+            "task-download-done",
+            3,
+            2,
+            "Tell me when Touch of Evil finishes downloading",
+            ScheduleKind::PollUntil,
+            "15m",
+        );
+        poll.condition = Some("check-torrent.sh touch-of-evil".into());
+        poll.next_run_at = Some(base + TimeDuration::hours(8));
+        let mut lights = task(
+            "task-evening-lights",
+            2,
+            3,
+            "Dim the living room lights at sunset",
+            ScheduleKind::Interval,
+            "24h",
+        );
+        lights.status = TaskStatus::Paused;
+        let mut jobs = task(
+            "task-mac-jobs",
+            1,
+            1,
+            "Report when a long job on the Mac finishes",
+            ScheduleKind::Event,
+            "tuclaw.jobs.done.>",
+        );
+        jobs.recurring = true;
+        self.tasks = vec![digest, poll, lights, jobs];
+        let fires = [
+            ("task-download-done", 2, 3, Outcome::Skipped),
+            ("task-download-done", 2, 3, Outcome::Skipped),
+            ("task-download-done", 2, 3, Outcome::Skipped),
+            ("task-download-done", 2, 4, Outcome::Ran),
+            ("task-mac-jobs", 1, 3, Outcome::Ran),
+            ("task-mac-jobs", 1, 4, Outcome::Silent),
+        ];
+        let mut minute = 0;
+        for (id, surface, hour, outcome) in fires {
+            minute += 15;
+            let at = base + TimeDuration::hours(hour) + TimeDuration::minutes(minute % 60);
+            let id = TaskId(id.to_string());
+            self.task_runs.entry(id.clone()).or_default().push(TaskRun {
+                at,
+                outcome,
+                duration_ms: 900,
+                error: None,
+            });
+            if let Some(index) = self.task_index(&id) {
+                self.tasks[index].last_run_at = Some(at);
+                self.tasks[index].last_outcome = Some(outcome);
+            }
+            self.fires.push((
+                SurfaceId(surface),
+                FireMark {
+                    task_id: id,
+                    at: Some(at),
+                    outcome,
+                    run_id: None,
+                    message_id: None,
+                    error: None,
+                },
+            ));
+        }
+    }
+
     fn me_view(&self) -> Me {
         Me {
             name: self.my_name.clone(),
@@ -1281,6 +1491,17 @@ impl World {
             }
             ["me", "avatar"] => AvatarOwner::Me,
             ["me"] => return self.rename(method, body),
+            ["tasks", id] => {
+                let (Method::Delete, Body::Empty) = (method, body) else {
+                    return Err(ApiError::NotFound);
+                };
+                let id = TaskId((*id).to_string());
+                let Some(index) = self.task_index(&id) else {
+                    return Err(ApiError::NotFound);
+                };
+                self.tasks[index].status = TaskStatus::Cancelled;
+                return Ok(Value::Null);
+            }
             ["agents", id] => return self.patch_agent(parse_agent(id)?, method, body),
             ["surfaces", surface, "agents", agent] => {
                 let surface = parse_surface(surface)?;
@@ -1588,7 +1809,32 @@ impl World {
         let has_more = matching.len() > limit;
         let start = matching.len().saturating_sub(limit);
         let messages = matching.split_off(start);
-        to_json(&MessagesPage { messages, has_more })
+        let from = messages.first().map(|message| message.created_at);
+        let until = match before {
+            Some(_) => messages.last().map(|message| message.created_at),
+            None => None,
+        };
+        let mut automations = Vec::new();
+        for (on, mark) in &self.fires {
+            if *on != surface {
+                continue;
+            }
+            let Some(at) = mark.at else {
+                continue;
+            };
+            if from.is_some_and(|from| at < from) && has_more {
+                continue;
+            }
+            if until.is_some_and(|until| at > until) {
+                continue;
+            }
+            automations.push(mark.clone());
+        }
+        to_json(&MessagesPage {
+            messages,
+            has_more,
+            automations,
+        })
     }
 
     fn detail(&self, index: usize) -> RunDetail {
@@ -2180,7 +2426,7 @@ mod tests {
     use futures::executor::block_on;
 
     use super::*;
-    use crate::v3::client::Client;
+    use crate::v3::client::{Client, Pause, TaskScope};
     use crate::v3::dto::{AgentPatch, ModelChange};
 
     fn stepped() -> (MockTransport, Client) {
@@ -2203,6 +2449,7 @@ mod tests {
             Frame::RunReset(_) => "run.reset",
             Frame::RunFinished(_) => "run.finished",
             Frame::MessageCreated(_) => "message.created",
+            Frame::TaskFired(_) => "task.fired",
             Frame::TextDelta(_) => "text.delta",
             Frame::InputAccepted(_) => "input.accepted",
             Frame::Unknown(_) => "unknown",
@@ -2250,6 +2497,68 @@ mod tests {
         mock.pump_control();
         drain(&mut connection);
         connection
+    }
+
+    #[test]
+    fn automations_list_pause_resume_and_cancel() {
+        let (_mock, client) = stepped();
+        let live = block_on(client.tasks(TaskScope::Live)).expect("tasks");
+        assert_eq!(live.len(), 4);
+        let lights = TaskId("task-evening-lights".into());
+        let resumed = block_on(client.set_task_paused(&lights, Pause::Resume)).expect("resumes");
+        assert_eq!(resumed.status, TaskStatus::Active);
+        let again = block_on(client.set_task_paused(&lights, Pause::Resume));
+        let Err(ApiError::Conflict) = again else {
+            panic!("resuming an active automation conflicts");
+        };
+        let paused = block_on(client.set_task_paused(&lights, Pause::Pause)).expect("pauses");
+        assert_eq!(paused.status, TaskStatus::Paused);
+        block_on(client.cancel_task(&lights)).expect("cancels");
+        assert_eq!(
+            block_on(client.tasks(TaskScope::Live))
+                .expect("tasks")
+                .len(),
+            3
+        );
+        let recent = block_on(client.tasks(TaskScope::Recent)).expect("tasks");
+        assert_eq!(recent.len(), 4);
+        let unknown = block_on(client.task_runs(&TaskId("gone".into())));
+        let Err(ApiError::NotFound) = unknown else {
+            panic!("an unknown automation has no runs");
+        };
+    }
+
+    #[test]
+    fn a_fire_is_persisted_on_its_surface_and_lands_on_the_page() {
+        let (mock, client) = stepped();
+        let mut connection = connected(&mock, &client, Vec::new());
+        let jobs = TaskId("task-mac-jobs".into());
+        let before = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        mock.fire_task(&jobs, Outcome::Ran);
+        let mut fired = None;
+        for frame in drain(&mut connection) {
+            if let Frame::TaskFired(frame) = frame {
+                fired = Some(frame);
+            }
+        }
+        let fired = fired.expect("task.fired is sent");
+        assert_eq!(fired.surface_id, Some(SurfaceId(1)));
+        assert_eq!(fired.mark.task_id, jobs);
+        assert_eq!(fired.mark.outcome, Outcome::Ran);
+        let after = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        assert_eq!(after.automations.len(), before.automations.len() + 1);
+        let runs = block_on(client.task_runs(&jobs)).expect("runs");
+        assert_eq!(runs[0].outcome, Outcome::Ran);
+        assert!(runs[0].at > runs[runs.len() - 1].at);
+    }
+
+    #[test]
+    fn a_surface_without_fires_still_carries_an_empty_list() {
+        let (_mock, client) = stepped();
+        let page = block_on(client.messages(SurfaceId(3), 200)).expect("page");
+        assert!(page.automations.is_empty());
+        let raw = to_json(&page).expect("encodes");
+        assert_eq!(raw["automations"], json!([]));
     }
 
     #[test]
@@ -2807,6 +3116,7 @@ mod tests {
                 path: path.clone(),
             }],
             me: None,
+            tasks: Vec::new(),
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
@@ -2845,6 +3155,7 @@ mod tests {
             runs: vec![detail.clone()],
             media: Vec::new(),
             me: None,
+            tasks: Vec::new(),
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);

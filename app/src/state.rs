@@ -31,6 +31,7 @@ const TOAST_LIFETIME: Duration = Duration::from_secs(6);
 pub enum View {
     Conversation,
     Agents,
+    Automations,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +44,7 @@ pub enum SidebarVisibility {
 pub enum Segment {
     Channel,
     Agents,
+    Automations,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,6 +141,10 @@ pub struct AppState {
     field_error: Option<FieldError>,
     toast: Option<Toast>,
     next_toast: u64,
+    fires: Vec<v3::FireMark>,
+    tasks: Vec<v3::Task>,
+    selected_task: Option<v3::TaskId>,
+    task_runs: HashMap<v3::TaskId, Vec<v3::TaskRun>>,
     run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
     playback: Option<Playback>,
@@ -186,6 +192,10 @@ impl AppState {
             field_error: None,
             toast: None,
             next_toast: 0,
+            fires: Vec::new(),
+            tasks: Vec::new(),
+            selected_task: None,
+            task_runs: HashMap::new(),
             run_logs: HashMap::new(),
             speaker,
             playback: None,
@@ -616,6 +626,151 @@ impl AppState {
         self.field_error = None;
         self.toast = None;
         cx.notify();
+    }
+
+    pub fn fires(&self) -> &[v3::FireMark] {
+        &self.fires
+    }
+
+    pub fn tasks(&self) -> &[v3::Task] {
+        &self.tasks
+    }
+
+    pub fn task(&self, id: &v3::TaskId) -> Option<&v3::Task> {
+        let mut found = None;
+        for task in &self.tasks {
+            if task.id == *id {
+                found = Some(task);
+            }
+        }
+        found
+    }
+
+    pub fn task_runs(&self, id: &v3::TaskId) -> Option<&[v3::TaskRun]> {
+        self.task_runs.get(id).map(Vec::as_slice)
+    }
+
+    fn merge_fires(&mut self, marks: Vec<v3::FireMark>) {
+        for mark in marks {
+            let mut known = false;
+            for stored in &self.fires {
+                if stored.task_id == mark.task_id && stored.at == mark.at {
+                    known = true;
+                }
+            }
+            if !known {
+                self.fires.push(mark);
+            }
+        }
+        self.fires.sort_by_key(|mark| mark.at);
+    }
+
+    fn task_fired(&mut self, fired: &v3::TaskFired, cx: &mut Context<Self>) {
+        let v3::TaskFired {
+            seq: _,
+            surface_id,
+            mark,
+        } = fired;
+        for task in &mut self.tasks {
+            if task.id == mark.task_id {
+                task.last_run_at = mark.at;
+                task.last_outcome = Some(mark.outcome);
+            }
+        }
+        self.task_runs.remove(&mark.task_id);
+        let shown = match (self.selected, surface_id) {
+            (Some(selected), Some(surface)) => link::surface_id(selected) == *surface,
+            (Some(_), None) => false,
+            (None, _) => false,
+        };
+        if !shown {
+            cx.notify();
+            return;
+        }
+        self.merge_fires(vec![mark.clone()]);
+        cx.emit(StateEvent::MessageAppended);
+        cx.notify();
+    }
+
+    pub fn selected_task(&self) -> Option<&v3::TaskId> {
+        self.selected_task.as_ref()
+    }
+
+    pub fn open_task(&mut self, id: v3::TaskId, cx: &mut Context<Self>) {
+        self.view = View::Automations;
+        self.selected_task = Some(id.clone());
+        self.load_task_runs(id, cx);
+        cx.notify();
+    }
+
+    pub fn load_tasks(&mut self, cx: &mut Context<Self>) {
+        let request = self.client.tasks(v3::TaskScope::Recent);
+        cx.spawn(async move |this, cx| {
+            let Ok(tasks) = request.await else {
+                return;
+            };
+            this.update(cx, |state, cx| {
+                state.tasks = tasks;
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn load_task_runs(&mut self, id: v3::TaskId, cx: &mut Context<Self>) {
+        let request = self.client.task_runs(&id);
+        cx.spawn(async move |this, cx| {
+            let Ok(runs) = request.await else {
+                return;
+            };
+            this.update(cx, |state, cx| {
+                state.task_runs.insert(id, runs);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn set_task_paused(&mut self, id: v3::TaskId, pause: v3::Pause, cx: &mut Context<Self>) {
+        let request = self.client.set_task_paused(&id, pause);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(updated) => {
+                    for task in &mut state.tasks {
+                        if task.id == updated.id {
+                            *task = updated.clone();
+                        }
+                    }
+                    cx.notify();
+                }
+                Err(_) => state.load_tasks(cx),
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn cancel_task(&mut self, id: v3::TaskId, cx: &mut Context<Self>) {
+        let request = self.client.cancel_task(&id);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| {
+                if answer.is_ok() {
+                    for task in &mut state.tasks {
+                        if task.id == id {
+                            task.status = v3::TaskStatus::Cancelled;
+                        }
+                    }
+                }
+                state.load_tasks(cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub fn open_profile(&mut self, cx: &mut Context<Self>) {
@@ -1257,6 +1412,7 @@ impl AppState {
             self.selected = Some(channel);
             self.halt();
             self.inspector = None;
+            self.fires.clear();
             if let Some(settings) = &mut self.settings {
                 settings.back = None;
             }
@@ -1275,6 +1431,7 @@ impl AppState {
         match self.view {
             View::Agents => Segment::Agents,
             View::Conversation => Segment::Channel,
+            View::Automations => Segment::Automations,
         }
     }
 
@@ -1282,6 +1439,10 @@ impl AppState {
         match segment {
             Segment::Agents => self.view = View::Agents,
             Segment::Channel => self.view = View::Conversation,
+            Segment::Automations => {
+                self.view = View::Automations;
+                self.load_tasks(cx);
+            }
         }
         cx.notify();
     }
@@ -1486,6 +1647,7 @@ impl AppState {
         } else {
             History::Complete
         };
+        self.merge_fires(page.automations);
         if older.is_empty() {
             return;
         }
@@ -1540,6 +1702,7 @@ impl AppState {
             }
         }
         self.messages = messages;
+        self.merge_fires(page.automations);
         self.history = if page.has_more {
             History::More
         } else {
@@ -1711,6 +1874,10 @@ impl AppState {
             },
             Frame::MessageCreated(created) => {
                 self.message_created(&created.message, cx);
+                false
+            }
+            Frame::TaskFired(fired) => {
+                self.task_fired(fired, cx);
                 false
             }
             Frame::StepText(_) => self.apply_to_run(&frame),
@@ -1891,6 +2058,13 @@ async fn fetch_directory(
     if let Ok(me) = client.me().await {
         this.update(cx, |state, cx| state.me_loaded(me, cx)).ok();
     }
+    if let Ok(tasks) = client.tasks(v3::TaskScope::Recent).await {
+        this.update(cx, |state, cx| {
+            state.tasks = tasks;
+            cx.notify();
+        })
+        .ok();
+    }
     loaded.is_ok()
 }
 
@@ -1908,6 +2082,7 @@ fn is_gap(frame: &Frame) -> bool {
         Frame::RunReset(_) => false,
         Frame::RunFinished(_) => false,
         Frame::MessageCreated(_) => false,
+        Frame::TaskFired(_) => false,
         Frame::TextDelta(_) => false,
         Frame::InputAccepted(_) => false,
         Frame::Unknown(_) => false,

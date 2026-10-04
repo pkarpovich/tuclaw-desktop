@@ -146,5 +146,6 @@ pub fn long_world(count: i64) -> Seed {
         runs: Vec::new(),
         media: Vec::new(),
         me: None,
+        tasks: Vec::new(),
     }
 }

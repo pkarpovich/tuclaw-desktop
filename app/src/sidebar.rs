@@ -142,6 +142,7 @@ impl Render for Sidebar {
         let agents = state.agents().len();
         let on_agents = match state.view() {
             View::Agents => Highlight::On,
+            View::Automations => Highlight::Off,
             View::Conversation => Highlight::Off,
         };
         let sections = sections(state);
@@ -180,6 +181,7 @@ fn sections(state: &AppState) -> Vec<Section> {
     let selected = match state.view() {
         View::Conversation => state.selected(),
         View::Agents => None,
+        View::Automations => None,
     };
     let people = state.people();
     let mut sections: Vec<Section> = Vec::new();

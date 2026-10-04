@@ -1,6 +1,8 @@
 pub mod agent_settings;
 pub mod agents;
 pub mod audio;
+pub mod automation;
+pub mod automations_view;
 pub mod card;
 pub mod composer;
 pub mod control;

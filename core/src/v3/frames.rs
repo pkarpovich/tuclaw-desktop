@@ -11,8 +11,8 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::dto::{
-    AgentId, ContextUsage, InputId, Message, RunId, Seq, StepRow, SurfaceId, ToolUseId, Usage,
-    null_as_empty,
+    AgentId, ContextUsage, FireMark, InputId, Message, MessageId, Outcome, RunId, Seq, StepRow,
+    SurfaceId, TaskId, ToolUseId, Usage, null_as_empty,
 };
 
 /// The envelope version this build speaks.
@@ -259,6 +259,29 @@ pub struct MessageCreated {
     pub message: Message,
 }
 
+/// `task.fired`: an automation fired on a surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskFired {
+    /// The event's position in the log.
+    pub seq: Seq,
+    /// The surface the automation reports to.
+    pub surface_id: Option<SurfaceId>,
+    /// The fire; its `at` is the event's.
+    pub mark: FireMark,
+}
+
+#[derive(Debug, Deserialize)]
+struct FiredPayload {
+    task_id: TaskId,
+    outcome: Outcome,
+    #[serde(default)]
+    run_id: Option<RunId>,
+    #[serde(default)]
+    message_id: Option<MessageId>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
 /// `text.delta`: streamed text of a run on a focused surface, never replayed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextDelta {
@@ -317,6 +340,8 @@ pub enum Frame {
     RunFinished(RunEvent<RunFinished>),
     /// `message.created`.
     MessageCreated(MessageCreated),
+    /// `task.fired`.
+    TaskFired(TaskFired),
     /// `text.delta`.
     TextDelta(TextDelta),
     /// `input.accepted`.
@@ -350,6 +375,7 @@ impl Frame {
             Frame::RunReset(event) => Some(event.seq),
             Frame::RunFinished(event) => Some(event.seq),
             Frame::MessageCreated(created) => Some(created.seq),
+            Frame::TaskFired(fired) => Some(fired.seq),
             Frame::TextDelta(_) => None,
             Frame::InputAccepted(_) => None,
             Frame::Unknown(unknown) => unknown.seq,
@@ -380,6 +406,7 @@ impl Frame {
             Frame::RunReset(event) => Some(&event.run_id),
             Frame::RunFinished(event) => Some(&event.run_id),
             Frame::MessageCreated(created) => created.message.run_id.as_ref(),
+            Frame::TaskFired(fired) => fired.mark.run_id.as_ref(),
             Frame::TextDelta(delta) => Some(&delta.run_id),
             Frame::InputAccepted(_) => None,
             Frame::Unknown(_) => None,
@@ -539,6 +566,27 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
                 message,
             })
         }
+        "task.fired" => {
+            let FiredPayload {
+                task_id,
+                outcome,
+                run_id,
+                message_id,
+                error,
+            } = envelope.payload()?;
+            Frame::TaskFired(TaskFired {
+                seq: envelope.seq()?,
+                surface_id: envelope.surface_id,
+                mark: FireMark {
+                    task_id,
+                    at: envelope.at,
+                    outcome,
+                    run_id,
+                    message_id,
+                    error,
+                },
+            })
+        }
         "text.delta" => {
             let DeltaPayload { text } = envelope.payload()?;
             Frame::TextDelta(TextDelta {
@@ -597,6 +645,22 @@ mod tests {
     use super::*;
     use crate::v3::dto::{ClientMessageId, MessageKind, RowKind, RunStatus};
     use crate::v3::golden::fixture;
+
+    #[test]
+    fn task_fired_carries_the_mark_with_the_envelope_time() {
+        let Frame::TaskFired(fired) = crate::v3::golden::frame("task_fired") else {
+            panic!("task.fired decodes");
+        };
+        assert_eq!(fired.seq, Seq(1290));
+        assert_eq!(fired.surface_id, Some(SurfaceId(4)));
+        assert_eq!(fired.mark.outcome, Outcome::Ran);
+        assert_eq!(fired.mark.message_id, Some(MessageId(9301)));
+        assert_eq!(fired.mark.at, Some(datetime!(2026-10-04 07:00:19 UTC)));
+        assert_eq!(
+            Frame::TaskFired(fired.clone()).run_id(),
+            Some(&RunId("0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d".into()))
+        );
+    }
 
     const RUN_ID: &str = "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11";
 

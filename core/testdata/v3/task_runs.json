@@ -1,0 +1,5 @@
+[
+  {"at": "2026-10-04T07:00:00Z", "outcome": "skipped", "duration_ms": 412},
+  {"at": "2026-10-03T07:00:00Z", "outcome": "failed", "duration_ms": 60123, "error": "agent silent"},
+  {"at": "2026-10-02T07:00:00Z", "outcome": "ran", "duration_ms": 18450}
+]

@@ -10,6 +10,7 @@ icon_assets!(
         AtSign,
         Bot,
         Check,
+        Clock,
         ChevronDown,
         ChevronLeft,
         ChevronRight,
@@ -21,6 +22,7 @@ icon_assets!(
         Mic,
         PanelLeft,
         Paperclip,
+        Pause,
         Play,
         Plus,
         RotateCcw,
@@ -32,6 +34,7 @@ icon_assets!(
         Type,
         Upload,
         X,
+        Zap,
     ]
 );
 
@@ -63,10 +66,13 @@ pub enum Glyph {
     Reset,
     Add,
     Message,
+    Automation,
+    Schedule,
+    Pause,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 26] = [
+    pub const ALL: [Glyph; 29] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -93,6 +99,9 @@ impl Glyph {
         Glyph::Reset,
         Glyph::Add,
         Glyph::Message,
+        Glyph::Automation,
+        Glyph::Schedule,
+        Glyph::Pause,
     ];
 
     fn name(self) -> IconName {
@@ -123,6 +132,9 @@ impl Glyph {
             Glyph::Reset => IconName::RotateCcw,
             Glyph::Add => IconName::Plus,
             Glyph::Message => IconName::MessageSquare,
+            Glyph::Automation => IconName::Zap,
+            Glyph::Schedule => IconName::Clock,
+            Glyph::Pause => IconName::Pause,
         }
     }
 }

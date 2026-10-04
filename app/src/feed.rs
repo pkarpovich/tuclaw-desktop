@@ -6,9 +6,10 @@ use gpui::{
     prelude::*, px,
 };
 use time::{OffsetDateTime, UtcOffset};
-use tuclaw_core::grouping::{DaySection, group_by_day};
+use tuclaw_core::grouping::day_title;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelKind, Message};
 
+use crate::automation::{FireRow, OnTask, fire_row};
 use crate::card;
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
@@ -40,6 +41,7 @@ enum Focus {
 enum Item {
     Separator(SharedString),
     Message(Message),
+    Fire(FireRow),
     Run(RunView),
 }
 
@@ -225,12 +227,18 @@ impl Feed {
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
             stopper.update(cx, |state, cx| state.interrupt(run, cx));
         });
+        let opener = self.state.clone();
+        let on_task: OnTask = Rc::new(move |task, _window, cx| {
+            let task = task.clone();
+            opener.update(cx, |state, cx| state.open_task(task, cx));
+        });
         list(self.list.clone(), move |index, _window, cx| {
             let Some(item) = items.get(index) else {
                 return div().into_any_element();
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
+                Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
                 Item::Message(message) => {
                     let state = state.read(cx);
                     let fold = if state.is_expanded(message.id) {
@@ -316,18 +324,34 @@ impl Render for Feed {
 }
 
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
-    let sections = group_by_day(state.messages(), UtcOffset::UTC, now);
-    let mut items = Vec::new();
-    for DaySection {
-        date: _,
-        title,
-        messages,
-    } in sections
-    {
-        items.push(Item::Separator(SharedString::from(title)));
-        for message in messages {
-            items.push(Item::Message(message));
+    let today = now.to_offset(UtcOffset::UTC).date();
+    let mut timeline = Vec::new();
+    for message in state.messages() {
+        timeline.push((message.sent_at, Item::Message(message.clone())));
+    }
+    for mark in state.fires() {
+        let Some(at) = mark.at else {
+            continue;
+        };
+        timeline.push((at, Item::Fire(FireRow::new(mark, at, state.tasks()))));
+    }
+    timeline.sort_by_key(|(at, _item)| *at);
+    let mut items: Vec<Item> = Vec::new();
+    let mut day = None;
+    for (at, item) in timeline {
+        let date = at.to_offset(UtcOffset::UTC).date();
+        if day != Some(date) {
+            day = Some(date);
+            items.push(Item::Separator(SharedString::from(day_title(date, today))));
         }
+        if let Item::Fire(next) = &item
+            && let Some(Item::Fire(previous)) = items.last_mut()
+            && previous.absorbs(next)
+        {
+            previous.absorb(next.clone());
+            continue;
+        }
+        items.push(item);
     }
     for run in state.live_runs() {
         items.push(Item::Run(run_view(run)));
@@ -339,6 +363,7 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
 enum Key {
     Separator(SharedString),
     Message(tuclaw_core::model::MessageId),
+    Fire(tuclaw_core::v3::TaskId, i64),
     Run(Option<tuclaw_core::v3::RunId>),
 }
 
@@ -346,6 +371,7 @@ fn key(item: &Item) -> Key {
     match item {
         Item::Separator(title) => Key::Separator(title.clone()),
         Item::Message(message) => Key::Message(message.id),
+        Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
         Item::Run(run) => Key::Run(run.id.clone()),
     }
 }
@@ -355,6 +381,12 @@ fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
         match item {
             Item::Message(message) => return Some((Key::Message(message.id), index != from)),
             Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
+            Item::Fire(row) => {
+                return Some((
+                    Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+                    index != from,
+                ));
+            }
             Item::Separator(_) => {}
         }
     }
@@ -375,6 +407,7 @@ fn first_run(items: &[Item]) -> usize {
             }
             Item::Separator(_) => {}
             Item::Message(_) => {}
+            Item::Fire(_) => {}
         }
     }
     first
@@ -784,7 +817,17 @@ mod tests {
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         feed.read_with(cx, |feed, _cx| {
             assert_eq!(feed.list.item_count(), feed.items.len());
-            assert_eq!(feed.items.len(), 31);
+            let mut fires = 0;
+            for item in feed.items.iter() {
+                match item {
+                    Item::Fire(_) => fires += 1,
+                    Item::Separator(_) => {}
+                    Item::Message(_) => {}
+                    Item::Run(_) => {}
+                }
+            }
+            assert_eq!(fires, 2);
+            assert_eq!(feed.items.len(), 31 + fires);
         });
     }
 
@@ -863,6 +906,7 @@ mod tests {
                     Item::Run(run) => runs.push(run.clone()),
                     Item::Separator(_) => {}
                     Item::Message(_) => {}
+                    Item::Fire(_) => {}
                 }
             }
             runs
@@ -997,6 +1041,7 @@ mod tests {
             runs: Vec::new(),
             media: Vec::new(),
             me: None,
+            tasks: Vec::new(),
         }
     }
 

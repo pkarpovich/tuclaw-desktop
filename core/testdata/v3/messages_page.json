@@ -30,5 +30,6 @@
     "run_summary": {"status": "ok", "step_count": 6, "tool_count": 1, "duration_ms": 13029},
     "attachments": []
   }],
-  "has_more": true
+  "has_more": true,
+  "automations": [{"task_id": "task-1759500000000000000-1a2b3c4d", "at": "2026-10-03T15:26:05Z", "outcome": "skipped"}]
 }

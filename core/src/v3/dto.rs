@@ -669,6 +669,168 @@ pub struct MessagesPage {
     /// Whether older messages exist.
     #[serde(default)]
     pub has_more: bool,
+    /// The automation fires within the page's time range (the last 30 days only).
+    #[serde(default)]
+    pub automations: Vec<FireMark>,
+}
+
+/// Identifies an automation (a scheduled task); the daemon names tasks with strings.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::TaskId;
+///
+/// let id: TaskId = serde_json::from_str(r#""task-1759-a1b2""#).unwrap();
+/// assert_eq!(id, TaskId("task-1759-a1b2".into()));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TaskId(pub String);
+
+/// What fires an automation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduleKind {
+    /// Once, at a moment.
+    Once,
+    /// On a cron expression.
+    Cron,
+    /// Every interval.
+    Interval,
+    /// Repeatedly until the agent answers `[DONE]`.
+    PollUntil,
+    /// On a matching NATS event.
+    Event,
+    /// A kind this build does not know.
+    #[serde(other)]
+    Unknown,
+}
+
+/// When an automation fires.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Schedule {
+    /// The trigger kind.
+    #[serde(rename = "type")]
+    pub kind: ScheduleKind,
+    /// The kind's value: a timestamp, a cron expression, a duration or a subject filter.
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub value: String,
+}
+
+/// Where an automation is in its life.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    /// Firing as scheduled.
+    Active,
+    /// Paused by the user.
+    Paused,
+    /// Done: a one-shot fired or its window ended.
+    Completed,
+    /// Cancelled.
+    Cancelled,
+    /// A status this build does not know.
+    #[serde(other)]
+    Unknown,
+}
+
+/// How one fire of an automation ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    /// The agent ran and answered.
+    Ran,
+    /// The agent ran and stayed silent.
+    Silent,
+    /// The condition said there was nothing to do.
+    Skipped,
+    /// The fire failed.
+    Failed,
+    /// An outcome this build does not know.
+    #[serde(other)]
+    Unknown,
+}
+
+/// One automation, as `GET /tasks` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Task {
+    /// The task's identifier.
+    pub id: TaskId,
+    /// The agent that runs it; `None` when its session is gone.
+    #[serde(default)]
+    pub agent_id: Option<AgentId>,
+    /// The surface it reports to.
+    #[serde(default)]
+    pub surface_id: Option<SurfaceId>,
+    /// What the agent is asked.
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub prompt: String,
+    /// When it fires.
+    pub schedule: Schedule,
+    /// Whether an event task stays subscribed after a fire.
+    #[serde(default)]
+    pub recurring: bool,
+    /// The pre-check command, when it has one.
+    #[serde(default)]
+    pub condition: Option<String>,
+    /// Its status.
+    pub status: TaskStatus,
+    /// When it fires next.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub next_run_at: Option<OffsetDateTime>,
+    /// When it last fired.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub last_run_at: Option<OffsetDateTime>,
+    /// How its newest attempt ended.
+    #[serde(default)]
+    pub last_outcome: Option<Outcome>,
+    /// The start of its activity window.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub active_from: Option<OffsetDateTime>,
+    /// The end of its activity window.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub active_until: Option<OffsetDateTime>,
+    /// When it was created.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+}
+
+/// One attempt of an automation, as `GET /tasks/{id}/runs` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskRun {
+    /// When it ran.
+    #[serde(with = "time::serde::rfc3339")]
+    pub at: OffsetDateTime,
+    /// How it ended: ran, failed or skipped.
+    pub outcome: Outcome,
+    /// How long it took.
+    #[serde(default)]
+    pub duration_ms: u64,
+    /// The failure, when it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// One fire of an automation on a surface: a `task.fired` event or a page's mark.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FireMark {
+    /// The automation.
+    pub task_id: TaskId,
+    /// When it fired.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub at: Option<OffsetDateTime>,
+    /// How it ended.
+    pub outcome: Outcome,
+    /// The run it started, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<RunId>,
+    /// The message it posted (its answer, or its failure notice), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<MessageId>,
+    /// The failure, when it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// The body of `POST /surfaces/{id}/messages`.
@@ -900,6 +1062,40 @@ mod tests {
     const POSTED_WITHOUT_INPUT: &str = include_str!("../../testdata/v3/posted_without_input.json");
     const ERROR: &str = include_str!("../../testdata/v3/error.json");
     const ME: &str = include_str!("../../testdata/v3/me.json");
+    const TASKS: &str = include_str!("../../testdata/v3/tasks.json");
+    const TASK_RUNS: &str = include_str!("../../testdata/v3/task_runs.json");
+
+    #[test]
+    fn automations_and_their_runs_decode() {
+        let tasks: Vec<Task> = serde_json::from_str(TASKS).unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(
+            tasks[0].id,
+            TaskId("task-1759500000000000000-1a2b3c4d".into())
+        );
+        assert_eq!(tasks[0].schedule.kind, ScheduleKind::Cron);
+        assert_eq!(tasks[0].last_outcome, Some(Outcome::Skipped));
+        assert_eq!(tasks[0].condition.as_deref(), Some("check-feeds.sh"));
+        assert_eq!(tasks[1].agent_id, None);
+        assert_eq!(tasks[1].status, TaskStatus::Paused);
+        assert!(tasks[1].recurring);
+        assert!(tasks[1].active_until.is_some());
+        let runs: Vec<TaskRun> = serde_json::from_str(TASK_RUNS).unwrap();
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[1].outcome, Outcome::Failed);
+        assert_eq!(runs[1].error.as_deref(), Some("agent silent"));
+        assert_eq!(runs[2].error, None);
+    }
+
+    #[test]
+    fn a_page_carries_its_automation_marks() {
+        let page: MessagesPage = serde_json::from_str(MESSAGES_PAGE).unwrap();
+        assert_eq!(page.automations.len(), 1);
+        assert_eq!(page.automations[0].outcome, Outcome::Skipped);
+        assert!(page.automations[0].run_id.is_none());
+        let encoded = serde_json::to_value(&page.automations[0]).unwrap();
+        assert!(encoded.get("run_id").is_none());
+    }
     const AVATAR_SET: &str = include_str!("../../testdata/v3/avatar_set.json");
 
     #[test]
@@ -909,7 +1105,7 @@ mod tests {
             description,
             avatar_url,
         } = serde_json::from_str(ME).unwrap();
-        assert_eq!(description, "");
+        assert_eq!(description, "Builds tuclaw");
         assert_eq!(name, "Pavel");
         assert_eq!(
             avatar_url,

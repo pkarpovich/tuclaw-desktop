@@ -17,10 +17,15 @@ fn main() {
     let open_logs = std::env::args().any(|arg| arg == "--open-logs");
     let inspect = std::env::args().any(|arg| arg == "--inspect");
     let profile = std::env::args().any(|arg| arg == "--profile");
+    let automations = std::env::args().any(|arg| arg == "--automations");
     let mut settings = None;
+    let mut task = None;
     for arg in std::env::args() {
         if let Some(name) = arg.strip_prefix("--settings=") {
             settings = Some(name.to_string());
+        }
+        if let Some(id) = arg.strip_prefix("--task=") {
+            task = Some(id.to_string());
         }
     }
     let height = match std::env::var("SNAPSHOT_HEIGHT") {
@@ -120,6 +125,23 @@ fn main() {
         cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
         cx.run_until_parked();
     }
+    if automations {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.activate_segment(tuclaw_desktop::state::Segment::Automations, cx)
+            })
+        });
+        cx.run_until_parked();
+    }
+    if let Some(id) = task.clone() {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.activate_segment(tuclaw_desktop::state::Segment::Automations, cx);
+                state.open_task(tuclaw_core::v3::TaskId(id), cx);
+            })
+        });
+        cx.run_until_parked();
+    }
     let built = state.clone();
     let window = cx
         .open_window(
@@ -139,7 +161,12 @@ fn main() {
         .join("target")
         .join("snapshots");
     std::fs::create_dir_all(&directory).expect("the directory exists");
-    let path = directory.join(format!("{}.png", channel.replace(' ', "-")));
+    let name = if automations || task.is_some() {
+        "Automations".to_string()
+    } else {
+        channel.replace(' ', "-")
+    };
+    let path = directory.join(format!("{name}.png"));
     image.save(&path).expect("the png is written");
     println!("{}", path.display());
 }

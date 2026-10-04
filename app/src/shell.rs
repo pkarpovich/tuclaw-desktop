@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::agent_settings::Target;
 use crate::agents::AgentsView;
+use crate::automations_view::AutomationsView;
 use crate::control::{self, button};
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
@@ -46,6 +47,7 @@ pub struct Shell {
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
     agents: Entity<AgentsView>,
+    automations: Entity<AutomationsView>,
     settings: Option<SlotPanel>,
     _observation: Subscription,
 }
@@ -59,11 +61,14 @@ impl Shell {
         let feed = cx.new(|cx| Feed::new(built, window, cx));
         let built = state.clone();
         let agents = cx.new(|cx| AgentsView::new(built, cx));
+        let built = state.clone();
+        let automations = cx.new(|cx| AutomationsView::new(built, cx));
         Shell {
             state,
             sidebar,
             feed,
             agents,
+            automations,
             settings: None,
             _observation: observation,
         }
@@ -115,6 +120,22 @@ impl Shell {
         let state = self.state.read(cx);
         let view = state.view();
         match view {
+            View::Automations => {
+                let mut cards = vec![
+                    card()
+                        .id("content-card")
+                        .debug_selector(|| "content-card".to_string())
+                        .flex_1()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .child(self.automations.clone())
+                        .into_any_element(),
+                ];
+                if let Some(panel) = self.settings_card() {
+                    cards.push(panel);
+                }
+                cards
+            }
             View::Agents => {
                 let mut cards = vec![
                     card()
@@ -277,7 +298,13 @@ impl Shell {
                     .rounded(px(9.))
                     .bg(theme::sunken())
                     .child(self.segment(Segment::Channel, active, "Channel", "segment-channel"))
-                    .child(self.segment(Segment::Agents, active, "Agents", "segment-agents")),
+                    .child(self.segment(Segment::Agents, active, "Agents", "segment-agents"))
+                    .child(self.segment(
+                        Segment::Automations,
+                        active,
+                        "Automations",
+                        "segment-automations",
+                    )),
             )
             .child(div().flex_1())
             .child(

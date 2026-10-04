@@ -450,6 +450,7 @@ impl Run {
             Frame::InputAccepted(_) => Applied::NotMine,
             Frame::Unknown(_) => Applied::NotMine,
             Frame::MessageCreated(_) => Applied::Unchanged,
+            Frame::TaskFired(_) => Applied::NotMine,
             Frame::RunSnapshot(snapshot) => self.apply_snapshot(snapshot),
             Frame::RunStarted(event) => {
                 self.begin(event);
