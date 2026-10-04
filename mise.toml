@@ -9,6 +9,10 @@ run = "cargo build --workspace --all-targets"
 description = "Build and run the app"
 run = "cargo run -p tuclaw-desktop"
 
+[tasks.snapshot]
+description = "Render the app offscreen to target/snapshots/<channel>.png (mock, or TUCLAW_MOCK_WORLD)"
+run = "cargo run -q -p tuclaw-desktop --example snapshot --"
+
 [tasks.test]
 description = "Run both test tiers"
 run = "cargo test --workspace"

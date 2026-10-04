@@ -46,6 +46,7 @@ running anything else.
 ```
 mise run build       # cargo build --workspace --all-targets
 mise run dev         # cargo run -p tuclaw-desktop
+mise run snapshot General   # render the window offscreen to target/snapshots/General.png
 mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all

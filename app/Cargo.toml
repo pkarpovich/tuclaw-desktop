@@ -17,3 +17,4 @@ rodio = { version = "0.22.2", default-features = false, features = ["playback", 
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+gpui_platform = { workspace = true, features = ["test-support"] }

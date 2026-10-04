@@ -221,8 +221,13 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         .flex_col()
         .rounded(px(14.))
         .bg(theme::voice_card())
-        .border_1()
-        .border_color(theme::hairline())
+        .shadow(vec![BoxShadow {
+            color: theme::hairline(),
+            offset: point(px(0.), px(0.)),
+            blur_radius: px(0.),
+            spread_radius: px(0.5),
+            inset: false,
+        }])
         .overflow_hidden()
         .child(top);
     if transcript.is_empty() {
