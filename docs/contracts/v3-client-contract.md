@@ -35,7 +35,7 @@ The sidebar. Every surface the daemon knows (today: Telegram topics), ordered by
   "last_message_at": "2026-10-03T15:26:00Z",
   "lead_agent_id": 1,
   "agents": [{"agent_id": 1, "role": "lead", "listens": true}, {"agent_id": 3, "role": "mention", "listens": false}],
-  "bindings": [{"channel": "telegram", "external_id": "-1003614621196:0", "mirror": "agent_only"}],
+  "bindings": [{"channel": "telegram", "external_id": "-1001234567890:0", "mirror": "agent_only"}],
   "live_run": {"run_id": "6763eb02-...", "agent_id": 1}
 }]
 ```

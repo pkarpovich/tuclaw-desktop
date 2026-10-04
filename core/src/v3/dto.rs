@@ -1390,7 +1390,7 @@ mod tests {
             bindings,
             &vec![Binding {
                 channel: Channel::Telegram,
-                external_id: "-1003614621196:0".into(),
+                external_id: "-1001234567890:0".into(),
                 mirror: Mirror::AgentOnly,
             }]
         );

@@ -2774,7 +2774,7 @@ fn seed_surfaces() -> Vec<Surface> {
             ],
             bindings: vec![Binding {
                 channel: Channel::Telegram,
-                external_id: "-1003614621196:0".into(),
+                external_id: "-1001234567890:0".into(),
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
@@ -2799,7 +2799,7 @@ fn seed_surfaces() -> Vec<Surface> {
             }],
             bindings: vec![Binding {
                 channel: Channel::Telegram,
-                external_id: "-1003614621196:918".into(),
+                external_id: "-1001234567890:918".into(),
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
@@ -2824,7 +2824,7 @@ fn seed_surfaces() -> Vec<Surface> {
             }],
             bindings: vec![Binding {
                 channel: Channel::Telegram,
-                external_id: "-1003614621196:731".into(),
+                external_id: "-1001234567890:731".into(),
                 mirror: Mirror::AgentOnly,
             }],
             live_run: None,
