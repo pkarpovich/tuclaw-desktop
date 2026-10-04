@@ -733,7 +733,7 @@ mod tests {
         click(cx, "card-settings".to_string());
         state.read_with(cx, |state, _cx| {
             assert_eq!(
-                state.settings().map(|settings| settings.agent),
+                state.settings().and_then(|settings| settings.agent()),
                 Some(tuclaw_core::model::AgentId(1))
             );
         });

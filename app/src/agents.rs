@@ -368,7 +368,7 @@ mod tests {
         cx.simulate_click(gear.center(), Modifiers::default());
         state.read_with(cx, |state, _cx| {
             assert_eq!(
-                state.settings().map(|settings| settings.agent),
+                state.settings().and_then(|settings| settings.agent()),
                 Some(AgentId(3))
             );
         });

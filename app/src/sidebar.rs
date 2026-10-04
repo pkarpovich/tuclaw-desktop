@@ -5,7 +5,7 @@ use gpui::{
 use gpui_kit::base::Button;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
-use crate::control::{AvatarSize, Face, avatar, row_button};
+use crate::control::{AvatarSize, Face, avatar, button, row_button};
 use crate::icon::{Glyph, icon};
 use crate::link;
 use crate::people::{Me, People};
@@ -145,7 +145,7 @@ impl Render for Sidebar {
             View::Conversation => Highlight::Off,
         };
         let sections = sections(state);
-        let footer = footer(&state.people());
+        let footer = footer(&state.people(), self.state.clone());
         let mut rows = div()
             .id("sidebar-rows")
             .flex()
@@ -369,8 +369,17 @@ fn search_field() -> impl IntoElement {
     )
 }
 
-fn footer(people: &People) -> Div {
-    let Me { name, picture } = people.me;
+fn footer(people: &People, state: Entity<AppState>) -> Div {
+    let Me {
+        name,
+        description,
+        picture,
+    } = people.me;
+    let tagline = match description.lines().next() {
+        Some(line) if !line.trim().is_empty() => SharedString::from(line.trim().to_string()),
+        Some(_) => SharedString::new_static("the only human here"),
+        None => SharedString::new_static("the only human here"),
+    };
     let face = Face {
         initials: SharedString::from(link::initials(name)),
         color: theme::accent(),
@@ -395,6 +404,8 @@ fn footer(people: &People) -> Div {
             div()
                 .flex()
                 .flex_col()
+                .flex_1()
+                .min_w(px(0.))
                 .child(
                     div()
                         .text_size(px(13.))
@@ -405,19 +416,22 @@ fn footer(people: &People) -> Div {
                     div()
                         .text_size(px(11.5))
                         .text_color(theme::text_label())
-                        .child("the only human here"),
+                        .text_ellipsis()
+                        .child(tagline),
                 ),
         )
-        .child(div().flex_1())
-        .child(gear())
-}
-
-fn gear() -> impl IntoElement {
-    div().flex_none().cursor_pointer().child(icon(
-        Glyph::Settings,
-        px(15.),
-        theme::text_secondary(),
-    ))
+        .child(
+            button("sidebar-profile")
+                .accessibility_label("Your profile")
+                .flex_none()
+                .p(px(5.))
+                .rounded(px(7.))
+                .hover(|style| style.bg(theme::sunken()))
+                .on_click(move |_event, _window, cx| {
+                    state.update(cx, |state, cx| state.open_profile(cx));
+                })
+                .child(icon(Glyph::Settings, px(15.), theme::text_secondary())),
+        )
 }
 
 #[cfg(test)]

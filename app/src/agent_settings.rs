@@ -6,8 +6,23 @@ use crate::state::Inspector;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
-    pub agent: AgentId,
+    pub target: Target,
     pub back: Option<Inspector>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Agent(AgentId),
+    Me,
+}
+
+impl Settings {
+    pub fn agent(&self) -> Option<AgentId> {
+        match self.target {
+            Target::Agent(agent) => Some(agent),
+            Target::Me => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +35,7 @@ pub enum Saving {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
+    Name,
     Description,
     Model,
 }

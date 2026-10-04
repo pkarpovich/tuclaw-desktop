@@ -16,7 +16,7 @@ use tuclaw_core::v3::{
 };
 
 use crate::agent_settings::{
-    self, Field, FieldError, Joinable, Saving, Settings, Toast, TopicRow, Undo,
+    self, Field, FieldError, Joinable, Saving, Settings, Target, Toast, TopicRow, Undo,
 };
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
@@ -293,9 +293,14 @@ impl AppState {
     }
 
     fn me_loaded(&mut self, me: v3::Me, cx: &mut Context<Self>) {
-        let v3::Me { name, avatar_url } = me;
+        let v3::Me {
+            name,
+            description,
+            avatar_url,
+        } = me;
         self.me = Me {
             name,
+            description,
             picture: link::picture(avatar_url.as_ref()),
         };
         self.fill_pictures(cx);
@@ -600,18 +605,137 @@ impl AppState {
 
     pub fn open_settings(&mut self, agent: AgentId, cx: &mut Context<Self>) {
         let back = match self.settings.take() {
-            Some(Settings { agent: _, back }) => back,
+            Some(Settings { target: _, back }) => back,
             None => self.inspector.take(),
         };
-        self.settings = Some(Settings { agent, back });
+        self.settings = Some(Settings {
+            target: Target::Agent(agent),
+            back,
+        });
         self.saving = Saving::Idle;
         self.field_error = None;
         self.toast = None;
         cx.notify();
     }
 
+    pub fn open_profile(&mut self, cx: &mut Context<Self>) {
+        let back = match self.settings.take() {
+            Some(Settings { target: _, back }) => back,
+            None => self.inspector.take(),
+        };
+        self.settings = Some(Settings {
+            target: Target::Me,
+            back,
+        });
+        self.saving = Saving::Idle;
+        self.field_error = None;
+        self.toast = None;
+        cx.notify();
+    }
+
+    pub fn save_my_name(&mut self, name: String, cx: &mut Context<Self>) {
+        let name = name.trim().to_string();
+        if name == self.me.name {
+            return;
+        }
+        let patch = v3::MePatch {
+            name: Some(name),
+            description: None,
+        };
+        self.update_me(patch, Field::Name, cx);
+    }
+
+    pub fn save_my_description(&mut self, text: String, cx: &mut Context<Self>) {
+        if text == self.me.description {
+            return;
+        }
+        let patch = v3::MePatch {
+            name: None,
+            description: Some(text),
+        };
+        self.update_me(patch, Field::Description, cx);
+    }
+
+    fn update_me(&mut self, patch: v3::MePatch, field: Field, cx: &mut Context<Self>) {
+        self.saving = Saving::Saving;
+        if self
+            .field_error
+            .as_ref()
+            .is_some_and(|error| error.field == field)
+        {
+            self.field_error = None;
+        }
+        cx.notify();
+        let request = self.client.update_me(&patch);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(me) => {
+                    state.me_loaded(me, cx);
+                    state.saving = Saving::Saved;
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    state.field_error = Some(FieldError {
+                        field,
+                        message: field_message(&error),
+                    });
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn upload_my_avatar(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        let Some(kind) = v3::ImageKind::sniff(&bytes) else {
+            self.saving = Saving::Failed("not a png, jpeg or webp image".into());
+            cx.notify();
+            return;
+        };
+        let request = self.client.set_avatar(v3::AvatarOwner::Me, kind, bytes);
+        self.after_my_avatar_write(async move { request.await.map(|_url| ()) }, cx);
+    }
+
+    pub fn clear_my_avatar(&mut self, cx: &mut Context<Self>) {
+        let request = self.client.clear_avatar(v3::AvatarOwner::Me);
+        self.after_my_avatar_write(request, cx);
+    }
+
+    fn after_my_avatar_write(
+        &mut self,
+        write: impl std::future::Future<Output = Result<(), v3::ApiError>> + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.saving = Saving::Saving;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let written = write.await;
+            let me = match written {
+                Ok(()) => client.me().await,
+                Err(error) => Err(error),
+            };
+            this.update(cx, |state, cx| match me {
+                Ok(me) => {
+                    state.me_loaded(me, cx);
+                    state.saving = Saving::Saved;
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub fn back_to_run(&mut self, cx: &mut Context<Self>) {
-        let Some(Settings { agent: _, back }) = self.settings.take() else {
+        let Some(Settings { target: _, back }) = self.settings.take() else {
             return;
         };
         self.inspector = back;
@@ -1877,7 +2001,7 @@ mod tests {
             assert_eq!(
                 state.settings(),
                 Some(crate::agent_settings::Settings {
-                    agent: AgentId(3),
+                    target: crate::agent_settings::Target::Agent(AgentId(3)),
                     back: Some(inspector),
                 })
             );

@@ -8,8 +8,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::dto::{
-    Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MessageId,
-    MessagesPage, Post, Posted, Rename, RunDetail, RunId, Seq, Surface, SurfaceId, WiringChange,
+    Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MePatch,
+    MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -212,23 +212,17 @@ impl Client {
         }
     }
 
-    /// Changes the user's display name.
-    pub fn rename_me(
+    /// Changes the user's name or description and returns the profile as stored.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Invalid`] for an empty name or a description over the limit.
+    pub fn update_me(
         &self,
-        name: String,
-    ) -> impl Future<Output = Result<(), ApiError>> + Send + 'static {
-        let request = match serde_json::to_value(Rename { name }) {
-            Ok(encoded) => self.transport.send(Request {
-                method: Method::Patch,
-                path: "/me".into(),
-                body: Body::Json(encoded),
-            }),
-            Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
-        };
-        async move {
-            request.await?;
-            Ok(())
-        }
+        patch: &MePatch,
+    ) -> impl Future<Output = Result<Me, ApiError>> + Send + 'static {
+        let request = self.json_write(Method::Patch, "/me".into(), patch);
+        async move { body(request.await?) }
     }
 
     /// Changes an agent's description or model and returns the agent as stored.

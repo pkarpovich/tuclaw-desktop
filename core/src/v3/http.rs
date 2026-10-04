@@ -295,7 +295,7 @@ mod tests {
     use crate::testing::{Events, FakeDaemon, Reply};
     use crate::v3::client::{AvatarOwner, Client};
     use crate::v3::dto::{
-        AgentId, AgentPatch, AvatarUrl, ClientMessageId, ImageKind, InputId, MessageId,
+        AgentId, AgentPatch, AvatarUrl, ClientMessageId, ImageKind, InputId, MePatch, MessageId,
         ModelChange, Post, Posted, Role, RunId, SurfaceId, WiringChange,
     };
     use crate::v3::frames::Frame;
@@ -453,9 +453,17 @@ mod tests {
     fn clearing_and_renaming_send_delete_and_patch() {
         let daemon = FakeDaemon::start();
         daemon.route("DELETE", "/api/v3/me/avatar", json_reply(204, ""));
-        daemon.route("PATCH", "/api/v3/me", json_reply(200, ""));
+        daemon.route(
+            "PATCH",
+            "/api/v3/me",
+            json_reply(200, include_str!("../../testdata/v3/me.json")),
+        );
         within(client(&daemon).clear_avatar(AvatarOwner::Me)).expect("cleared");
-        within(client(&daemon).rename_me("Pavel".into())).expect("renamed");
+        within(client(&daemon).update_me(&MePatch {
+            name: Some("Pavel".into()),
+            description: None,
+        }))
+        .expect("renamed");
         let requests = daemon.requests();
         assert_eq!(requests[0].method, "DELETE");
         assert_eq!(requests[1].method, "PATCH");

@@ -9,6 +9,7 @@ use tuclaw_core::v3::{self, Role};
 
 use crate::agent_settings::{Field, Joinable, Saving, Settings, Toast, TopicRow};
 use crate::control::{self, AvatarSize, Face, avatar, button, row_button};
+use crate::form::{error_line, field_frame, label, saving_label};
 use crate::icon::{Glyph, icon};
 use crate::people::People;
 use crate::state::AppState;
@@ -633,7 +634,7 @@ impl Render for SettingsPanel {
             return div().size_full().into_any_element();
         };
         let back = match state.settings() {
-            Some(Settings { agent: _, back }) => back.is_some(),
+            Some(Settings { target: _, back }) => back.is_some(),
             None => false,
         };
         let saving = state.saving().clone();
@@ -652,6 +653,7 @@ impl Render for SettingsPanel {
             Some(error) => match error.field {
                 Field::Description => (Some(error.message), None),
                 Field::Model => (None, Some(error.message)),
+                Field::Name => (None, None),
             },
             None => (None, None),
         };
@@ -816,52 +818,11 @@ fn status_of(people: &People, agent: AgentId) -> (SharedString, gpui::Hsla) {
     }
 }
 
-fn saving_label(saving: &Saving) -> Div {
-    let line = div().flex().items_center().gap(px(4.)).text_size(px(11.5));
-    match saving {
-        Saving::Idle => line,
-        Saving::Saving => line.text_color(theme::text_muted()).child("Saving…"),
-        Saving::Saved => line
-            .text_color(theme::text_muted())
-            .child(icon(Glyph::Done, px(11.), theme::status_idle()))
-            .child("Saved"),
-        Saving::Failed(_) => line.text_color(theme::accent()).child("Not saved"),
-    }
-}
-
-fn label(text: &'static str) -> Div {
-    div()
-        .text_size(px(12.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .child(text)
-}
-
 fn cell_label(text: &'static str) -> Div {
     div()
         .text_size(px(10.5))
         .text_color(theme::text_muted())
         .child(text)
-}
-
-fn field_frame(invalid: bool) -> Div {
-    div()
-        .px(px(10.))
-        .py(px(7.))
-        .rounded(px(8.))
-        .bg(theme::field())
-        .border_1()
-        .border_color(if invalid {
-            theme::accent()
-        } else {
-            theme::border()
-        })
-}
-
-fn error_line(text: String) -> Div {
-    div()
-        .text_size(px(11.))
-        .text_color(theme::accent())
-        .child(format!("{text}. Not saved."))
 }
 
 fn group_label(title: &'static str, hint: &'static str, hears: bool) -> Div {

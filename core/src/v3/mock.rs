@@ -27,9 +27,9 @@ use super::client::AvatarOwner;
 use super::dto::{
     Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
     AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, ImageKind,
-    InputId, Me, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted, Rename, Role,
-    RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface, SurfaceId,
-    SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring, WiringChange,
+    InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage, Mirror, Post, Posted,
+    Role, RowKind, RunDetail, RunId, RunRow, RunStatus, RunSummary, Seq, StepRow, Surface,
+    SurfaceId, SurfaceKind, SurfaceRun, ToolUseId, Usage, Wiring, WiringChange,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
@@ -89,6 +89,7 @@ const AVATAR_LIMIT: usize = 2 * 1024 * 1024;
 const DEFAULT_NAME: &str = "You";
 const DEFAULT_MODEL: &str = "opus[1m]";
 const DESCRIPTION_LIMIT: usize = 140;
+const PROFILE_LIMIT: usize = 280;
 
 #[derive(Debug, Clone)]
 struct Avatar {
@@ -232,6 +233,7 @@ struct World {
     posted: HashMap<ClientMessageId, (SurfaceId, Posted)>,
     media: HashMap<AttachmentId, Media>,
     my_name: String,
+    my_description: String,
     avatars: HashMap<AvatarOwner, Avatar>,
     next_message: i64,
     next_input: i64,
@@ -581,6 +583,7 @@ impl World {
             posted: HashMap::new(),
             media: HashMap::new(),
             my_name: DEFAULT_NAME.into(),
+            my_description: String::new(),
             avatars: HashMap::from([
                 (
                     AvatarOwner::Agent(AgentId(1)),
@@ -606,12 +609,13 @@ impl World {
             media: files,
             me,
         } = seed;
-        let my_name = match me {
+        let (my_name, my_description) = match me {
             Some(Me {
                 name,
+                description,
                 avatar_url: _,
-            }) => name,
-            None => DEFAULT_NAME.into(),
+            }) => (name, description),
+            None => (DEFAULT_NAME.into(), String::new()),
         };
         let mut media = HashMap::new();
         for SeedMedia { id, path } in files {
@@ -681,6 +685,7 @@ impl World {
             posted: HashMap::new(),
             media,
             my_name,
+            my_description,
             avatars: HashMap::new(),
             next_message,
             next_input: 1,
@@ -1230,6 +1235,7 @@ impl World {
     fn me_view(&self) -> Me {
         Me {
             name: self.my_name.clone(),
+            description: self.my_description.clone(),
             avatar_url: self
                 .avatars
                 .get(&AvatarOwner::Me)
@@ -1490,15 +1496,32 @@ impl World {
         let (Method::Patch, Body::Json(json)) = (method, body) else {
             return Err(ApiError::NotFound);
         };
-        let Ok(Rename { name }) = serde_json::from_value::<Rename>(json) else {
-            return Err(ApiError::Invalid("name is required".into()));
+        let Ok(MePatch { name, description }) = serde_json::from_value::<MePatch>(json) else {
+            return Err(ApiError::Invalid(
+                "name and description must be strings".into(),
+            ));
         };
-        let name = name.trim();
-        if name.is_empty() {
-            return Err(ApiError::Invalid("name must not be empty".into()));
+        let name = match name {
+            Some(name) if name.trim().is_empty() => {
+                return Err(ApiError::Invalid("name must not be empty".into()));
+            }
+            Some(name) => Some(name.trim().to_string()),
+            None => None,
+        };
+        if let Some(description) = &description
+            && description.chars().count() > PROFILE_LIMIT
+        {
+            return Err(ApiError::Invalid(format!(
+                "description is longer than {PROFILE_LIMIT} characters"
+            )));
         }
-        self.my_name = name.to_string();
-        Ok(Value::Null)
+        if let Some(name) = name {
+            self.my_name = name;
+        }
+        if let Some(description) = description {
+            self.my_description = description;
+        }
+        to_json(&self.me_view())
     }
 
     fn agents_view(&self) -> Vec<Agent> {
@@ -2756,9 +2779,17 @@ mod tests {
         let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
         assert_eq!(block_on(client.me()).expect("me").name, "You");
-        block_on(client.rename_me("Pavel".into())).expect("renamed");
+        let renamed = block_on(client.update_me(&MePatch {
+            name: Some("Pavel".into()),
+            description: Some("Builds tuclaw".into()),
+        }))
+        .expect("renamed");
+        assert_eq!(renamed.description, "Builds tuclaw");
         assert_eq!(block_on(client.me()).expect("me").name, "Pavel");
-        let blank = block_on(client.rename_me("  ".into()));
+        let blank = block_on(client.update_me(&MePatch {
+            name: Some("  ".into()),
+            description: None,
+        }));
         assert!(matches!(blank, Err(ApiError::Invalid(_))));
     }
 

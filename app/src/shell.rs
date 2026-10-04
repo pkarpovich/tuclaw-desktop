@@ -3,14 +3,22 @@ use gpui::{
     SharedString, Subscription, Window, actions, div, phi, point, prelude::*, px,
 };
 
+use crate::agent_settings::Target;
 use crate::agents::AgentsView;
 use crate::control::{self, button};
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
 use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
 use crate::link::Source;
+use crate::profile_panel::ProfilePanel;
 use crate::runlog::OnDisclose;
 use crate::settings_panel::{self, SettingsPanel};
+
+#[derive(Clone)]
+enum SlotPanel {
+    Agent(Entity<SettingsPanel>),
+    Me(Entity<ProfilePanel>),
+}
 use crate::sidebar::Sidebar;
 use crate::state::{AppState, Link, Segment, SidebarVisibility, View};
 use crate::theme;
@@ -38,7 +46,7 @@ pub struct Shell {
     sidebar: Entity<Sidebar>,
     feed: Entity<Feed>,
     agents: Entity<AgentsView>,
-    settings: Option<Entity<SettingsPanel>>,
+    settings: Option<SlotPanel>,
     _observation: Subscription,
 }
 
@@ -66,22 +74,32 @@ impl Shell {
             .state
             .read(cx)
             .settings()
-            .map(|settings| settings.agent);
-        let current = self.settings.as_ref().map(|panel| panel.read(cx).agent());
+            .map(|settings| settings.target);
+        let current = match &self.settings {
+            Some(SlotPanel::Agent(panel)) => Some(Target::Agent(panel.read(cx).agent())),
+            Some(SlotPanel::Me(_)) => Some(Target::Me),
+            None => None,
+        };
         if wanted == current {
             return;
         }
+        let state = self.state.clone();
         self.settings = match wanted {
-            Some(agent) => {
-                let state = self.state.clone();
-                Some(cx.new(|cx| SettingsPanel::new(state, agent, window, cx)))
-            }
+            Some(Target::Agent(agent)) => Some(SlotPanel::Agent(
+                cx.new(|cx| SettingsPanel::new(state, agent, window, cx)),
+            )),
+            Some(Target::Me) => Some(SlotPanel::Me(
+                cx.new(|cx| ProfilePanel::new(state, window, cx)),
+            )),
             None => None,
         };
     }
 
     fn settings_card(&self) -> Option<AnyElement> {
-        let panel = self.settings.clone()?;
+        let panel = match self.settings.clone()? {
+            SlotPanel::Agent(panel) => panel.into_any_element(),
+            SlotPanel::Me(panel) => panel.into_any_element(),
+        };
         Some(
             card()
                 .id("settings-card")

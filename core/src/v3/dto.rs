@@ -406,6 +406,9 @@ pub struct Agent {
 pub struct Me {
     /// The display name; "You" when the daemon knows none.
     pub name: String,
+    /// A few words about the user; empty when unset.
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub description: String,
     /// The avatar; `None` draws the initials.
     #[serde(default)]
     pub avatar_url: Option<AvatarUrl>,
@@ -478,11 +481,24 @@ pub struct WiringChange {
     pub listens: bool,
 }
 
-/// The body of `PATCH /me`.
+/// The body of `PATCH /me`; absent fields stay as they are.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::MePatch;
+///
+/// let patch = MePatch { name: None, description: Some("Builds tuclaw".into()) };
+/// assert_eq!(serde_json::to_string(&patch).unwrap(), r#"{"description":"Builds tuclaw"}"#);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Rename {
+pub struct MePatch {
     /// The new display name.
-    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The new description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// The kind of a message.
@@ -888,7 +904,12 @@ mod tests {
 
     #[test]
     fn me_and_an_avatar_answer_decode() {
-        let Me { name, avatar_url } = serde_json::from_str(ME).unwrap();
+        let Me {
+            name,
+            description,
+            avatar_url,
+        } = serde_json::from_str(ME).unwrap();
+        assert_eq!(description, "");
         assert_eq!(name, "Pavel");
         assert_eq!(
             avatar_url,

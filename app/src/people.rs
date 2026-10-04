@@ -12,6 +12,7 @@ pub const DEFAULT_NAME: &str = "You";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Me {
     pub name: String,
+    pub description: String,
     pub picture: Option<Picture>,
 }
 
@@ -19,6 +20,7 @@ impl Default for Me {
     fn default() -> Me {
         Me {
             name: DEFAULT_NAME.into(),
+            description: String::new(),
             picture: None,
         }
     }

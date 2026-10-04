@@ -16,6 +16,7 @@ fn main() {
         .unwrap_or_else(|| "Magnet Feed".to_string());
     let open_logs = std::env::args().any(|arg| arg == "--open-logs");
     let inspect = std::env::args().any(|arg| arg == "--inspect");
+    let profile = std::env::args().any(|arg| arg == "--profile");
     let mut settings = None;
     for arg in std::env::args() {
         if let Some(name) = arg.strip_prefix("--settings=") {
@@ -113,6 +114,10 @@ fn main() {
                 }
             })
         });
+        cx.run_until_parked();
+    }
+    if profile {
+        cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
         cx.run_until_parked();
     }
     let built = state.clone();
