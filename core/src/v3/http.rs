@@ -272,7 +272,14 @@ fn request_error(error: reqwest::Error) -> ApiError {
     if error.is_timeout() {
         return ApiError::Transport("the daemon did not answer in time".into());
     }
-    ApiError::Transport(error.to_string())
+    let mut reason = error.to_string();
+    let mut source = std::error::Error::source(&error);
+    while let Some(cause) = source {
+        reason.push_str(": ");
+        reason.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    ApiError::Transport(reason)
 }
 
 fn handshake_error(error: WsError) -> ApiError {
@@ -441,6 +448,19 @@ mod tests {
         assert_eq!(requests[0].method, "PUT");
         assert_eq!(requests[0].content_type.as_deref(), Some("image/png"));
         assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn a_public_picture_is_fetched_over_tls() {
+        let daemon = FakeDaemon::start();
+        let url = PublicUrl::parse("https://127.0.0.1:1/picture.jpg").expect("an https URL");
+        let Err(ApiError::Transport(reason)) = within(transport(&daemon).fetch_public(&url)) else {
+            panic!("nothing listens on port 1");
+        };
+        assert!(
+            !reason.contains("scheme is not http"),
+            "the request never left the client: {reason}"
+        );
     }
 
     #[test]
