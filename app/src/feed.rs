@@ -51,6 +51,7 @@ enum Item {
 enum Resync {
     Reset,
     Runs,
+    Labels,
 }
 
 enum Header {
@@ -105,6 +106,7 @@ impl Feed {
                     feed.composer
                         .update(cx, |composer, cx| composer.insert(&text, window, cx));
                 }
+                StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
             },
         );
         let items = items(state.read(cx), OffsetDateTime::now_utc());
@@ -192,6 +194,13 @@ impl Feed {
         self.items = Rc::new(items);
         match resync {
             Resync::Reset => self.list.reset(self.items.len()),
+            Resync::Labels => {
+                if self.items.len() == before {
+                    self.list.remeasure();
+                } else {
+                    self.list.reset(self.items.len());
+                }
+            }
             Resync::Runs => {
                 if self.items.len() == before {
                     self.list.remeasure_items(first_run..self.items.len());
@@ -931,7 +940,10 @@ mod tests {
             let mut triggered = 0;
             for item in feed.items.iter() {
                 match item {
-                    Item::Fire(row) => fires.push(row.outcome),
+                    Item::Fire(row) => {
+                        assert_ne!(row.label, "An automation");
+                        fires.push(row.outcome);
+                    }
                     Item::Message(_, Some(_)) => triggered += 1,
                     Item::Message(_, None) => {}
                     Item::Separator(_) => {}

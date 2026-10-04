@@ -77,6 +77,7 @@ pub enum StateEvent {
     OlderLoaded,
     SendFailed(String),
     Mention(String),
+    TasksLoaded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -833,17 +834,20 @@ impl AppState {
         cx.notify();
     }
 
+    fn tasks_loaded(&mut self, tasks: Vec<v3::Task>, cx: &mut Context<Self>) {
+        self.tasks = tasks;
+        cx.emit(StateEvent::TasksLoaded);
+        cx.notify();
+    }
+
     pub fn load_tasks(&mut self, cx: &mut Context<Self>) {
         let request = self.client.tasks(v3::TaskScope::Recent);
         cx.spawn(async move |this, cx| {
             let Ok(tasks) = request.await else {
                 return;
             };
-            this.update(cx, |state, cx| {
-                state.tasks = tasks;
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |state, cx| state.tasks_loaded(tasks, cx))
+                .ok();
         })
         .detach();
     }
@@ -2209,11 +2213,8 @@ async fn fetch_directory(
         this.update(cx, |state, cx| state.me_loaded(me, cx)).ok();
     }
     if let Ok(tasks) = client.tasks(v3::TaskScope::Recent).await {
-        this.update(cx, |state, cx| {
-            state.tasks = tasks;
-            cx.notify();
-        })
-        .ok();
+        this.update(cx, |state, cx| state.tasks_loaded(tasks, cx))
+            .ok();
     }
     loaded.is_ok()
 }
