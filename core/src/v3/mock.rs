@@ -1276,7 +1276,7 @@ impl World {
             [..] => return Err(ApiError::NotFound),
         };
         match (method, body) {
-            (Method::Put, Body::Image { kind, bytes }) => self.store_avatar(owner, kind, bytes),
+            (Method::Put, Body::Image { kind: _, bytes }) => self.store_avatar(owner, bytes),
             (Method::Delete, Body::Empty) => {
                 self.avatars.remove(&owner);
                 Ok(Value::Null)
@@ -1295,21 +1295,15 @@ impl World {
         }
     }
 
-    fn store_avatar(
-        &mut self,
-        owner: AvatarOwner,
-        kind: ImageKind,
-        bytes: Vec<u8>,
-    ) -> Result<Value, ApiError> {
+    fn store_avatar(&mut self, owner: AvatarOwner, bytes: Vec<u8>) -> Result<Value, ApiError> {
         if bytes.len() > AVATAR_LIMIT {
             return Err(ApiError::Invalid("the image is larger than 2 MiB".into()));
         }
-        if ImageKind::sniff(&bytes) != Some(kind) {
-            return Err(ApiError::Invalid(format!(
-                "the body is not {}",
-                kind.mime()
-            )));
-        }
+        let Some(_kind) = ImageKind::sniff(&bytes) else {
+            return Err(ApiError::Invalid(
+                "the body is not a png, jpeg or webp image".into(),
+            ));
+        };
         let avatar = Avatar::new(bytes);
         let avatar_url = avatar.url(owner);
         self.avatars.insert(owner, avatar);
@@ -2434,11 +2428,14 @@ mod tests {
     }
 
     #[test]
-    fn an_upload_that_is_not_its_declared_image_is_refused() {
+    fn an_upload_is_judged_by_its_bytes_not_its_declared_type() {
         let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
-        let refused =
+        let mislabeled =
             block_on(client.set_avatar(AvatarOwner::Me, ImageKind::Jpeg, MY_AVATAR.to_vec()));
+        assert!(mislabeled.is_ok());
+        let refused =
+            block_on(client.set_avatar(AvatarOwner::Me, ImageKind::Png, b"GIF89a....".to_vec()));
         assert!(matches!(refused, Err(ApiError::Invalid(_))));
         let huge = block_on(client.set_avatar(
             AvatarOwner::Me,
