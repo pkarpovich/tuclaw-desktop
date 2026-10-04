@@ -1,3 +1,4 @@
+pub mod agent_settings;
 pub mod agents;
 pub mod audio;
 pub mod composer;

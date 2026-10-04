@@ -34,6 +34,11 @@ pub fn agent_id(agent: v3::AgentId) -> AgentId {
     AgentId(id)
 }
 
+pub fn v3_agent_id(agent: AgentId) -> v3::AgentId {
+    let AgentId(id) = agent;
+    v3::AgentId(id)
+}
+
 pub fn agent(agent: &v3::Agent, busy_on: Option<&str>) -> Agent {
     let v3::Agent {
         id,

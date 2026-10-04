@@ -7,13 +7,17 @@ use futures::channel::mpsc::UnboundedSender;
 use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
 use tuclaw_core::model::{
-    Agent, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span, Voice,
+    Agent, AgentId, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span,
+    Voice,
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
     RunState, Seq, TextDelta,
 };
 
+use crate::agent_settings::{
+    self, Field, FieldError, Joinable, Saving, Settings, Toast, TopicRow, Undo,
+};
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 use crate::people::{self, Gallery, Me, People};
@@ -21,6 +25,7 @@ use crate::runlog::{self, Disclosure, RunLog};
 
 const PAGE: u32 = 50;
 const TICK: Duration = Duration::from_millis(200);
+const TOAST_LIFETIME: Duration = Duration::from_secs(6);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -128,6 +133,11 @@ pub struct AppState {
     expanded: HashSet<MessageId>,
     toggled: HashSet<Disclosure>,
     inspector: Option<Inspector>,
+    settings: Option<Settings>,
+    saving: Saving,
+    field_error: Option<FieldError>,
+    toast: Option<Toast>,
+    next_toast: u64,
     run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
     playback: Option<Playback>,
@@ -170,6 +180,11 @@ impl AppState {
             expanded: HashSet::new(),
             toggled: HashSet::new(),
             inspector: None,
+            settings: None,
+            saving: Saving::Idle,
+            field_error: None,
+            toast: None,
+            next_toast: 0,
             run_logs: HashMap::new(),
             speaker,
             playback: None,
@@ -531,7 +546,378 @@ impl AppState {
 
     pub fn close_inspector(&mut self, cx: &mut Context<Self>) {
         self.inspector = None;
+        self.settings = None;
         cx.notify();
+    }
+
+    pub fn settings(&self) -> Option<Settings> {
+        self.settings
+    }
+
+    pub fn saving(&self) -> &Saving {
+        &self.saving
+    }
+
+    pub fn field_error(&self) -> Option<&FieldError> {
+        self.field_error.as_ref()
+    }
+
+    pub fn toast(&self) -> Option<&Toast> {
+        self.toast.as_ref()
+    }
+
+    pub fn directory_agent(&self, agent: AgentId) -> Option<&v3::Agent> {
+        let wanted = link::v3_agent_id(agent);
+        let mut found = None;
+        for candidate in &self.directory {
+            if candidate.id == wanted {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found
+    }
+
+    pub fn agent_topics(&self, agent: AgentId) -> Vec<TopicRow> {
+        agent_settings::topics_of(&self.surfaces, &self.directory, agent)
+    }
+
+    pub fn joinable_topics(&self, agent: AgentId) -> Vec<Joinable> {
+        agent_settings::joinable(&self.surfaces, &self.directory, agent)
+    }
+
+    pub fn surface_name(&self, surface: v3::SurfaceId) -> Option<String> {
+        let mut found = None;
+        for candidate in &self.surfaces {
+            if candidate.id == surface {
+                found = Some(candidate.name.clone());
+            }
+        }
+        found
+    }
+
+    pub fn open_settings(&mut self, agent: AgentId, cx: &mut Context<Self>) {
+        let back = match self.settings.take() {
+            Some(Settings { agent: _, back }) => back,
+            None => self.inspector.take(),
+        };
+        self.settings = Some(Settings { agent, back });
+        self.saving = Saving::Idle;
+        self.field_error = None;
+        self.toast = None;
+        cx.notify();
+    }
+
+    pub fn back_to_run(&mut self, cx: &mut Context<Self>) {
+        let Some(Settings { agent: _, back }) = self.settings.take() else {
+            return;
+        };
+        self.inspector = back;
+        cx.notify();
+    }
+
+    pub fn save_description(&mut self, agent: AgentId, text: String, cx: &mut Context<Self>) {
+        let unchanged = match self.directory_agent(agent) {
+            Some(known) => known.description == text,
+            None => return,
+        };
+        if unchanged {
+            return;
+        }
+        let patch = v3::AgentPatch {
+            description: Some(text),
+            model: v3::ModelChange::Keep,
+        };
+        self.update_agent(agent, patch, Field::Description, cx);
+    }
+
+    pub fn save_model(&mut self, agent: AgentId, spec: String, cx: &mut Context<Self>) {
+        let spec = spec.trim().to_string();
+        let model = if spec.is_empty() {
+            v3::ModelChange::Default
+        } else {
+            v3::ModelChange::Set(spec.clone())
+        };
+        let unchanged = match (self.directory_agent(agent), &model) {
+            (Some(known), v3::ModelChange::Set(_)) => known.model == spec,
+            (Some(_), v3::ModelChange::Default) => false,
+            (Some(_), v3::ModelChange::Keep) => true,
+            (None, v3::ModelChange::Set(_) | v3::ModelChange::Default | v3::ModelChange::Keep) => {
+                return;
+            }
+        };
+        if unchanged {
+            return;
+        }
+        let patch = v3::AgentPatch {
+            description: None,
+            model,
+        };
+        self.update_agent(agent, patch, Field::Model, cx);
+    }
+
+    fn update_agent(
+        &mut self,
+        agent: AgentId,
+        patch: v3::AgentPatch,
+        field: Field,
+        cx: &mut Context<Self>,
+    ) {
+        self.saving = Saving::Saving;
+        if self
+            .field_error
+            .as_ref()
+            .is_some_and(|error| error.field == field)
+        {
+            self.field_error = None;
+        }
+        cx.notify();
+        let request = self.client.update_agent(link::v3_agent_id(agent), &patch);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(updated) => {
+                    state.store_agent(updated);
+                    state.saving = Saving::Saved;
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    state.field_error = Some(FieldError {
+                        field,
+                        message: field_message(&error),
+                    });
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn store_agent(&mut self, updated: v3::Agent) {
+        for agent in &mut self.directory {
+            if agent.id == updated.id {
+                *agent = updated.clone();
+            }
+        }
+        self.refresh_agents();
+    }
+
+    fn store_surface(&mut self, updated: v3::Surface) {
+        for surface in &mut self.surfaces {
+            if surface.id == updated.id {
+                *surface = updated.clone();
+            }
+        }
+    }
+
+    pub fn toggle_hears(&mut self, agent: AgentId, surface: v3::SurfaceId, cx: &mut Context<Self>) {
+        let Some(row) = self.topic_row(agent, surface) else {
+            return;
+        };
+        let change = v3::WiringChange {
+            role: row.role,
+            listens: !row.listens,
+        };
+        self.wire(agent, surface, change, None, cx);
+    }
+
+    pub fn make_lead(&mut self, agent: AgentId, surface: v3::SurfaceId, cx: &mut Context<Self>) {
+        let Some(row) = self.topic_row(agent, surface) else {
+            return;
+        };
+        let demoted = self.lead_of(surface);
+        let name = row.name.clone();
+        let undo = Undo::Restore {
+            surface,
+            agent,
+            change: v3::WiringChange {
+                role: row.role,
+                listens: row.listens,
+            },
+            demoted,
+        };
+        let who = self.agent_name(agent);
+        let toast = (format!("{who} is now Lead in #{name}"), undo);
+        let change = v3::WiringChange {
+            role: v3::Role::Lead,
+            listens: row.listens,
+        };
+        self.wire(agent, surface, change, Some(toast), cx);
+    }
+
+    pub fn join_topic(&mut self, agent: AgentId, option: &Joinable, cx: &mut Context<Self>) {
+        let change = v3::WiringChange {
+            role: agent_settings::joining_role(option),
+            listens: false,
+        };
+        self.wire(agent, option.surface, change, None, cx);
+    }
+
+    pub fn leave_topic(&mut self, agent: AgentId, surface: v3::SurfaceId, cx: &mut Context<Self>) {
+        let Some(row) = self.topic_row(agent, surface) else {
+            return;
+        };
+        self.saving = Saving::Saving;
+        cx.notify();
+        let request = self.client.remove_wiring(surface, link::v3_agent_id(agent));
+        let undo = Undo::Rewire {
+            surface,
+            agent,
+            change: v3::WiringChange {
+                role: row.role,
+                listens: row.listens,
+            },
+        };
+        let text = format!("Removed from #{}", row.name);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(()) => {
+                    state.unwire_locally(agent, surface);
+                    state.saving = Saving::Saved;
+                    state.show_toast(text, undo, cx);
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub fn undo(&mut self, cx: &mut Context<Self>) {
+        let Some(Toast {
+            id: _,
+            text: _,
+            undo,
+        }) = self.toast.take()
+        else {
+            return;
+        };
+        match undo {
+            Undo::Rewire {
+                surface,
+                agent,
+                change,
+            } => self.wire(agent, surface, change, None, cx),
+            Undo::Restore {
+                surface,
+                agent,
+                change,
+                demoted,
+            } => {
+                if let Some(previous) = demoted {
+                    let back = v3::WiringChange {
+                        role: v3::Role::Lead,
+                        listens: self
+                            .topic_row(previous, surface)
+                            .is_some_and(|row| row.listens),
+                    };
+                    self.wire(previous, surface, back, None, cx);
+                }
+                self.wire(agent, surface, change, None, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    fn wire(
+        &mut self,
+        agent: AgentId,
+        surface: v3::SurfaceId,
+        change: v3::WiringChange,
+        toast: Option<(String, Undo)>,
+        cx: &mut Context<Self>,
+    ) {
+        self.saving = Saving::Saving;
+        cx.notify();
+        let request = self
+            .client
+            .set_wiring(surface, link::v3_agent_id(agent), change);
+        cx.spawn(async move |this, cx| {
+            let answer = request.await;
+            this.update(cx, |state, cx| match answer {
+                Ok(updated) => {
+                    state.store_surface(updated);
+                    state.saving = Saving::Saved;
+                    if let Some((text, undo)) = toast {
+                        state.show_toast(text, undo, cx);
+                    }
+                    cx.notify();
+                }
+                Err(error) => {
+                    state.saving = Saving::Failed(error.to_string());
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn unwire_locally(&mut self, agent: AgentId, surface: v3::SurfaceId) {
+        let wanted = link::v3_agent_id(agent);
+        for candidate in &mut self.surfaces {
+            if candidate.id != surface {
+                continue;
+            }
+            let mut kept = Vec::new();
+            for wiring in std::mem::take(&mut candidate.agents) {
+                if wiring.agent_id != wanted {
+                    kept.push(wiring);
+                }
+            }
+            candidate.agents = kept;
+        }
+    }
+
+    fn show_toast(&mut self, text: String, undo: Undo, cx: &mut Context<Self>) {
+        self.next_toast += 1;
+        let id = self.next_toast;
+        self.toast = Some(Toast { id, text, undo });
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(TOAST_LIFETIME).await;
+            this.update(cx, |state, cx| {
+                if state.toast.as_ref().is_some_and(|toast| toast.id == id) {
+                    state.toast = None;
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn topic_row(&self, agent: AgentId, surface: v3::SurfaceId) -> Option<TopicRow> {
+        let mut found = None;
+        for row in self.agent_topics(agent) {
+            if row.surface == surface {
+                found = Some(row);
+            }
+        }
+        found
+    }
+
+    fn lead_of(&self, surface: v3::SurfaceId) -> Option<AgentId> {
+        let mut found = None;
+        for candidate in &self.surfaces {
+            if candidate.id == surface {
+                found = candidate.lead_agent_id.map(link::agent_id);
+            }
+        }
+        found
+    }
+
+    fn agent_name(&self, agent: AgentId) -> String {
+        match self.directory_agent(agent) {
+            Some(known) => known.name.clone(),
+            None => "the agent".into(),
+        }
     }
 
     pub fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
@@ -543,6 +929,7 @@ impl AppState {
 
     pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
         if let Disclosure::Inspect(message) = disclosure {
+            self.settings = None;
             self.inspector = Some(Inspector {
                 message,
                 filter: Filter::All,
@@ -631,6 +1018,9 @@ impl AppState {
             self.selected = Some(channel);
             self.halt();
             self.inspector = None;
+            if let Some(settings) = &mut self.settings {
+                settings.back = None;
+            }
             self.messages.clear();
             self.history = History::Unknown;
             self.pending.clear();
@@ -1228,6 +1618,18 @@ fn ends_its_run(kind: v3::MessageKind) -> bool {
     }
 }
 
+fn field_message(error: &v3::ApiError) -> String {
+    match error {
+        v3::ApiError::Invalid(message) => message.clone(),
+        v3::ApiError::NotFound => "the agent is gone".into(),
+        v3::ApiError::Unauthorized => "the daemon rejected the token".into(),
+        v3::ApiError::Conflict => "the change conflicts with the current state".into(),
+        v3::ApiError::Unavailable => "the daemon is unavailable; not saved".into(),
+        v3::ApiError::Transport(_) => "the daemon did not answer; not saved".into(),
+        v3::ApiError::Decode(_) => "the daemon answered something unexpected".into(),
+    }
+}
+
 fn jitter() -> f64 {
     f64::from(OffsetDateTime::now_utc().nanosecond() % 1000) / 1000.0
 }
@@ -1331,7 +1733,7 @@ async fn run_link(this: WeakEntity<AppState>, client: v3::Client, cx: &mut Async
 mod tests {
     use gpui::TestAppContext;
     use tuclaw_core::model::{AgentId, AgentStatus, ChannelId};
-    use tuclaw_core::v3::{AgentId as WireAgent, Scenario};
+    use tuclaw_core::v3::{self, AgentId as WireAgent, Scenario};
 
     use std::time::Duration;
 
@@ -1339,8 +1741,140 @@ mod tests {
     use tuclaw_core::model::MessageId;
     use tuclaw_core::v3::MockTransport;
 
-    use super::{AppState, Link, Player, Segment, SidebarVisibility, TICK, View};
+    use super::{
+        AppState, Filter, Inspector, Link, Player, Segment, SidebarVisibility, TICK, View,
+    };
     use crate::testing::{FakeSpeaker, channel_named, loaded, mocked, play, speaking};
+
+    #[gpui::test]
+    fn settings_take_the_run_slot_and_give_it_back(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let inspector = Inspector {
+            message: MessageId(7),
+            filter: Filter::Tools,
+        };
+        state.update(cx, |state, cx| {
+            state.inspector = Some(inspector);
+            state.open_settings(AgentId(3), cx);
+        });
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.inspector(), None);
+            assert_eq!(
+                state.settings(),
+                Some(crate::agent_settings::Settings {
+                    agent: AgentId(3),
+                    back: Some(inspector),
+                })
+            );
+        });
+        state.update(cx, |state, cx| state.open_settings(AgentId(1), cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.settings().and_then(|settings| settings.back),
+                Some(inspector)
+            );
+        });
+        state.update(cx, |state, cx| state.back_to_run(cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.settings(), None);
+            assert_eq!(state.inspector(), Some(inspector));
+        });
+    }
+
+    #[gpui::test]
+    fn make_lead_demotes_the_old_lead_and_undo_restores_both(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let general = v3::SurfaceId(1);
+        state.update(cx, |state, cx| state.make_lead(AgentId(3), general, cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let roles = roles_in(state, general);
+            assert_eq!(roles, vec![(1, v3::Role::Mention), (3, v3::Role::Lead)]);
+            let Some(toast) = state.toast() else {
+                panic!("make lead offers an undo");
+            };
+            assert!(toast.text.contains("Lead in #General"));
+        });
+        state.update(cx, |state, cx| state.undo(cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                roles_in(state, general),
+                vec![(1, v3::Role::Lead), (3, v3::Role::Mention)]
+            );
+            assert_eq!(state.toast(), None);
+        });
+    }
+
+    #[gpui::test]
+    fn leaving_a_topic_can_be_undone(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let general = v3::SurfaceId(1);
+        state.update(cx, |state, cx| state.leave_topic(AgentId(3), general, cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(roles_in(state, general), vec![(1, v3::Role::Lead)]);
+            assert!(state.toast().is_some());
+        });
+        state.update(cx, |state, cx| state.undo(cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                roles_in(state, general),
+                vec![(1, v3::Role::Lead), (3, v3::Role::Mention)]
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn a_rejected_model_is_reported_on_its_field(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        state.update(cx, |state, cx| {
+            state.save_model(AgentId(3), "opus medium".into(), cx)
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let Some(error) = state.field_error() else {
+                panic!("the model is refused");
+            };
+            assert_eq!(error.field, crate::agent_settings::Field::Model);
+            assert_eq!(
+                state
+                    .directory_agent(AgentId(3))
+                    .map(|agent| agent.model.as_str()),
+                Some("sonnet")
+            );
+        });
+        state.update(cx, |state, cx| {
+            state.save_model(AgentId(3), "opus[1m]:high".into(), cx);
+            state.save_description(AgentId(3), "Pulls releases".into(), cx);
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.field_error(), None);
+            assert_eq!(state.saving(), &crate::agent_settings::Saving::Saved);
+            let Some(agent) = state.directory_agent(AgentId(3)) else {
+                panic!("agent 3 is known");
+            };
+            assert_eq!(agent.model, "opus[1m]:high");
+            assert_eq!(agent.description, "Pulls releases");
+        });
+    }
+
+    fn roles_in(state: &AppState, surface: v3::SurfaceId) -> Vec<(i64, v3::Role)> {
+        let mut roles = Vec::new();
+        for candidate in &state.surfaces {
+            if candidate.id != surface {
+                continue;
+            }
+            for wiring in &candidate.agents {
+                let v3::AgentId(id) = wiring.agent_id;
+                roles.push((id, wiring.role));
+            }
+        }
+        roles.sort_by_key(|(id, _role)| *id);
+        roles
+    }
 
     #[gpui::test]
     fn the_start_loads_me_and_every_avatar(cx: &mut TestAppContext) {
