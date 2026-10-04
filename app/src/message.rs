@@ -9,12 +9,15 @@ use time::OffsetDateTime;
 use time::macros::format_description;
 use tuclaw_core::model::{Agent, Author, Message, MessageId, RecordingId, Span, Voice};
 
+use crate::audio::{PEAKS, Peaks};
 use crate::rich::{self, Ink, Parts};
 use crate::state::Player;
 use crate::theme;
 
 const REASON: usize = 80;
 const BARS: usize = 22;
+const MIN_BAR: f32 = 4.0;
+const MAX_BAR: f32 = 26.0;
 const TRANSCRIPT: &str = "Transcript";
 
 pub type OnToggle = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
@@ -23,10 +26,12 @@ pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub struct Look {
     pub fold: Fold,
     pub player: Player,
+    pub peaks: Option<Peaks>,
 }
 
 struct Controls {
     player: Player,
+    peaks: Option<Peaks>,
     on_play: OnPlay,
 }
 
@@ -71,7 +76,11 @@ pub fn message_row(
         sent_at,
         voice,
     } = message;
-    let Look { fold, player } = look;
+    let Look {
+        fold,
+        player,
+        peaks,
+    } = look;
     let writer = writer(*author, agents);
     let MessageId(raw) = *id;
     let selector = format!("message-{raw}");
@@ -90,6 +99,7 @@ pub fn message_row(
     if let Some(voice) = voice {
         let controls = Controls {
             player,
+            peaks,
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
@@ -146,7 +156,11 @@ pub fn source(body: &[Span]) -> String {
 }
 
 fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Controls) -> Div {
-    let Controls { player, on_play } = controls;
+    let Controls {
+        player,
+        peaks,
+        on_play,
+    } = controls;
     let MessageId(raw) = id;
     let selector = format!("voice-{raw}");
     let known = voice.duration.unwrap_or(Duration::ZERO);
@@ -197,7 +211,7 @@ fn voice_card(id: MessageId, voice: &Voice, transcript: String, controls: Contro
         .py(px(11.))
         .child(button)
         .child(waveform(
-            voice.recording,
+            bar_heights(voice.recording, peaks),
             progress(elapsed.unwrap_or(Duration::ZERO), total),
         ))
         .child(label.flex_none().text_size(px(12.)));
@@ -237,10 +251,10 @@ fn transcript_text(transcript: String) -> StyledText {
     StyledText::new(text).with_highlights(vec![(0..TRANSCRIPT.len(), label)])
 }
 
-fn waveform(recording: RecordingId, played: f32) -> Div {
+fn waveform(heights: Vec<f32>, played: f32) -> Div {
     let lit = (played * BARS as f32).round() as usize;
     let mut bars = div().flex_1().flex().items_center().gap(px(2.5)).h(px(26.));
-    for (index, height) in bar_heights(recording).into_iter().enumerate() {
+    for (index, height) in heights.into_iter().enumerate() {
         let tone = if index < lit {
             theme::ink_soft()
         } else {
@@ -258,7 +272,42 @@ fn waveform(recording: RecordingId, played: f32) -> Div {
     bars
 }
 
-fn bar_heights(recording: RecordingId) -> Vec<f32> {
+fn bar_heights(recording: RecordingId, peaks: Option<Peaks>) -> Vec<f32> {
+    match peaks {
+        Some(peaks) => measured_heights(peaks),
+        None => placeholder_heights(recording),
+    }
+}
+
+fn measured_heights(peaks: Peaks) -> Vec<f32> {
+    let Peaks(levels) = peaks;
+    let mut groups = Vec::new();
+    for bar in 0..BARS {
+        let start = bar * PEAKS / BARS;
+        let end = ((bar + 1) * PEAKS / BARS).max(start + 1);
+        let mut level = 0u8;
+        for value in &levels[start..end] {
+            level = level.max(*value);
+        }
+        groups.push(level);
+    }
+    let mut loudest = 0u8;
+    for level in &groups {
+        loudest = loudest.max(*level);
+    }
+    let mut heights = Vec::new();
+    for level in groups {
+        let share = if loudest == 0 {
+            0.0
+        } else {
+            f32::from(level) / f32::from(loudest)
+        };
+        heights.push(MIN_BAR + (MAX_BAR - MIN_BAR) * share);
+    }
+    heights
+}
+
+fn placeholder_heights(recording: RecordingId) -> Vec<f32> {
     let RecordingId(raw) = recording;
     let mut seed = (raw as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
     let mut heights = Vec::new();
@@ -513,12 +562,28 @@ mod tests {
 
     #[test]
     fn the_waveform_is_stable_per_recording_and_fits_the_row() {
-        let first = bar_heights(RecordingId(5));
-        assert_eq!(first, bar_heights(RecordingId(5)));
-        assert_ne!(first, bar_heights(RecordingId(6)));
+        let first = bar_heights(RecordingId(5), None);
+        assert_eq!(first, bar_heights(RecordingId(5), None));
+        assert_ne!(first, bar_heights(RecordingId(6), None));
         assert_eq!(first.len(), BARS);
         for height in first {
             assert!((6.0..=26.0).contains(&height), "{height}");
+        }
+    }
+
+    #[test]
+    fn measured_peaks_scale_to_the_loudest_bar() {
+        let mut levels = [0u8; PEAKS];
+        levels[0] = 40;
+        levels[PEAKS - 1] = 80;
+        let heights = bar_heights(RecordingId(1), Some(Peaks(levels)));
+        assert_eq!(heights.len(), BARS);
+        assert_eq!(heights[BARS - 1], MAX_BAR);
+        assert_eq!(heights[0], MIN_BAR + (MAX_BAR - MIN_BAR) / 2.0);
+        assert_eq!(heights[BARS / 2], MIN_BAR);
+        let silent = bar_heights(RecordingId(1), Some(Peaks([0; PEAKS])));
+        for height in silent {
+            assert_eq!(height, MIN_BAR);
         }
     }
 

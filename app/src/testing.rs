@@ -6,7 +6,7 @@ use gpui::{AppContext, Entity, TestAppContext};
 use tuclaw_core::model::ChannelId;
 use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario, Seed};
 
-use crate::audio::{Pcm, Speaker};
+use crate::audio::{Pcm, PeakCache, Speaker};
 use crate::link::Source;
 use crate::state::AppState;
 
@@ -58,12 +58,26 @@ pub fn speaking(
     cx: &mut TestAppContext,
     scenario: Scenario,
 ) -> (MockTransport, Entity<AppState>, FakeSpeaker) {
+    speaking_with(cx, scenario, None)
+}
+
+pub fn speaking_with(
+    cx: &mut TestAppContext,
+    scenario: Scenario,
+    cache: Option<PeakCache>,
+) -> (MockTransport, Entity<AppState>, FakeSpeaker) {
     cx.update(gpui_kit::init);
     let mock = MockTransport::new(scenario, Pace::Stepped);
     let client = Client::mock(&mock);
     let speaker = FakeSpeaker::default();
     let boxed = Box::new(speaker.clone());
-    let state = cx.new(|_| AppState::new(client, Source::Mock, boxed));
+    let state = cx.new(|_| {
+        let state = AppState::new(client, Source::Mock, boxed);
+        match cache {
+            Some(cache) => state.with_peak_cache(cache),
+            None => state,
+        }
+    });
     state.update(cx, |state, cx| state.start(cx));
     cx.run_until_parked();
     mock.pump_control();

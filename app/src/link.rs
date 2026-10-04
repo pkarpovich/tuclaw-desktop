@@ -204,6 +204,35 @@ impl Config {
     }
 }
 
+pub fn peak_directory(source: &Source) -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(
+        PathBuf::from(home)
+            .join("Library")
+            .join("Caches")
+            .join("tuclaw-desktop")
+            .join("waveforms")
+            .join(source_key(source)),
+    )
+}
+
+fn source_key(source: &Source) -> String {
+    let url = match source {
+        Source::Mock => return "mock".to_string(),
+        Source::Snapshot => return "snapshot".to_string(),
+        Source::Daemon(url) => url,
+    };
+    let mut key = String::new();
+    for letter in url.trim_start_matches("http://").chars() {
+        if letter.is_ascii_alphanumeric() {
+            key.push(letter);
+        } else {
+            key.push('-');
+        }
+    }
+    key
+}
+
 fn default_world() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     let path = PathBuf::from(home)
@@ -362,6 +391,16 @@ mod tests {
         assert_eq!(other.voice, None);
         let unheaded = message(&spoken("just words", r#"[{"id": 4, "kind": "voice"}]"#));
         assert_eq!(unheaded.body, vec![Span::Text("just words".into())]);
+    }
+
+    #[test]
+    fn every_source_keeps_its_own_waveforms() {
+        assert_eq!(source_key(&Source::Mock), "mock");
+        assert_eq!(source_key(&Source::Snapshot), "snapshot");
+        assert_eq!(
+            source_key(&Source::Daemon("http://192.168.1.10:9090".into())),
+            "192-168-1-10-9090"
+        );
     }
 
     #[test]

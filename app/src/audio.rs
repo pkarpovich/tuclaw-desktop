@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use std::num::NonZero;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use opus_pure::{MAX_PACKET_SAMPLES, OggOpusReader, Trim};
@@ -7,6 +8,65 @@ use rodio::buffer::SamplesBuffer;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 
 const OPUS_RATE: i32 = 48_000;
+pub const PEAKS: usize = 64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Peaks(pub [u8; PEAKS]);
+
+pub fn peaks(pcm: &Pcm) -> Peaks {
+    let channels = usize::from(pcm.channels.max(1));
+    let frames = pcm.samples.len() / channels;
+    let mut levels = [0u8; PEAKS];
+    if frames == 0 {
+        return Peaks(levels);
+    }
+    for (bucket, level) in levels.iter_mut().enumerate() {
+        let start = bucket * frames / PEAKS * channels;
+        let end = ((bucket + 1) * frames / PEAKS * channels).max(start);
+        let mut peak = 0.0f32;
+        for sample in &pcm.samples[start..end] {
+            peak = peak.max(sample.abs());
+        }
+        *level = (peak.min(1.0) * 255.0).round() as u8;
+    }
+    Peaks(levels)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeakCache {
+    directory: PathBuf,
+}
+
+impl PeakCache {
+    pub fn new(directory: PathBuf) -> PeakCache {
+        PeakCache { directory }
+    }
+
+    fn path(&self, recording: i64) -> PathBuf {
+        self.directory.join(format!("{recording}.peaks"))
+    }
+
+    pub fn read(&self, recording: i64) -> Option<Peaks> {
+        let bytes = std::fs::read(self.path(recording)).ok()?;
+        let levels: [u8; PEAKS] = bytes.try_into().ok()?;
+        Some(Peaks(levels))
+    }
+
+    pub fn write(&self, recording: i64, peaks: &Peaks) -> Result<(), String> {
+        let Peaks(levels) = peaks;
+        std::fs::create_dir_all(&self.directory).map_err(|error| error.to_string())?;
+        let target = self.path(recording);
+        let staging = staging_path(&target);
+        std::fs::write(&staging, levels).map_err(|error| error.to_string())?;
+        std::fs::rename(&staging, &target).map_err(|error| error.to_string())
+    }
+}
+
+fn staging_path(target: &Path) -> PathBuf {
+    let mut staging = target.as_os_str().to_owned();
+    staging.push(".tmp");
+    PathBuf::from(staging)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pcm {
@@ -205,6 +265,50 @@ mod tests {
         assert_eq!(ogg.rate, 48_000);
         let m4a = decode("application/octet-stream", TONE_M4A.to_vec()).expect("m4a sniffed");
         assert_eq!(m4a.rate, 44_100);
+    }
+
+    #[test]
+    fn peaks_are_sixty_four_absolute_levels() {
+        let pcm = decode("audio/ogg", TONE_OGG.to_vec()).expect("the tone decodes");
+        let Peaks(levels) = peaks(&pcm);
+        let tone = (loudness(&pcm).min(1.0) * 255.0).round() as u8;
+        let mut loudest = 0;
+        for level in levels {
+            loudest = loudest.max(level);
+            assert!(
+                level > tone / 2,
+                "a steady tone fills every bucket: {levels:?}"
+            );
+        }
+        assert_eq!(loudest, tone);
+        let silence = Pcm {
+            samples: vec![0.0; 4_800],
+            channels: 1,
+            rate: 48_000,
+        };
+        assert_eq!(peaks(&silence), Peaks([0; PEAKS]));
+        let empty = Pcm {
+            samples: Vec::new(),
+            channels: 2,
+            rate: 48_000,
+        };
+        assert_eq!(peaks(&empty), Peaks([0; PEAKS]));
+    }
+
+    #[test]
+    fn the_peak_cache_round_trips_and_rejects_a_wrong_size() {
+        let directory = std::env::temp_dir().join(format!("tuclaw-peaks-{}", std::process::id()));
+        let cache = PeakCache::new(directory.clone());
+        assert_eq!(cache.read(3), None);
+        let mut levels = [0u8; PEAKS];
+        for (index, level) in levels.iter_mut().enumerate() {
+            *level = index as u8 * 4;
+        }
+        cache.write(3, &Peaks(levels)).expect("written");
+        assert_eq!(cache.read(3), Some(Peaks(levels)));
+        std::fs::write(directory.join("4.peaks"), [1u8; 10]).expect("written");
+        assert_eq!(cache.read(4), None);
+        std::fs::remove_dir_all(directory).ok();
     }
 
     #[test]

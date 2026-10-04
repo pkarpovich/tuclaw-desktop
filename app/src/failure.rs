@@ -2,8 +2,8 @@ use gpui::{
     BoxShadow, Context, FontWeight, IntoElement, Render, SharedString, Window, div, prelude::*, px,
 };
 
-use crate::audio::RodioSpeaker;
-use crate::link::Config;
+use crate::audio::{PeakCache, RodioSpeaker};
+use crate::link::{self, Config};
 use crate::state::AppState;
 use crate::theme;
 
@@ -25,11 +25,15 @@ pub fn start(config: Config) -> Startup {
             .unwrap_or_else(|| "the mock daemon".to_string()),
     );
     match config.client() {
-        Ok((client, source)) => Startup::Ready(Box::new(AppState::new(
-            client,
-            source,
-            Box::new(RodioSpeaker::default()),
-        ))),
+        Ok((client, source)) => {
+            let peaks = link::peak_directory(&source);
+            let state = AppState::new(client, source, Box::new(RodioSpeaker::default()));
+            let state = match peaks {
+                Some(directory) => state.with_peak_cache(PeakCache::new(directory)),
+                None => state,
+            };
+            Startup::Ready(Box::new(state))
+        }
         Err(error) => Startup::Failed(FailureView {
             source,
             error: SharedString::from(error),

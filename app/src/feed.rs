@@ -164,9 +164,14 @@ impl Feed {
                     } else {
                         Fold::Collapsed
                     };
+                    let peaks = match &message.voice {
+                        Some(voice) => state.peaks(voice.recording),
+                        None => None,
+                    };
                     let look = Look {
                         fold,
                         player: state.player(message.id),
+                        peaks,
                     };
                     message_row(message, state.agents(), look, &actions).into_any_element()
                 }
