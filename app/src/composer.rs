@@ -1,17 +1,27 @@
 use anyhow::Result;
 use gpui::{
-    App, BoxShadow, Context, Entity, FocusHandle, Focusable, FontWeight, IntoElement, Render,
-    SharedString, Subscription, Window, div, prelude::*, px,
+    App, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement,
+    KeyBinding, Render, SharedString, Subscription, Window, actions, div, prelude::*, px,
 };
 use gpui_kit::base::input::{Enter, Textarea, TextareaState};
 
 use crate::control::button;
-use crate::icon::{Glyph, icon};
+use crate::icon::{Glyph, icon, spinner};
+use crate::state::{AppState, Recording};
 use crate::theme;
+
+actions!(composer, [ToggleTalk]);
+
+const REASON_LIMIT: usize = 60;
 
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
 
 const MAX_ROWS: usize = 10;
+
+enum Talk {
+    Start,
+    Send,
+}
 
 enum Sendable {
     Blank,
@@ -21,7 +31,13 @@ enum Sendable {
 pub struct Composer {
     input: Entity<TextareaState>,
     on_submit: OnSubmit,
+    voice: Option<Entity<AppState>>,
     _observation: Subscription,
+    _voice_observation: Option<Subscription>,
+}
+
+pub fn bind_keys(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new("alt-space", ToggleTalk, None)]);
 }
 
 impl Composer {
@@ -42,7 +58,155 @@ impl Composer {
         Composer {
             input,
             on_submit,
+            voice: None,
             _observation: observation,
+            _voice_observation: None,
+        }
+    }
+
+    pub fn with_voice(mut self, state: Entity<AppState>, cx: &mut Context<Self>) -> Composer {
+        self._voice_observation = Some(cx.observe(&state, |_composer, _state, cx| cx.notify()));
+        self.voice = Some(state);
+        self
+    }
+
+    fn toggle_talk(&mut self, _action: &ToggleTalk, _window: &mut Window, cx: &mut Context<Self>) {
+        self.talk(cx);
+    }
+
+    fn talk(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.voice.clone() else {
+            return;
+        };
+        state.update(cx, |state, cx| match state.recording() {
+            Recording::Live {
+                since: _,
+                channel: _,
+            } => state.finish_recording(cx),
+            Recording::Idle => state.start_recording(cx),
+            Recording::Failed(_) => state.start_recording(cx),
+            Recording::Sending => {}
+        });
+    }
+
+    fn cancel_recording(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.voice.clone() else {
+            return;
+        };
+        state.update(cx, |state, cx| state.cancel_recording(cx));
+    }
+
+    fn voice_controls(&self, cx: &mut Context<Self>) -> Div {
+        let recording = match &self.voice {
+            Some(state) => state.read(cx).recording().clone(),
+            None => Recording::Idle,
+        };
+        let row = div().flex().flex_none().items_center().gap(px(8.));
+        match recording {
+            Recording::Idle => row.child(hint()).child(self.talk_chip(Talk::Start, cx)),
+            Recording::Live { since, channel: _ } => {
+                let elapsed = cx
+                    .background_executor()
+                    .now()
+                    .saturating_duration_since(since);
+                row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme::accent())
+                        .child(div().size(px(8.)).rounded_full().bg(theme::accent()))
+                        .child(SharedString::from(format!(
+                            "Recording {}:{:02}",
+                            elapsed.as_secs() / 60,
+                            elapsed.as_secs() % 60
+                        ))),
+                )
+                .child(
+                    button("composer-cancel-recording")
+                        .px(px(8.))
+                        .py(px(5.))
+                        .rounded(px(7.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .text_size(px(12.5))
+                        .text_color(theme::text_secondary())
+                        .on_click(cx.listener(|composer, _event, _window, cx| {
+                            composer.cancel_recording(cx)
+                        }))
+                        .child("Cancel"),
+                )
+                .child(self.talk_chip(Talk::Send, cx))
+            }
+            Recording::Sending => row.child(
+                div()
+                    .id("composer-transcribing")
+                    .debug_selector(|| "composer-transcribing".to_string())
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .px(px(12.))
+                    .text_size(px(12.5))
+                    .text_color(theme::text_muted())
+                    .child(spinner(px(13.), theme::text_muted()))
+                    .child("Transcribing…"),
+            ),
+            Recording::Failed(reason) => {
+                let mut reason: String = reason.chars().take(REASON_LIMIT).collect();
+                if reason.chars().count() == REASON_LIMIT {
+                    reason.push('…');
+                }
+                row.child(
+                    div()
+                        .id("composer-voice-error")
+                        .debug_selector(|| "composer-voice-error".to_string())
+                        .text_size(px(11.5))
+                        .text_color(theme::accent())
+                        .child(SharedString::from(reason)),
+                )
+                .child(
+                    button("composer-dismiss-voice-error")
+                        .accessibility_label("Dismiss")
+                        .p(px(4.))
+                        .rounded(px(6.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .on_click(cx.listener(|composer, _event, _window, cx| {
+                            composer.cancel_recording(cx)
+                        }))
+                        .child(icon(Glyph::Close, px(12.), theme::text_muted())),
+                )
+                .child(self.talk_chip(Talk::Start, cx))
+            }
+        }
+    }
+
+    fn talk_chip(&self, talk: Talk, cx: &mut Context<Self>) -> gpui_kit::base::Button {
+        let chip = button("composer-talk")
+            .flex_none()
+            .gap(px(7.))
+            .px(px(12.))
+            .py(px(6.))
+            .rounded_full()
+            .border_1()
+            .text_size(px(12.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .on_click(cx.listener(|composer, _event, _window, cx| composer.talk(cx)));
+        match talk {
+            Talk::Start => chip
+                .accessibility_label("Record a voice message")
+                .border_color(theme::border())
+                .bg(theme::raised())
+                .text_color(theme::text_secondary())
+                .child(icon(Glyph::Voice, px(13.), theme::accent()))
+                .child("Talk"),
+            Talk::Send => chip
+                .accessibility_label("Send the voice message")
+                .border_color(theme::accent())
+                .bg(theme::accent())
+                .text_color(theme::chip_text())
+                .child(icon(Glyph::Send, px(13.), theme::chip_text()))
+                .child("Send voice"),
         }
     }
 
@@ -134,6 +298,7 @@ impl Composer {
 
     fn feed_shape(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .on_action(cx.listener(Self::toggle_talk))
             .flex()
             .flex_none()
             .flex_col()
@@ -184,8 +349,7 @@ impl Composer {
                             .child(tool(Glyph::Emoji))
                             .child(tool(Glyph::Format))
                             .child(div().flex_1())
-                            .child(hint())
-                            .child(talk_chip())
+                            .child(self.voice_controls(cx))
                             .child(self.send_button(sendable, cx)),
                     ),
             )
@@ -221,26 +385,7 @@ fn hint() -> impl IntoElement {
         .mr(px(6.))
         .text_size(px(11.5))
         .text_color(theme::text_muted())
-        .child("Hold ⌥Space to talk")
-}
-
-fn talk_chip() -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(7.))
-        .px(px(12.))
-        .py(px(6.))
-        .rounded_full()
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::raised())
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::text_secondary())
-        .child(icon(Glyph::Voice, px(13.), theme::accent()))
-        .child("Talk")
+        .child("⌥Space to talk")
 }
 
 #[cfg(test)]

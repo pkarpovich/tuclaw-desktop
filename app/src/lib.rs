@@ -17,6 +17,7 @@ pub mod menu;
 pub mod message;
 pub mod people;
 pub mod profile_panel;
+pub mod recorder;
 pub mod rich;
 pub mod runlog;
 pub mod settings_panel;
@@ -40,6 +41,7 @@ pub fn run() {
         .run(move |cx: &mut App| {
             gpui_kit::init(cx);
             menu::install(cx);
+            composer::bind_keys(cx);
             let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),

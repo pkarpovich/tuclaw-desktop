@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use futures::StreamExt;
@@ -12,7 +12,7 @@ use tuclaw_core::model::{
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
-    RunState, Seq, TextDelta,
+    RunState, Seq, TextDelta, VoicePost,
 };
 
 use crate::agent_settings::{
@@ -21,6 +21,7 @@ use crate::agent_settings::{
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 use crate::people::{self, Gallery, Me, People};
+use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
 const PAGE: u32 = 50;
@@ -38,6 +39,16 @@ pub enum View {
 pub enum SidebarVisibility {
     Shown,
     Hidden,
+}
+
+const RECORDING_TICK: Duration = Duration::from_millis(500);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Recording {
+    Idle,
+    Live { since: Instant, channel: ChannelId },
+    Sending,
+    Failed(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +158,8 @@ pub struct AppState {
     task_runs: HashMap<v3::TaskId, Vec<v3::TaskRun>>,
     run_logs: HashMap<String, RunLog>,
     speaker: Box<dyn Speaker>,
+    recorder: Box<dyn Recorder>,
+    recording: Recording,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
     waveforms: HashMap<RecordingId, Waveform>,
@@ -198,6 +211,8 @@ impl AppState {
             task_runs: HashMap::new(),
             run_logs: HashMap::new(),
             speaker,
+            recorder: Box::new(NoRecorder),
+            recording: Recording::Idle,
             playback: None,
             _playback: None,
             waveforms: HashMap::new(),
@@ -210,6 +225,120 @@ impl AppState {
             requested: HashSet::new(),
             _link: None,
         }
+    }
+
+    pub fn with_recorder(mut self, recorder: Box<dyn Recorder>) -> AppState {
+        self.recorder = recorder;
+        self
+    }
+
+    pub fn set_recorder(&mut self, recorder: Box<dyn Recorder>) {
+        self.recorder = recorder;
+    }
+
+    pub fn recording(&self) -> &Recording {
+        &self.recording
+    }
+
+    pub fn start_recording(&mut self, cx: &mut Context<Self>) {
+        match self.recording {
+            Recording::Idle => {}
+            Recording::Failed(_) => {}
+            Recording::Live {
+                since: _,
+                channel: _,
+            } => return,
+            Recording::Sending => return,
+        }
+        let Some(channel) = self.selected else {
+            return;
+        };
+        if let Err(reason) = self.recorder.start() {
+            self.recording = Recording::Failed(reason);
+            cx.notify();
+            return;
+        }
+        let since = cx.background_executor().now();
+        self.recording = Recording::Live { since, channel };
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(RECORDING_TICK).await;
+                let Ok(going) = this.update(cx, |state, cx| state.recording_tick(since, cx)) else {
+                    return;
+                };
+                if !going {
+                    return;
+                }
+            }
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn recording_tick(&mut self, started: Instant, cx: &mut Context<Self>) -> bool {
+        let Recording::Live { since, channel: _ } = self.recording else {
+            return false;
+        };
+        if since != started {
+            return false;
+        }
+        if cx.background_executor().now() - since >= recorder::LIMIT {
+            self.finish_recording(cx);
+            return false;
+        }
+        cx.notify();
+        true
+    }
+
+    pub fn finish_recording(&mut self, cx: &mut Context<Self>) {
+        let Recording::Live { since: _, channel } = self.recording else {
+            return;
+        };
+        let Take { kind, bytes } = match self.recorder.finish() {
+            Ok(take) => take,
+            Err(reason) => {
+                self.recording = Recording::Failed(reason);
+                cx.notify();
+                return;
+            }
+        };
+        self.recording = Recording::Sending;
+        let request = self.client.post_voice(
+            link::surface_id(channel),
+            VoicePost {
+                kind,
+                bytes,
+                addressed_agent_id: None,
+                client_message_id: ClientMessageId::random(),
+            },
+        );
+        cx.spawn(async move |this, cx| {
+            let posted = request.await;
+            this.update(cx, |state, cx| {
+                state.recording = match posted {
+                    Ok(_) => Recording::Idle,
+                    Err(error) => Recording::Failed(format!("not sent: {error}")),
+                };
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub fn cancel_recording(&mut self, cx: &mut Context<Self>) {
+        match self.recording {
+            Recording::Live {
+                since: _,
+                channel: _,
+            } => self.recorder.cancel(),
+            Recording::Failed(_) => {}
+            Recording::Idle => return,
+            Recording::Sending => return,
+        }
+        self.recording = Recording::Idle;
+        cx.notify();
     }
 
     pub fn with_peak_cache(mut self, cache: PeakCache) -> AppState {

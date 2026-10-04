@@ -858,6 +858,46 @@ pub struct Post {
     pub client_message_id: ClientMessageId,
 }
 
+/// The audio containers a voice message can be uploaded in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AudioKind {
+    /// AAC in an MPEG-4 container, `audio/mp4`.
+    M4a,
+    /// Opus in Ogg, `audio/ogg`.
+    Ogg,
+}
+
+impl AudioKind {
+    /// Returns the MIME type sent as the upload's `Content-Type`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tuclaw_core::v3::AudioKind;
+    ///
+    /// assert_eq!(AudioKind::M4a.mime(), "audio/mp4");
+    /// ```
+    pub fn mime(self) -> &'static str {
+        match self {
+            AudioKind::M4a => "audio/mp4",
+            AudioKind::Ogg => "audio/ogg",
+        }
+    }
+}
+
+/// A recorded voice message to post into a surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoicePost {
+    /// The recording's container.
+    pub kind: AudioKind,
+    /// The encoded recording.
+    pub bytes: Vec<u8>,
+    /// The agent the message is addressed to, if any.
+    pub addressed_agent_id: Option<AgentId>,
+    /// The idempotency key.
+    pub client_message_id: ClientMessageId,
+}
+
 /// The `202` answer to a post.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Posted {

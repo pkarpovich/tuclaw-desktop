@@ -6,6 +6,7 @@ use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario};
 use tuclaw_desktop::audio::{PeakCache, RodioSpeaker};
 use tuclaw_desktop::icon::Icons;
 use tuclaw_desktop::link::Source;
+use tuclaw_desktop::recorder::{Recorder, Take};
 use tuclaw_desktop::runlog::Disclosure;
 use tuclaw_desktop::shell::Shell;
 use tuclaw_desktop::state::AppState;
@@ -18,6 +19,7 @@ fn main() {
     let inspect = std::env::args().any(|arg| arg == "--inspect");
     let profile = std::env::args().any(|arg| arg == "--profile");
     let automations = std::env::args().any(|arg| arg == "--automations");
+    let recording = std::env::args().any(|arg| arg == "--recording");
     let mut settings = None;
     let mut task = None;
     for arg in std::env::args() {
@@ -125,6 +127,15 @@ fn main() {
         cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
         cx.run_until_parked();
     }
+    if recording {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.set_recorder(Box::new(Stub));
+                state.start_recording(cx);
+            })
+        });
+        cx.run_until_parked();
+    }
     if automations {
         cx.update(|cx| {
             state.update(cx, |state, cx| {
@@ -163,10 +174,26 @@ fn main() {
     std::fs::create_dir_all(&directory).expect("the directory exists");
     let name = if automations || task.is_some() {
         "Automations".to_string()
+    } else if recording {
+        format!("{}-recording", channel.replace(' ', "-"))
     } else {
         channel.replace(' ', "-")
     };
     let path = directory.join(format!("{name}.png"));
     image.save(&path).expect("the png is written");
     println!("{}", path.display());
+}
+
+struct Stub;
+
+impl Recorder for Stub {
+    fn start(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<Take, String> {
+        Err("a snapshot records nothing".to_string())
+    }
+
+    fn cancel(&mut self) {}
 }

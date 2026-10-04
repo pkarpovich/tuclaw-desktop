@@ -30,6 +30,8 @@
 	<string>@MIN_MACOS@</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Tuclaw talks to the tuclaw daemon on your local network.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tuclaw records voice messages for your agents.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

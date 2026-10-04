@@ -61,6 +61,8 @@ pub struct Recorded {
     pub authorization: Option<String>,
     /// The `Content-Type` header, if any.
     pub content_type: Option<String>,
+    /// The `X-Client-Message-Id` header, if any.
+    pub client_message_id: Option<String>,
     /// The request body.
     pub body: String,
 }
@@ -206,6 +208,7 @@ async fn serve(mut stream: TcpStream, state: Arc<Mutex<State>>) {
     }
     let mut authorization = None;
     let mut content_type = None;
+    let mut client_message_id = None;
     let mut length = 0;
     for line in lines {
         let Some((name, value)) = line.split_once(':') else {
@@ -217,6 +220,9 @@ async fn serve(mut stream: TcpStream, state: Arc<Mutex<State>>) {
         }
         if name.eq_ignore_ascii_case("content-type") {
             content_type = Some(value.to_string());
+        }
+        if name.eq_ignore_ascii_case("x-client-message-id") {
+            client_message_id = Some(value.to_string());
         }
         if name.eq_ignore_ascii_case("content-length") {
             length = value.parse().unwrap_or(0);
@@ -237,6 +243,7 @@ async fn serve(mut stream: TcpStream, state: Arc<Mutex<State>>) {
             target: target.to_string(),
             authorization,
             content_type,
+            client_message_id,
             body: String::from_utf8_lossy(&body).into_owned(),
         });
         state
@@ -358,6 +365,7 @@ impl Callback for Upgrade {
             target: request.uri().to_string(),
             authorization,
             content_type: None,
+            client_message_id: None,
             body: String::new(),
         });
         let Some(status) = self.rejection else {

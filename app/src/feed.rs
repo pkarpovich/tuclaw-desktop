@@ -132,6 +132,7 @@ impl Feed {
                 window,
                 cx,
             )
+            .with_voice(state.clone(), cx)
         });
         Feed {
             state,
@@ -731,8 +732,8 @@ mod tests {
     use super::{Busy, Feed, Header, Item, busy_agents, header};
     use crate::live::RunView;
     use crate::runlog::{Row, StepStatus};
-    use crate::state::AppState;
-    use crate::testing::{channel_named, loaded, play};
+    use crate::state::{AppState, Recording};
+    use crate::testing::{FakeRecorder, channel_named, loaded, play};
 
     fn agent(id: i64, status: AgentStatus) -> Agent {
         Agent {
@@ -758,6 +759,61 @@ mod tests {
         let built = state.clone();
         let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         (mock, state, feed, cx)
+    }
+
+    #[gpui::test]
+    fn talk_records_and_a_second_press_posts_the_voice(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        let tape = recorder.0.clone();
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        assert!(tape.borrow().recording);
+        assert!(cx.debug_bounds("composer-cancel-recording").is_some());
+        click(cx, "composer-talk".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.recording(), &Recording::Idle);
+        });
+        let mut steps = 0;
+        while mock.step() && steps < 4 {
+            steps += 1;
+        }
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let Some(last) = state.messages().last() else {
+                panic!("the voice message arrived");
+            };
+            assert_eq!(last.author, Author::User);
+            assert!(last.voice.is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn a_cancelled_recording_posts_nothing(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        let tape = recorder.0.clone();
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        let before = state.read_with(cx, |state, _cx| state.messages().len());
+        click(cx, "composer-talk".to_string());
+        click(cx, "composer-cancel-recording".to_string());
+        assert_eq!(tape.borrow().cancelled, 1);
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.recording(), &Recording::Idle);
+            assert_eq!(state.messages().len(), before);
+        });
+    }
+
+    #[gpui::test]
+    fn a_microphone_that_refuses_shows_why(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        recorder.0.borrow_mut().refuse = Some("the microphone is not available".into());
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        assert!(cx.debug_bounds("composer-voice-error").is_some());
+        click(cx, "composer-dismiss-voice-error".to_string());
+        assert!(cx.debug_bounds("composer-voice-error").is_none());
     }
 
     fn last_agent_message(state: &Entity<AppState>, cx: &mut VisualTestContext) -> i64 {

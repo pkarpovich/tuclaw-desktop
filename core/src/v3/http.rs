@@ -15,12 +15,14 @@ use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
-use super::dto::Seq;
+use super::dto::{ClientMessageId, Seq};
 use super::frames::{ClientFrame, Frame, decode, encode};
 use super::runtime::{handle, spawn};
 use super::transport::{ApiError, Body, Connection, Method, Request, Transport};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const CLIENT_MESSAGE_ID: &str = "X-Client-Message-Id";
+const VOICE_TIMEOUT: Duration = Duration::from_secs(180);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT_DEADLINE: Duration = Duration::from_secs(60);
 
@@ -154,6 +156,7 @@ impl Transport for HttpTransport {
         let Request { method, path, body } = request;
         let url = format!("{}{path}", self.api);
         let builder = match method {
+            Method::Post => self.client.post(url),
             Method::Put => self.client.put(url),
             Method::Patch => self.client.patch(url),
             Method::Delete => self.client.delete(url),
@@ -162,6 +165,15 @@ impl Transport for HttpTransport {
             Body::Empty => builder,
             Body::Json(json) => builder.json(&json),
             Body::Image { kind, bytes } => builder.header(CONTENT_TYPE, kind.mime()).body(bytes),
+            Body::Voice {
+                kind,
+                bytes,
+                client_message_id: ClientMessageId(id),
+            } => builder
+                .timeout(VOICE_TIMEOUT)
+                .header(CONTENT_TYPE, kind.mime())
+                .header(CLIENT_MESSAGE_ID, id)
+                .body(bytes),
         };
         let builder = self.authorized(builder);
         spawn(
@@ -295,8 +307,8 @@ mod tests {
     use crate::testing::{Events, FakeDaemon, Reply};
     use crate::v3::client::{AvatarOwner, Client};
     use crate::v3::dto::{
-        AgentId, AgentPatch, AvatarUrl, ClientMessageId, ImageKind, InputId, MePatch, MessageId,
-        ModelChange, Post, Posted, Role, RunId, SurfaceId, WiringChange,
+        AgentId, AgentPatch, AudioKind, AvatarUrl, ClientMessageId, ImageKind, InputId, MePatch,
+        MessageId, ModelChange, Post, Posted, Role, RunId, SurfaceId, VoicePost, WiringChange,
     };
     use crate::v3::frames::Frame;
 
@@ -396,6 +408,39 @@ mod tests {
         let requests = daemon.requests();
         assert_eq!(requests[0].method, "PUT");
         assert_eq!(requests[0].content_type.as_deref(), Some("image/png"));
+        assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
+    }
+
+    #[test]
+    fn a_voice_post_is_raw_audio_with_its_key_in_a_header() {
+        let daemon = FakeDaemon::start();
+        daemon.route(
+            "POST",
+            "/api/v3/surfaces/4/voice",
+            json_reply(
+                202,
+                r#"{"message_id": 9301, "input_id": 77, "agent_id": 3}"#,
+            ),
+        );
+        let posted = within(client(&daemon).post_voice(
+            SurfaceId(4),
+            VoicePost {
+                kind: AudioKind::M4a,
+                bytes: b"....ftypM4A ".to_vec(),
+                addressed_agent_id: Some(AgentId(3)),
+                client_message_id: ClientMessageId("0f8e-voice".into()),
+            },
+        ))
+        .expect("the voice is posted");
+        assert_eq!(posted.message_id, MessageId(9301));
+        let requests = daemon.requests();
+        assert_eq!(requests[0].method, "POST");
+        assert_eq!(
+            requests[0].target,
+            "/api/v3/surfaces/4/voice?addressed_agent_id=3"
+        );
+        assert_eq!(requests[0].content_type.as_deref(), Some("audio/mp4"));
+        assert_eq!(requests[0].client_message_id.as_deref(), Some("0f8e-voice"));
         assert_eq!(requests[0].authorization.as_deref(), Some("Bearer s3cret"));
     }
 

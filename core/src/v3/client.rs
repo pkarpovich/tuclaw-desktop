@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::dto::{
     Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, ImageKind, Me, MePatch,
     MessageId, MessagesPage, Post, Posted, RunDetail, RunId, Seq, Surface, SurfaceId, Task, TaskId,
-    TaskRun, WiringChange,
+    TaskRun, VoicePost, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -110,6 +110,39 @@ impl Client {
                 .post(&format!("/surfaces/{surface}/messages"), Some(encoded)),
             Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
         };
+        async move { body(request.await?) }
+    }
+
+    /// Posts a recorded voice message; the daemon answers once it has the transcript.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Conflict`] when the idempotency key was used on another surface.
+    pub fn post_voice(
+        &self,
+        surface: SurfaceId,
+        voice: VoicePost,
+    ) -> impl Future<Output = Result<Posted, ApiError>> + Send + 'static {
+        let SurfaceId(surface) = surface;
+        let VoicePost {
+            kind,
+            bytes,
+            addressed_agent_id,
+            client_message_id,
+        } = voice;
+        let path = match addressed_agent_id {
+            Some(AgentId(agent)) => format!("/surfaces/{surface}/voice?addressed_agent_id={agent}"),
+            None => format!("/surfaces/{surface}/voice"),
+        };
+        let request = self.transport.send(Request {
+            method: Method::Post,
+            path,
+            body: Body::Voice {
+                kind,
+                bytes,
+                client_message_id,
+            },
+        });
         async move { body(request.await?) }
     }
 

@@ -8,6 +8,7 @@ use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario, Seed};
 
 use crate::audio::{Pcm, PeakCache, Speaker};
 use crate::link::Source;
+use crate::recorder::{Recorder, Take};
 use crate::state::AppState;
 
 #[derive(Default)]
@@ -46,6 +47,45 @@ impl Speaker for FakeSpeaker {
 
     fn finished(&self) -> bool {
         !self.0.borrow().playing
+    }
+}
+
+#[derive(Default)]
+pub struct Tape {
+    pub recording: bool,
+    pub cancelled: usize,
+    pub refuse: Option<String>,
+}
+
+#[derive(Clone, Default)]
+pub struct FakeRecorder(pub Rc<RefCell<Tape>>);
+
+impl Recorder for FakeRecorder {
+    fn start(&mut self) -> Result<(), String> {
+        let mut tape = self.0.borrow_mut();
+        if let Some(reason) = tape.refuse.clone() {
+            return Err(reason);
+        }
+        tape.recording = true;
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<Take, String> {
+        let mut tape = self.0.borrow_mut();
+        if !tape.recording {
+            return Err("nothing is being recorded".to_string());
+        }
+        tape.recording = false;
+        Ok(Take {
+            kind: tuclaw_core::v3::AudioKind::M4a,
+            bytes: b"....ftypM4A recording".to_vec(),
+        })
+    }
+
+    fn cancel(&mut self) {
+        let mut tape = self.0.borrow_mut();
+        tape.recording = false;
+        tape.cancelled += 1;
     }
 }
 

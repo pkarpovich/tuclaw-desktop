@@ -123,6 +123,7 @@ impl Avatar {
 #[derive(Debug, Clone)]
 enum Media {
     Embedded(&'static [u8]),
+    Owned(Vec<u8>),
     File(PathBuf),
 }
 
@@ -465,6 +466,10 @@ impl Transport for MockTransport {
         ready(Ok(connection)).boxed()
     }
 }
+
+const VOICE_LIMIT: usize = 20 * 1024 * 1024;
+const VOICE_ATTACHMENTS: i64 = 100;
+const VOICE_TRANSCRIPT: &str = "Что нового за сегодня?";
 
 fn fresh_run() -> RunId {
     RunId(Uuid::new_v4().to_string())
@@ -1115,6 +1120,7 @@ impl World {
         };
         match media {
             Media::Embedded(bytes) => Ok(bytes.to_vec()),
+            Media::Owned(bytes) => Ok(bytes.clone()),
             Media::File(path) => std::fs::read(path)
                 .map_err(|error| ApiError::Transport(format!("{}: {error}", path.display()))),
         }
@@ -1133,7 +1139,7 @@ impl World {
                 };
                 let post: Post = serde_json::from_value(body)
                     .map_err(|error| ApiError::Invalid(error.to_string()))?;
-                to_json(&self.accept(surface, post)?)
+                to_json(&self.accept(surface, post, Vec::new())?)
             }
             ["runs", id, "interrupt"] => {
                 self.interrupt(&RunId((*id).to_string()))?;
@@ -1145,7 +1151,63 @@ impl World {
         }
     }
 
-    fn accept(&mut self, surface: SurfaceId, post: Post) -> Result<Posted, ApiError> {
+    fn voice(
+        &mut self,
+        surface: SurfaceId,
+        query: &str,
+        method: Method,
+        body: Body,
+    ) -> Result<Value, ApiError> {
+        let (
+            Method::Post,
+            Body::Voice {
+                kind,
+                bytes,
+                client_message_id,
+            },
+        ) = (method, body)
+        else {
+            return Err(ApiError::NotFound);
+        };
+        if bytes.is_empty() {
+            return Err(ApiError::Invalid("the recording is empty".into()));
+        }
+        if bytes.len() > VOICE_LIMIT {
+            return Err(ApiError::Invalid("the recording is over 20 MiB".into()));
+        }
+        let mut addressed_agent_id = None;
+        for pair in query.split('&') {
+            let Some(("addressed_agent_id", agent)) = pair.split_once('=') else {
+                continue;
+            };
+            addressed_agent_id = Some(parse_agent(agent)?);
+        }
+        let post = Post {
+            text: format!("[Voice message]\n{VOICE_TRANSCRIPT}"),
+            addressed_agent_id,
+            client_message_id,
+        };
+        if self.posted.contains_key(&post.client_message_id) {
+            return to_json(&self.accept(surface, post, Vec::new())?);
+        }
+        let id = AttachmentId(VOICE_ATTACHMENTS + i64::try_from(self.media.len()).unwrap_or(0));
+        let attachment = Attachment {
+            id,
+            kind: AttachmentKind::Voice,
+            mime: kind.mime().into(),
+            size_bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
+            duration_ms: None,
+        };
+        self.media.insert(id, Media::Owned(bytes));
+        to_json(&self.accept(surface, post, vec![attachment])?)
+    }
+
+    fn accept(
+        &mut self,
+        surface: SurfaceId,
+        post: Post,
+        attachments: Vec<Attachment>,
+    ) -> Result<Posted, ApiError> {
         if let Some((first, posted)) = self.posted.get(&post.client_message_id) {
             if *first != surface {
                 return Err(ApiError::Conflict);
@@ -1179,8 +1241,10 @@ impl World {
             Some(post.client_message_id.clone()),
         );
         message.addressed_agent_id = post.addressed_agent_id;
+        message.attachments = attachments.clone();
         if let Some(stored) = self.messages.last_mut() {
             stored.addressed_agent_id = post.addressed_agent_id;
+            stored.attachments = attachments;
         }
         let input = self.next_input();
         let posted = Posted {
@@ -1501,8 +1565,16 @@ impl World {
             return Err(ApiError::Unavailable);
         }
         let Request { method, path, body } = request;
-        let segments = segments(&path);
+        let (route, query) = match path.split_once('?') {
+            Some((route, query)) => (route, query),
+            None => (path.as_str(), ""),
+        };
+        let segments = segments(route);
         let owner = match segments.as_slice() {
+            ["surfaces", id, "voice"] => {
+                let surface = parse_surface(id)?;
+                return self.voice(surface, query, method, body);
+            }
             ["agents", id, "avatar"] => {
                 let agent = parse_agent(id)?;
                 let mut known = false;
@@ -1534,45 +1606,48 @@ impl World {
             ["surfaces", surface, "agents", agent] => {
                 let surface = parse_surface(surface)?;
                 let agent = parse_agent(agent)?;
-                return match (method, body) {
-                    (Method::Put, Body::Json(json)) => self.wire(surface, agent, &json),
-                    (
-                        Method::Delete,
-                        Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ },
-                    ) => self.unwire(surface, agent),
-                    (Method::Put, Body::Empty) => {
-                        Err(ApiError::Invalid("a body is required".into()))
-                    }
-                    (Method::Put, Body::Image { kind: _, bytes: _ }) => {
-                        Err(ApiError::Invalid("a JSON body is required".into()))
-                    }
-                    (
-                        Method::Patch,
-                        Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ },
-                    ) => Err(ApiError::NotFound),
+                return match method {
+                    Method::Put => match body {
+                        Body::Json(json) => self.wire(surface, agent, &json),
+                        Body::Empty => Err(ApiError::Invalid("a body is required".into())),
+                        Body::Image { kind: _, bytes: _ }
+                        | Body::Voice {
+                            kind: _,
+                            bytes: _,
+                            client_message_id: _,
+                        } => Err(ApiError::Invalid("a JSON body is required".into())),
+                    },
+                    Method::Delete => self.unwire(surface, agent),
+                    Method::Patch | Method::Post => Err(ApiError::NotFound),
                 };
             }
             [..] => return Err(ApiError::NotFound),
         };
-        match (method, body) {
-            (Method::Put, Body::Image { kind: _, bytes }) => self.store_avatar(owner, bytes),
-            (Method::Delete, Body::Empty) => {
-                self.avatars.remove(&owner);
-                Ok(Value::Null)
-            }
-            (Method::Put, Body::Empty) => {
-                Err(ApiError::Invalid("an image body is required".into()))
-            }
-            (Method::Put, Body::Json(_)) => {
-                Err(ApiError::Invalid("an image body is required".into()))
-            }
-            (Method::Delete, Body::Json(_)) => Err(ApiError::Invalid("no body expected".into())),
-            (Method::Delete, Body::Image { kind: _, bytes: _ }) => {
-                Err(ApiError::Invalid("no body expected".into()))
-            }
-            (Method::Patch, Body::Empty | Body::Json(_) | Body::Image { kind: _, bytes: _ }) => {
-                Err(ApiError::NotFound)
-            }
+        match method {
+            Method::Put => match body {
+                Body::Image { kind: _, bytes } => self.store_avatar(owner, bytes),
+                Body::Empty
+                | Body::Json(_)
+                | Body::Voice {
+                    kind: _,
+                    bytes: _,
+                    client_message_id: _,
+                } => Err(ApiError::Invalid("an image body is required".into())),
+            },
+            Method::Delete => match body {
+                Body::Empty => {
+                    self.avatars.remove(&owner);
+                    Ok(Value::Null)
+                }
+                Body::Json(_)
+                | Body::Image { kind: _, bytes: _ }
+                | Body::Voice {
+                    kind: _,
+                    bytes: _,
+                    client_message_id: _,
+                } => Err(ApiError::Invalid("no body expected".into())),
+            },
+            Method::Patch | Method::Post => Err(ApiError::NotFound),
         }
     }
 
@@ -2455,7 +2530,7 @@ mod tests {
 
     use super::*;
     use crate::v3::client::{Client, Pause, TaskScope};
-    use crate::v3::dto::{AgentPatch, ModelChange};
+    use crate::v3::dto::{AgentPatch, AudioKind, ModelChange, VoicePost};
 
     fn stepped() -> (MockTransport, Client) {
         let mock = MockTransport::new(Scenario::default(), Pace::Stepped);
@@ -2525,6 +2600,42 @@ mod tests {
         mock.pump_control();
         drain(&mut connection);
         connection
+    }
+
+    fn voice(bytes: &[u8], client_message_id: &ClientMessageId) -> VoicePost {
+        VoicePost {
+            kind: AudioKind::M4a,
+            bytes: bytes.to_vec(),
+            addressed_agent_id: None,
+            client_message_id: client_message_id.clone(),
+        }
+    }
+
+    #[test]
+    fn a_voice_post_stores_the_recording_and_wakes_the_lead() {
+        let (_mock, client) = stepped();
+        let key = ClientMessageId::random();
+        let posted = block_on(client.post_voice(SurfaceId(1), voice(b"m4a bytes", &key)))
+            .expect("the voice is accepted");
+        assert_eq!(posted.agent_id, Some(AgentId(1)));
+        let again = block_on(client.post_voice(SurfaceId(1), voice(b"m4a bytes", &key)))
+            .expect("a retry answers the first ids");
+        assert_eq!(again, posted);
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let Some(stored) = page.messages.last() else {
+            panic!("the voice message is stored");
+        };
+        assert_eq!(stored.id, posted.message_id);
+        assert!(stored.text.starts_with("[Voice message]"));
+        assert_eq!(stored.attachments.len(), 1);
+        assert_eq!(stored.attachments[0].mime, "audio/mp4");
+        let bytes = block_on(client.attachment(stored.attachments[0].id)).expect("bytes");
+        assert_eq!(bytes, b"m4a bytes");
+        let empty =
+            block_on(client.post_voice(SurfaceId(1), voice(b"", &ClientMessageId::random())));
+        let Err(ApiError::Invalid(_)) = empty else {
+            panic!("an empty recording is refused");
+        };
     }
 
     #[test]

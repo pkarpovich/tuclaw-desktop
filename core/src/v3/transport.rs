@@ -5,7 +5,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::future::BoxFuture;
 use serde_json::Value;
 
-use super::dto::{ErrorBody, ErrorDetail, ImageKind, Seq, SurfaceId};
+use super::dto::{AudioKind, ClientMessageId, ErrorBody, ErrorDetail, ImageKind, Seq, SurfaceId};
 use super::frames::{ClientFrame, Frame};
 
 /// Why a call to the daemon failed.
@@ -108,6 +108,8 @@ impl Connection {
 /// A write other than `POST`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
+    /// Creates something.
+    Post,
     /// Replaces a resource.
     Put,
     /// Edits a resource in place.
@@ -129,6 +131,15 @@ pub enum Body {
         kind: ImageKind,
         /// The encoded image.
         bytes: Vec<u8>,
+    },
+    /// A raw voice recording, sent with its MIME type and idempotency key.
+    Voice {
+        /// The recording's container.
+        kind: AudioKind,
+        /// The encoded recording.
+        bytes: Vec<u8>,
+        /// The idempotency key, sent as `X-Client-Message-Id`.
+        client_message_id: ClientMessageId,
     },
 }
 
