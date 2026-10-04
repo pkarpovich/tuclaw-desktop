@@ -140,6 +140,8 @@ fn body(
                 .pt(px(4.))
                 .text_size(px(12.5))
                 .text_color(theme::text_secondary())
+                .line_clamp(3)
+                .text_ellipsis()
                 .child(description),
         );
     }
