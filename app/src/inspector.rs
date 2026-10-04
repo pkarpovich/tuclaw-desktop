@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::{App, Div, FontWeight, SharedString, Stateful, Window, div, prelude::*, px, relative};
+use gpui::{
+    App, Div, FontWeight, SharedString, Stateful, Window, div, phi, prelude::*, px, relative,
+};
+use gpui_kit::base::ToggleGroup;
 use tuclaw_core::model::{Agent, Message, RunOutcome, RunRef};
 use tuclaw_core::v3::RunDetail;
 
-use crate::control::button;
+use crate::control::{self, button};
 use crate::icon::{Glyph, icon};
 use crate::message::{avatar, writer};
 use crate::rich;
@@ -332,9 +335,8 @@ fn status_block(run: &RunRef, log: Option<&RunLog>) -> Div {
     )
 }
 
-fn filters(active: Filter, on_filter: OnFilter) -> Div {
-    let mut row = div()
-        .flex()
+fn filters(active: Filter, on_filter: OnFilter) -> ToggleGroup {
+    let mut group = control::segments("inspector-filters")
         .gap(px(2.))
         .mx(px(16.))
         .mb(px(6.))
@@ -348,26 +350,18 @@ fn filters(active: Filter, on_filter: OnFilter) -> Div {
         (Filter::Errors, "Errors", "inspector-filter-errors"),
     ] {
         let pick = on_filter.clone();
-        let chip = div()
-            .id(selector)
-            .debug_selector(move || selector.to_string())
-            .flex_1()
-            .flex()
-            .justify_center()
-            .py(px(4.))
-            .rounded(px(6.))
-            .text_size(px(12.))
-            .font_weight(FontWeight::SEMIBOLD)
-            .cursor_pointer()
-            .on_click(move |_event, window, cx| pick(filter, window, cx))
-            .child(label);
-        row = row.child(if filter == active {
-            chip.bg(theme::raised()).text_color(theme::text_primary())
-        } else {
-            chip.text_color(theme::text_secondary())
-        });
+        group = group.child(
+            control::segment(selector, filter == active)
+                .flex_1()
+                .py(px(4.))
+                .rounded(px(6.))
+                .text_size(px(12.))
+                .line_height(phi())
+                .on_change(move |_pressed, _event, window, cx| pick(filter, window, cx))
+                .child(label),
+        );
     }
-    row
+    group
 }
 
 fn note(text: &'static str) -> Div {

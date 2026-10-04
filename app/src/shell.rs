@@ -1,10 +1,10 @@
 use gpui::{
-    AnyElement, BoxShadow, Context, Div, Entity, FontWeight, Hsla, IntoElement, Pixels, Point,
-    Render, SharedString, Subscription, Window, actions, div, point, prelude::*, px,
+    AnyElement, BoxShadow, Context, Div, Entity, Hsla, IntoElement, Pixels, Point, Render,
+    SharedString, Subscription, Window, actions, div, phi, point, prelude::*, px,
 };
 
 use crate::agents::AgentsView;
-use crate::control::button;
+use crate::control::{self, button};
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
 use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
@@ -148,34 +148,25 @@ impl Shell {
         active: Segment,
         label: &'static str,
         selector: &'static str,
-        cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let chip = div()
-            .id(selector)
-            .debug_selector(move || selector.to_string())
-            .flex()
-            .items_center()
+        let state = self.state.clone();
+        control::segment(selector, segment == active)
             .px(px(12.))
             .py(px(4.))
             .rounded(px(7.))
             .text_size(px(12.5))
-            .font_weight(FontWeight::SEMIBOLD)
-            .cursor_pointer()
-            .on_click(cx.listener(move |shell, _event, _window, cx| {
-                shell
-                    .state
-                    .update(cx, |state, cx| state.activate_segment(segment, cx));
-            }))
-            .child(label);
-        if segment == active {
-            chip.bg(theme::raised())
-                .text_color(theme::text_primary())
-                .shadow(vec![
-                    BoxShadow::new(px(0.), px(1.), theme::shadow()).blur_radius(px(2.)),
-                ])
-        } else {
-            chip.text_color(theme::text_secondary())
-        }
+            .line_height(phi())
+            .styles(|styles| {
+                styles.pressed(|style| {
+                    style.shadow(vec![
+                        BoxShadow::new(px(0.), px(1.), theme::shadow()).blur_radius(px(2.)),
+                    ])
+                })
+            })
+            .on_change(move |_pressed, _event, _window, cx| {
+                state.update(cx, |state, cx| state.activate_segment(segment, cx));
+            })
+            .child(label)
     }
 
     fn sidebar_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -219,17 +210,13 @@ impl Shell {
                 }
             })
             .child(
-                div()
-                    .id("segments")
-                    .debug_selector(|| "segments".to_string())
-                    .flex()
-                    .items_center()
+                control::segments("segments")
                     .gap(px(3.))
                     .p(px(3.))
                     .rounded(px(9.))
                     .bg(theme::sunken())
-                    .child(self.segment(Segment::Channel, active, "Channel", "segment-channel", cx))
-                    .child(self.segment(Segment::Agents, active, "Agents", "segment-agents", cx)),
+                    .child(self.segment(Segment::Channel, active, "Channel", "segment-channel"))
+                    .child(self.segment(Segment::Agents, active, "Agents", "segment-agents")),
             )
             .child(div().flex_1())
             .child(
