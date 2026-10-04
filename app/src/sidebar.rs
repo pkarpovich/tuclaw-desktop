@@ -178,7 +178,10 @@ impl Render for Sidebar {
 }
 
 fn sections(state: &AppState) -> Vec<Section> {
-    let selected = state.selected();
+    let selected = match state.view() {
+        View::Conversation => state.selected(),
+        View::Agents => None,
+    };
     let agents = state.agents();
     let mut sections: Vec<Section> = Vec::new();
     for Channel {
@@ -458,6 +461,23 @@ mod tests {
             assert_eq!(names, vec!["General", "Magnet Feed", "Smart Home"]);
             assert!(rows[0].highlight == Highlight::On);
             assert!(rows[1].highlight == Highlight::Off);
+        });
+    }
+
+    #[gpui::test]
+    fn the_agents_view_highlights_no_channel_row(cx: &mut TestAppContext) {
+        let (state, cx) = sidebar(cx);
+        state.update(cx, |state, cx| state.activate_segment(Segment::Agents, cx));
+        state.read_with(cx, |state, _cx| {
+            for Section { title: _, rows } in sections(state) {
+                for row in rows {
+                    assert!(
+                        row.highlight == Highlight::Off,
+                        "{} is highlighted",
+                        row.name
+                    );
+                }
+            }
         });
     }
 
