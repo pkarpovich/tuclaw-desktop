@@ -16,6 +16,7 @@ pub mod live;
 pub mod menu;
 pub mod message;
 pub mod people;
+pub mod picture;
 pub mod profile_panel;
 pub mod recorder;
 pub mod rich;

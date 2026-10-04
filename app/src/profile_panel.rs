@@ -6,7 +6,7 @@ use gpui_kit::base::input::{Input, InputEvent, InputState, Textarea, TextareaSta
 
 use crate::agent_settings::Field;
 use crate::control::{AvatarSize, Face, avatar, button};
-use crate::form::{error_line, field_frame, label, saving_label};
+use crate::form::{error_line, field_frame, label, saving_label, upload_failure};
 use crate::icon::{Glyph, icon};
 use crate::link;
 use crate::state::AppState;
@@ -132,6 +132,7 @@ impl Render for ProfilePanel {
         let has_picture = picture.is_some();
         let saving = state.saving().clone();
         let error = state.field_error().cloned();
+        let failure = upload_failure(&saving, error.is_some());
         let (name_error, description_error) = match error {
             Some(error) => match error.field {
                 Field::Name => (Some(error.message), None),
@@ -285,7 +286,8 @@ impl Render for ProfilePanel {
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .child(SharedString::from(me.name.clone())),
                                     )
-                                    .child(avatar_actions),
+                                    .child(avatar_actions)
+                                    .children(failure),
                             ),
                     )
                     .child(name_field)
@@ -313,6 +315,32 @@ mod tests {
     use crate::agent_settings::Target;
     use crate::shell::Shell;
     use crate::testing::loaded;
+
+    const AVIF: &[u8] = include_bytes!("../testdata/avatar.avif");
+
+    #[gpui::test]
+    fn an_avif_upload_becomes_the_picture_and_garbage_says_why(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_shell, cx) = cx.add_window_view(move |window, cx| Shell::new(built, window, cx));
+        state.update(cx, |state, cx| state.open_profile(cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.upload_my_avatar(b"not an image".to_vec(), cx)
+        });
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("upload-failure").is_some());
+        let before = state.read_with(cx, |state, _cx| state.people().me.picture.clone());
+        state.update(cx, |state, cx| state.upload_my_avatar(AVIF.to_vec(), cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let me = state.people().me;
+            assert!(me.picture.is_some());
+            assert_ne!(me.picture, before);
+            assert_eq!(state.saving(), &crate::agent_settings::Saving::Saved);
+        });
+        assert!(cx.debug_bounds("upload-failure").is_none());
+    }
 
     #[gpui::test]
     fn the_sidebar_gear_opens_the_profile_and_it_saves(cx: &mut TestAppContext) {

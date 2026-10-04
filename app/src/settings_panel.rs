@@ -9,7 +9,7 @@ use tuclaw_core::v3::{self, Role};
 
 use crate::agent_settings::{Field, Joinable, Saving, Settings, Toast, TopicRow};
 use crate::control::{self, AvatarSize, Face, avatar, button, row_button};
-use crate::form::{error_line, field_frame, label, saving_label};
+use crate::form::{error_line, field_frame, label, saving_label, upload_failure};
 use crate::icon::{Glyph, icon};
 use crate::people::People;
 use crate::state::AppState;
@@ -221,6 +221,8 @@ impl SettingsPanel {
 
     fn identity(&self, face: Face, known: &v3::Agent, cx: &mut Context<Self>) -> Div {
         let has_picture = face.picture.is_some();
+        let state = self.state.read(cx);
+        let failure = upload_failure(state.saving(), state.field_error().is_some());
         let bot = known
             .bot_username
             .clone()
@@ -287,7 +289,8 @@ impl SettingsPanel {
                                     .child(SharedString::from(bot)),
                             ),
                     )
-                    .child(actions),
+                    .child(actions)
+                    .children(failure),
             )
     }
 

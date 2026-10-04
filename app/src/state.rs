@@ -21,6 +21,7 @@ use crate::agent_settings::{
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
 use crate::people::{self, Gallery, Me, People};
+use crate::picture::{self, Upload};
 use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
@@ -974,10 +975,13 @@ impl AppState {
     }
 
     pub fn upload_my_avatar(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
-        let Some(kind) = v3::ImageKind::sniff(&bytes) else {
-            self.saving = Saving::Failed("not a png, jpeg or webp image".into());
-            cx.notify();
-            return;
+        let Upload { kind, bytes } = match picture::prepare(bytes) {
+            Ok(upload) => upload,
+            Err(reason) => {
+                self.saving = Saving::Failed(reason);
+                cx.notify();
+                return;
+            }
         };
         let request = self.client.set_avatar(v3::AvatarOwner::Me, kind, bytes);
         self.after_my_avatar_write(async move { request.await.map(|_url| ()) }, cx);
@@ -1331,10 +1335,13 @@ impl AppState {
     }
 
     pub fn upload_avatar(&mut self, agent: AgentId, bytes: Vec<u8>, cx: &mut Context<Self>) {
-        let Some(kind) = v3::ImageKind::sniff(&bytes) else {
-            self.saving = Saving::Failed("not a png, jpeg or webp image".into());
-            cx.notify();
-            return;
+        let Upload { kind, bytes } = match picture::prepare(bytes) {
+            Ok(upload) => upload,
+            Err(reason) => {
+                self.saving = Saving::Failed(reason);
+                cx.notify();
+                return;
+            }
         };
         let request = self.client.set_avatar(
             v3::AvatarOwner::Agent(link::v3_agent_id(agent)),
