@@ -343,6 +343,15 @@ impl MockTransport {
 
     /// Queues a message an agent posts on a surface outside any run, e.g. a picture it linked.
     pub fn agent_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
+        self.agent_posts_from(surface, agent, text, "user");
+    }
+
+    /// Queues an agent's post that an automation, not the user, started.
+    pub fn automation_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
+        self.agent_posts_from(surface, agent, text, "scheduled");
+    }
+
+    fn agent_posts_from(&self, surface: SurfaceId, agent: AgentId, text: &str, origin: &str) {
         let mut world = self.lock();
         let message = Message {
             id: world.next_message(),
@@ -356,7 +365,7 @@ impl MockTransport {
             reply_to_message_id: None,
             text: text.to_string(),
             run_id: None,
-            origin: "user".into(),
+            origin: origin.into(),
             channel: None,
             client_message_id: None,
             created_at: world.now,

@@ -142,7 +142,7 @@ impl Feed {
                 feed.schedule_seen(cx);
             }
         });
-        let items = items(state.read(cx), OffsetDateTime::now_utc());
+        let items = items(state.read(cx), local::now());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
         list.set_follow_mode(FollowMode::Tail);
         let pager = state.downgrade();
@@ -321,7 +321,7 @@ impl Feed {
             Some((anchor, _)) => (Some(anchor), offset_in_item),
             None => (None, offset_in_item),
         };
-        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let items = items(self.state.read(cx), local::now());
         let mut found = None;
         if let Some(anchor) = anchor {
             for (index, item) in items.iter().enumerate() {
@@ -348,7 +348,7 @@ impl Feed {
     }
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
-        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let items = items(self.state.read(cx), local::now());
         let before = self.items.len();
         let first_run = first_run(&items);
         self.items = Rc::new(items);

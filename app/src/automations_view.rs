@@ -563,7 +563,7 @@ fn outcome_word(outcome: Outcome) -> &'static str {
 }
 
 fn when(at: OffsetDateTime) -> String {
-    local::when(at, OffsetDateTime::now_utc())
+    local::when(at, local::now())
 }
 
 fn first_line(text: &str) -> String {

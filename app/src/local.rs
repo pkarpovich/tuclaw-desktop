@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -6,13 +6,25 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime, UtcOffset};
 
 static ZONE: LazyLock<TimeZone> = LazyLock::new(TimeZone::system);
+static FIXED: OnceLock<OffsetDateTime> = OnceLock::new();
+
+pub fn now() -> OffsetDateTime {
+    match FIXED.get() {
+        Some(at) => *at,
+        None => OffsetDateTime::now_utc(),
+    }
+}
+
+pub fn fix_now(at: OffsetDateTime) {
+    FIXED.set(at).ok();
+}
 
 pub fn local(at: OffsetDateTime) -> OffsetDateTime {
     in_zone(at, &ZONE)
 }
 
 pub fn today() -> Date {
-    local(OffsetDateTime::now_utc()).date()
+    local(now()).date()
 }
 
 pub fn clock(at: OffsetDateTime) -> String {

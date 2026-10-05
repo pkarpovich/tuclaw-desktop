@@ -1408,9 +1408,7 @@ impl AppState {
         self.settings = None;
         self.automations.open = true;
         if let Some(channel) = self.selected {
-            self.automations
-                .seen
-                .insert(channel, OffsetDateTime::now_utc());
+            self.automations.seen.insert(channel, crate::local::now());
         }
         cx.notify();
     }

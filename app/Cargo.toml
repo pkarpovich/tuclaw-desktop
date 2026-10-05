@@ -28,3 +28,7 @@ objc2-core-graphics = { version = "0.3.2", features = ["CGImage"] }
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 gpui_platform = { workspace = true, features = ["test-support"] }
+
+[[test]]
+name = "visual"
+harness = false

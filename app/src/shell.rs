@@ -258,7 +258,7 @@ impl Shell {
                 tasks: state.channel_tasks(),
                 fires: state.fires(),
                 show_skipped: state.show_skipped(),
-                now: time::OffsetDateTime::now_utc(),
+                now: crate::local::now(),
             },
             automations_panel::PanelActions {
                 on_close,

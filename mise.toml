@@ -17,6 +17,10 @@ run = "cargo run -q -p tuclaw-desktop --example snapshot --"
 description = "Run both test tiers"
 run = "cargo test --workspace"
 
+[tasks.visual]
+description = "Render the visual scenes and compare them with app/tests/visual (UPDATE_BASELINE=1 rewrites them)"
+run = "cargo test -p tuclaw-desktop --test visual"
+
 [tasks.lint]
 description = "Clippy with warnings as errors"
 run = "cargo clippy --workspace --all-targets -- -D warnings"
