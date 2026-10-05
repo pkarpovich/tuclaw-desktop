@@ -1289,6 +1289,34 @@ mod tests {
         assert_eq!(super::pulse_text(&idle), "5 automations");
     }
 
+    #[gpui::test]
+    fn dragging_across_a_message_selects_and_copies_its_text(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_root, cx) = cx.add_window_view(move |window, cx| {
+            let feed = gpui::AppContext::new(cx, |cx| Feed::new(built, window, cx));
+            gpui_kit::base::Root::new(feed, window, cx)
+        });
+        let raw = posted_by_jarvis(&mock, &state, cx, "Copy this sentence please.");
+        let selector: &'static str = Box::leak(format!("message-{raw}-md").into_boxed_str());
+        let bounds = cx
+            .debug_bounds(selector)
+            .expect("the message text is drawn");
+        let start = gpui::point(bounds.left() + gpui::px(1.), bounds.center().y);
+        let end = gpui::point(bounds.right() - gpui::px(1.), bounds.center().y);
+        cx.simulate_mouse_down(start, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.simulate_mouse_move(
+            end,
+            Some(gpui::MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(end, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.run_until_parked();
+        cx.simulate_keystrokes("cmd-c");
+        let copied = cx.read_from_clipboard().and_then(|item| item.text());
+        assert_eq!(copied.as_deref(), Some("Copy this sentence please."));
+    }
+
     #[test]
     fn the_agent_count_agrees_in_number() {
         assert_eq!(super::agent_count(0), "0 agents");

@@ -159,11 +159,15 @@ pub fn message_row(
             index => format!("{selector}-md-{index}"),
         };
         column = match segment {
-            Segment::Text(text) => column.child(div().text_size(px(14.5)).child(rich::markdown(
-                SharedString::from(key),
-                text,
-                Ink::Body,
-            ))),
+            Segment::Text(text) => column.child(
+                div()
+                    .debug_selector({
+                        let key = key.clone();
+                        move || key
+                    })
+                    .text_size(px(14.5))
+                    .child(rich::markdown(SharedString::from(key), text, Ink::Body)),
+            ),
             Segment::Picture(picture) => column.child(picture_block(
                 &key,
                 &picture,
