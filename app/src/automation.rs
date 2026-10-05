@@ -4,9 +4,10 @@ use gpui::{App, Div, FontWeight, Hsla, SharedString, Window, div, prelude::*, px
 use time::OffsetDateTime;
 use tuclaw_core::v3::{FireMark, Outcome, Schedule, ScheduleKind, Task, TaskId};
 
-use crate::control::row_button;
+use crate::control::{button, row_button};
 use crate::icon::{Glyph, icon};
 use crate::local::clock;
+use crate::runlog::MONO;
 use crate::theme;
 
 const LABEL_LIMIT: usize = 60;
@@ -18,9 +19,7 @@ pub struct FireRow {
     pub task: TaskId,
     pub label: String,
     pub outcome: Outcome,
-    pub first: OffsetDateTime,
-    pub last: OffsetDateTime,
-    pub count: usize,
+    pub at: OffsetDateTime,
     pub error: Option<String>,
 }
 
@@ -38,31 +37,68 @@ impl FireRow {
             task: task_id.clone(),
             label: label_of(task_id, tasks),
             outcome: *outcome,
-            first: at,
-            last: at,
-            count: 1,
+            at,
             error: error.clone(),
         }
     }
+}
 
-    pub fn absorbs(&self, next: &FireRow) -> bool {
-        skipped(self.outcome) && skipped(next.outcome) && self.task == next.task
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Quiet {
+    pub first: OffsetDateTime,
+    pub last: OffsetDateTime,
+    pub checks: usize,
+    pub ran: usize,
+}
+
+impl Quiet {
+    pub fn new(at: OffsetDateTime, outcome: Outcome) -> Quiet {
+        let mut quiet = Quiet {
+            first: at,
+            last: at,
+            checks: 0,
+            ran: 0,
+        };
+        quiet.add(at, outcome);
+        quiet
     }
 
-    pub fn absorb(&mut self, next: FireRow) {
-        self.last = next.last;
-        self.count += next.count;
+    pub fn add(&mut self, at: OffsetDateTime, outcome: Outcome) {
+        self.first = self.first.min(at);
+        self.last = self.last.max(at);
+        self.checks += 1;
+        let ran = match outcome {
+            Outcome::Ran => true,
+            Outcome::Silent => true,
+            Outcome::Skipped => false,
+            Outcome::Failed => false,
+            Outcome::Unknown => false,
+        };
+        if ran {
+            self.ran += 1;
+        }
     }
 }
 
-fn skipped(outcome: Outcome) -> bool {
-    match outcome {
-        Outcome::Skipped => true,
-        Outcome::Ran => false,
-        Outcome::Silent => false,
-        Outcome::Failed => false,
-        Outcome::Unknown => false,
+pub fn quiet_span(quiet: &Quiet) -> String {
+    let first = clock(quiet.first);
+    let last = clock(quiet.last);
+    if first == last {
+        return first;
     }
+    format!("{first} – {last}")
+}
+
+pub fn quiet_text(quiet: &Quiet) -> String {
+    let checks = if quiet.checks == 1 {
+        "1 check".to_string()
+    } else {
+        format!("{} checks", quiet.checks)
+    };
+    if quiet.ran == 0 {
+        return format!("quiet · {checks}, nothing to do");
+    }
+    format!("quiet · {checks} · {} ran", quiet.ran)
 }
 
 pub fn label_of(task: &TaskId, tasks: &[Task]) -> String {
@@ -82,22 +118,6 @@ pub fn label_of(task: &TaskId, tasks: &[Task]) -> String {
     let mut clipped: String = line.chars().take(LABEL_LIMIT).collect();
     clipped.push('…');
     clipped
-}
-
-pub fn outcome_text(row: &FireRow) -> String {
-    match row.outcome {
-        Outcome::Ran => "ran".to_string(),
-        Outcome::Silent => "ran, nothing to say".to_string(),
-        Outcome::Skipped if row.count > 1 => {
-            format!("skipped {}× since {}", row.count, clock(row.first))
-        }
-        Outcome::Skipped => "skipped, nothing to do".to_string(),
-        Outcome::Failed => match &row.error {
-            Some(error) => format!("failed: {error}"),
-            None => "failed".to_string(),
-        },
-        Outcome::Unknown => "fired".to_string(),
-    }
 }
 
 pub fn outcome_tone(outcome: Outcome) -> Hsla {
@@ -122,38 +142,112 @@ pub fn schedule_text(schedule: &Schedule) -> String {
     }
 }
 
-pub fn fire_row(row: &FireRow, on_open: OnTask) -> Div {
-    let selector = format!("fire-{}-{}", row.task.0, row.last.unix_timestamp());
-    let task = row.task.clone();
-    div().px(px(20.)).py(px(3.)).child(
-        row_button(selector)
-            .gap(px(8.))
-            .px(px(10.))
-            .py(px(4.))
-            .rounded(px(7.))
-            .hover(|style| style.bg(theme::sunken()))
-            .text_size(px(12.))
-            .text_color(theme::text_muted())
-            .on_click(move |_event, window, cx| on_open(&task, window, cx))
-            .child(icon(Glyph::Automation, px(12.), outcome_tone(row.outcome)))
+pub fn quiet_divider(quiet: &Quiet) -> Div {
+    let selector = format!("quiet-{}", quiet.first.unix_timestamp());
+    let rule = || div().flex_1().h(px(1.)).bg(theme::hairline());
+    div().px(px(20.)).py(px(8.)).child(
+        div()
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector)
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .text_size(px(11.5))
+            .child(rule())
             .child(
                 div()
+                    .flex_none()
                     .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(theme::text_secondary())
-                    .child(SharedString::from(row.label.clone())),
+                    .text_color(theme::text_label())
+                    .child(SharedString::from(quiet_span(quiet))),
             )
-            .child(div().child("·"))
             .child(
                 div()
-                    .text_color(outcome_tone(row.outcome))
-                    .child(SharedString::from(outcome_text(row))),
+                    .flex_none()
+                    .text_color(theme::text_muted())
+                    .child(SharedString::from(quiet_text(quiet))),
             )
-            .child(div().child(SharedString::from(clock(row.last)))),
+            .child(rule()),
+    )
+}
+
+pub fn failed_card(row: &FireRow, on_open: OnTask) -> Div {
+    let selector = format!("failed-{}-{}", row.task.0, row.at.unix_timestamp());
+    let task = row.task.clone();
+    let error = row.error.clone().unwrap_or_else(|| "failed".to_string());
+    div().px(px(20.)).py(px(4.)).child(
+        div()
+            .id(SharedString::from(selector.clone()))
+            .debug_selector({
+                let selector = selector.clone();
+                move || selector
+            })
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .px(px(12.))
+            .py(px(10.))
+            .rounded(px(9.))
+            .bg(theme::failure_tint())
+            .border_1()
+            .border_color(theme::hairline())
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .text_size(px(12.5))
+                    .child(icon(Glyph::Automation, px(13.), theme::accent()))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(theme::accent())
+                            .child("Automation failed"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .truncate()
+                            .text_color(theme::text_secondary())
+                            .child(SharedString::from(row.label.clone())),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(px(11.5))
+                            .text_color(theme::text_muted())
+                            .child(SharedString::from(clock(row.at))),
+                    ),
+            )
+            .child(
+                div()
+                    .font_family(MONO)
+                    .text_size(px(11.5))
+                    .text_color(theme::accent())
+                    .child(SharedString::from(error)),
+            )
+            .child(
+                div().flex().child(
+                    button(format!("{selector}-open"))
+                        .px(px(10.))
+                        .py(px(3.))
+                        .rounded(px(6.))
+                        .border_1()
+                        .border_color(theme::border())
+                        .bg(theme::card())
+                        .text_size(px(12.))
+                        .text_color(theme::text_primary())
+                        .on_click(move |_event, window, cx| on_open(&task, window, cx))
+                        .child("Open automation"),
+                ),
+            ),
     )
 }
 
 pub fn trigger_tag(row: &FireRow, on_open: OnTask) -> gpui_kit::base::Button {
-    let selector = format!("trigger-{}-{}", row.task.0, row.last.unix_timestamp());
+    let selector = format!("trigger-{}-{}", row.task.0, row.at.unix_timestamp());
     let task = row.task.clone();
     row_button(selector)
         .accessibility_label(format!("Open the automation {}", row.label))
@@ -173,41 +267,26 @@ pub fn trigger_tag(row: &FireRow, on_open: OnTask) -> gpui_kit::base::Button {
 #[cfg(test)]
 mod tests {
     use time::macros::datetime;
-    use tuclaw_core::v3::{FireMark, Outcome, TaskId};
+    use tuclaw_core::v3::{Outcome, TaskId};
 
-    use super::{FireRow, label_of, outcome_text};
+    use super::{Quiet, label_of, quiet_span, quiet_text};
     use crate::local::clock;
 
-    fn row(task: &str, outcome: Outcome, minute: u8) -> FireRow {
-        let at = datetime!(2026-10-04 09:00 UTC) + time::Duration::minutes(i64::from(minute));
-        FireRow::new(
-            &FireMark {
-                task_id: TaskId(task.into()),
-                at: Some(at),
-                outcome,
-                run_id: None,
-                message_id: None,
-                error: None,
-            },
-            at,
-            &[],
-        )
-    }
-
     #[test]
-    fn consecutive_skips_of_one_task_collapse() {
-        let mut first = row("a", Outcome::Skipped, 0);
-        let second = row("a", Outcome::Skipped, 15);
-        assert!(first.absorbs(&second));
-        first.absorb(second);
-        assert_eq!(first.count, 2);
+    fn a_quiet_stretch_counts_its_checks_and_what_ran() {
+        let start = datetime!(2026-10-05 01:00 UTC);
+        let mut quiet = Quiet::new(start, Outcome::Skipped);
+        assert_eq!(quiet_text(&quiet), "quiet · 1 check, nothing to do");
+        assert_eq!(quiet_span(&quiet), clock(start));
+        let end = start + time::Duration::hours(2);
+        quiet.add(end, Outcome::Skipped);
+        quiet.add(start + time::Duration::minutes(30), Outcome::Silent);
+        assert_eq!(quiet.checks, 3);
+        assert_eq!(quiet_text(&quiet), "quiet · 3 checks · 1 ran");
         assert_eq!(
-            outcome_text(&first),
-            format!("skipped 2× since {}", clock(first.first))
+            quiet_span(&quiet),
+            format!("{} – {}", clock(start), clock(end))
         );
-        assert!(!first.absorbs(&row("b", Outcome::Skipped, 30)));
-        assert!(!first.absorbs(&row("a", Outcome::Ran, 30)));
-        assert!(!row("a", Outcome::Ran, 0).absorbs(&row("a", Outcome::Ran, 1)));
     }
 
     #[test]

@@ -11,7 +11,7 @@ use tuclaw_core::grouping::day_title;
 use tuclaw_core::model::{Agent, AgentId, Channel, ChannelKind, Message, MessageId};
 use tuclaw_core::v3;
 
-use crate::automation::{FireRow, OnTask, fire_row, trigger_tag};
+use crate::automation::{FireRow, OnTask, Quiet, failed_card, quiet_divider, trigger_tag};
 use crate::card;
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
@@ -24,6 +24,7 @@ use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
 
 const PREFETCH: usize = 3;
+const QUIET_GAP: time::Duration = time::Duration::hours(1);
 use crate::theme;
 
 pub struct Feed {
@@ -46,7 +47,8 @@ enum Item {
     Separator(SharedString),
     Message(Message, Option<FireRow>),
     Unread,
-    Fire(FireRow),
+    Failed(FireRow),
+    Quiet(Quiet),
     Run(RunView),
 }
 
@@ -273,7 +275,8 @@ impl Feed {
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
                 Item::Unread => unread_divider().into_any_element(),
-                Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
+                Item::Failed(row) => failed_card(row, on_task.clone()).into_any_element(),
+                Item::Quiet(quiet) => quiet_divider(quiet).into_any_element(),
                 Item::Message(message, trigger) => {
                     let state = state.read(cx);
                     let fold = if state.is_expanded(message.id) {
@@ -360,7 +363,7 @@ impl Render for Feed {
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     let today = local::local(now).date();
     let mut triggers: HashMap<MessageId, FireRow> = HashMap::new();
-    let mut loose = Vec::new();
+    let mut entries = Vec::new();
     for mark in state.fires() {
         let Some(at) = mark.at else {
             continue;
@@ -373,21 +376,28 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
             v3::Outcome::Failed => None,
             v3::Outcome::Unknown => None,
         };
-        let Some(answer) = answer.filter(|answer| has_message(state, *answer)) else {
-            loose.push((at, row));
+        if let Some(answer) = answer.filter(|answer| has_message(state, *answer)) {
+            triggers.insert(answer, row);
             continue;
+        }
+        let entry = match mark.outcome {
+            v3::Outcome::Failed => Entry::Item(at, Box::new(Item::Failed(row))),
+            v3::Outcome::Ran => Entry::Check(at, mark.outcome),
+            v3::Outcome::Silent => Entry::Check(at, mark.outcome),
+            v3::Outcome::Skipped => Entry::Check(at, mark.outcome),
+            v3::Outcome::Unknown => Entry::Check(at, mark.outcome),
         };
-        triggers.insert(answer, row);
+        entries.push(entry);
     }
-    let mut timeline = Vec::new();
     for message in state.messages() {
         let trigger = triggers.remove(&message.id);
-        timeline.push((message.sent_at, Item::Message(message.clone(), trigger)));
+        entries.push(Entry::Item(
+            message.sent_at,
+            Box::new(Item::Message(message.clone(), trigger)),
+        ));
     }
-    for (at, row) in loose {
-        timeline.push((at, Item::Fire(row)));
-    }
-    timeline.sort_by_key(|(at, _item)| *at);
+    entries.sort_by_key(Entry::at);
+    let timeline = fold_quiet(entries, now);
     let mut items: Vec<Item> = Vec::new();
     let mut day = None;
     let mut divider = state.divider();
@@ -404,19 +414,55 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
             day = Some(date);
             items.push(Item::Separator(SharedString::from(day_title(date, today))));
         }
-        if let Item::Fire(next) = &item
-            && let Some(Item::Fire(previous)) = items.last_mut()
-            && previous.absorbs(next)
-        {
-            previous.absorb(next.clone());
-            continue;
-        }
         items.push(item);
     }
     for run in state.live_runs() {
         items.push(Item::Run(run_view(run)));
     }
     items
+}
+
+enum Entry {
+    Item(OffsetDateTime, Box<Item>),
+    Check(OffsetDateTime, v3::Outcome),
+}
+
+impl Entry {
+    fn at(&self) -> OffsetDateTime {
+        match self {
+            Entry::Item(at, _item) => *at,
+            Entry::Check(at, _outcome) => *at,
+        }
+    }
+}
+
+fn fold_quiet(entries: Vec<Entry>, now: OffsetDateTime) -> Vec<(OffsetDateTime, Item)> {
+    let mut timeline = Vec::new();
+    let mut since: Option<OffsetDateTime> = None;
+    let mut pending: Option<Quiet> = None;
+    for entry in entries {
+        match entry {
+            Entry::Check(at, outcome) => match &mut pending {
+                Some(quiet) => quiet.add(at, outcome),
+                None => pending = Some(Quiet::new(at, outcome)),
+            },
+            Entry::Item(at, item) => {
+                if let Some(quiet) = pending.take()
+                    && at - since.unwrap_or(quiet.first) >= QUIET_GAP
+                {
+                    timeline.push((quiet.first, Item::Quiet(quiet)));
+                }
+                since = Some(at);
+                timeline.push((at, *item));
+            }
+        }
+    }
+    if let Some(quiet) = pending
+        && now - since.unwrap_or(quiet.first) >= QUIET_GAP
+    {
+        timeline.push((quiet.first, Item::Quiet(quiet)));
+    }
+    timeline
 }
 
 fn has_message(state: &AppState, id: MessageId) -> bool {
@@ -435,7 +481,8 @@ enum Key {
     Separator(SharedString),
     Unread,
     Message(tuclaw_core::model::MessageId),
-    Fire(tuclaw_core::v3::TaskId, i64),
+    Failed(tuclaw_core::v3::TaskId, i64),
+    Quiet(i64),
     Run(Option<tuclaw_core::v3::RunId>),
 }
 
@@ -444,7 +491,8 @@ fn key(item: &Item) -> Key {
         Item::Separator(title) => Key::Separator(title.clone()),
         Item::Unread => Key::Unread,
         Item::Message(message, _trigger) => Key::Message(message.id),
-        Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+        Item::Failed(row) => Key::Failed(row.task.clone(), row.at.unix_timestamp()),
+        Item::Quiet(quiet) => Key::Quiet(quiet.first.unix_timestamp()),
         Item::Run(run) => Key::Run(run.id.clone()),
     }
 }
@@ -456,11 +504,14 @@ fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
                 return Some((Key::Message(message.id), index != from));
             }
             Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
-            Item::Fire(row) => {
+            Item::Failed(row) => {
                 return Some((
-                    Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+                    Key::Failed(row.task.clone(), row.at.unix_timestamp()),
                     index != from,
                 ));
+            }
+            Item::Quiet(quiet) => {
+                return Some((Key::Quiet(quiet.first.unix_timestamp()), index != from));
             }
             Item::Separator(_) => {}
             Item::Unread => {}
@@ -484,7 +535,8 @@ fn first_run(items: &[Item]) -> usize {
             Item::Separator(_) => {}
             Item::Unread => {}
             Item::Message(_, _) => {}
-            Item::Fire(_) => {}
+            Item::Failed(_) => {}
+            Item::Quiet(_) => {}
         }
     }
     first
@@ -1039,6 +1091,64 @@ mod tests {
         feed.read_with(cx, |feed, cx| feed.composer.read(cx).text(cx).to_string())
     }
 
+    fn check(minute: i64) -> super::Entry {
+        super::Entry::Check(
+            time::macros::datetime!(2026-10-05 00:00 UTC) + time::Duration::minutes(minute),
+            tuclaw_core::v3::Outcome::Skipped,
+        )
+    }
+
+    fn boundary(minute: i64) -> super::Entry {
+        super::Entry::Item(
+            time::macros::datetime!(2026-10-05 00:00 UTC) + time::Duration::minutes(minute),
+            Box::new(Item::Unread),
+        )
+    }
+
+    fn quiet_checks(timeline: &[(time::OffsetDateTime, Item)]) -> Vec<usize> {
+        let mut checks = Vec::new();
+        for (_at, item) in timeline {
+            if let Item::Quiet(quiet) = item {
+                checks.push(quiet.checks);
+            }
+        }
+        checks
+    }
+
+    #[test]
+    fn checks_in_an_hour_long_pause_fold_into_one_quiet_line() {
+        let now = time::macros::datetime!(2026-10-05 12:00 UTC);
+        let long = super::fold_quiet(
+            vec![boundary(0), check(10), check(25), check(70), boundary(180)],
+            now,
+        );
+        assert_eq!(quiet_checks(&long), vec![3]);
+        assert_eq!(long.len(), 3);
+        let short = super::fold_quiet(vec![boundary(0), check(10), check(20), boundary(40)], now);
+        assert!(quiet_checks(&short).is_empty());
+        assert_eq!(short.len(), 2);
+    }
+
+    #[test]
+    fn a_boundary_splits_the_quiet_stretch_and_the_tail_runs_to_now() {
+        let now = time::macros::datetime!(2026-10-05 08:00 UTC);
+        let timeline = super::fold_quiet(
+            vec![
+                boundary(0),
+                check(30),
+                check(90),
+                boundary(120),
+                check(150),
+                check(300),
+            ],
+            now,
+        );
+        assert_eq!(quiet_checks(&timeline), vec![2, 2]);
+        let recent = time::macros::datetime!(2026-10-05 05:20 UTC);
+        let fresh = super::fold_quiet(vec![boundary(300), check(310)], recent);
+        assert!(quiet_checks(&fresh).is_empty());
+    }
+
     #[test]
     fn the_agent_count_agrees_in_number() {
         assert_eq!(super::agent_count(0), "0 agents");
@@ -1052,14 +1162,15 @@ mod tests {
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         feed.read_with(cx, |feed, _cx| {
             assert_eq!(feed.list.item_count(), feed.items.len());
-            let mut fires = Vec::new();
+            let mut marks = 0;
             let mut triggered = 0;
             for item in feed.items.iter() {
                 match item {
-                    Item::Fire(row) => {
+                    Item::Failed(row) => {
                         assert_ne!(row.label, "An automation");
-                        fires.push(row.outcome);
+                        marks += 1;
                     }
+                    Item::Quiet(_) => marks += 1,
                     Item::Message(_, Some(_)) => triggered += 1,
                     Item::Message(_, None) => {}
                     Item::Separator(_) => {}
@@ -1067,9 +1178,8 @@ mod tests {
                     Item::Run(_) => {}
                 }
             }
-            assert_eq!(fires, vec![tuclaw_core::v3::Outcome::Silent]);
             assert_eq!(triggered, 1);
-            assert_eq!(feed.items.len(), 31 + fires.len());
+            assert_eq!(feed.items.len(), 31 + marks);
         });
     }
 
@@ -1149,7 +1259,8 @@ mod tests {
                     Item::Separator(_) => {}
                     Item::Unread => {}
                     Item::Message(_, _) => {}
-                    Item::Fire(_) => {}
+                    Item::Failed(_) => {}
+                    Item::Quiet(_) => {}
                 }
             }
             runs
