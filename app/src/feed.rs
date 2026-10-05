@@ -1670,6 +1670,23 @@ mod tests {
     }
 
     #[gpui::test]
+    fn seeing_the_newest_reply_reads_the_older_ones_too(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        let first = posted_by_jarvis(&mock, &state, cx, "First, above the view.");
+        let last = posted_by_jarvis(&mock, &state, cx, "Second, the newest.");
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.mark_seen(vec![tuclaw_core::model::MessageId(last)], cx)
+        });
+        cx.run_until_parked();
+        let stripe: &'static str = Box::leak(format!("message-{first}-stripe").into_boxed_str());
+        assert!(cx.debug_bounds(stripe).is_none());
+        assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
     fn a_reply_below_the_view_raises_a_pill_that_scrolls_to_it(cx: &mut TestAppContext) {
         let (mock, state, _feed, cx) = feed(cx);
         state.update(cx, |state, _cx| state.set_following(false));

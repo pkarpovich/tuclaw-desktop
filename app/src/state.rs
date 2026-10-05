@@ -627,8 +627,22 @@ impl AppState {
         if !self.window_active || messages.is_empty() {
             return;
         }
+        let mut newest = MessageId(0);
+        for message in &messages {
+            newest = newest.max(*message);
+        }
         let mut changed = false;
         for message in messages {
+            changed |= self.seen.insert(message);
+        }
+        let mut older = Vec::new();
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 && message.id < newest {
+                older.push(message.id);
+            }
+        }
+        for message in older {
             changed |= self.seen.insert(message);
         }
         if changed {
