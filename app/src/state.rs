@@ -137,6 +137,13 @@ struct Pending {
     local: MessageId,
 }
 
+#[derive(Default)]
+struct AutomationsPanel {
+    open: bool,
+    show_skipped: bool,
+    seen: HashMap<ChannelId, OffsetDateTime>,
+}
+
 pub struct AppState {
     client: v3::Client,
     source: Source,
@@ -162,6 +169,7 @@ pub struct AppState {
     expanded: HashSet<MessageId>,
     toggled: HashSet<Disclosure>,
     inspector: Option<Inspector>,
+    automations: AutomationsPanel,
     settings: Option<Settings>,
     saving: Saving,
     field_error: Option<FieldError>,
@@ -240,6 +248,7 @@ impl AppState {
             cursors: HashMap::new(),
             divider: None,
             held: None,
+            automations: AutomationsPanel::default(),
             window_active: true,
             recording: Recording::Idle,
             playback: None,
@@ -1304,6 +1313,82 @@ impl AppState {
         self.inspector
     }
 
+    pub fn automations_open(&self) -> bool {
+        self.automations.open
+    }
+
+    pub fn show_skipped(&self) -> bool {
+        self.automations.show_skipped
+    }
+
+    pub fn open_automations(&mut self, cx: &mut Context<Self>) {
+        self.inspector = None;
+        self.settings = None;
+        self.automations.open = true;
+        if let Some(channel) = self.selected {
+            self.automations
+                .seen
+                .insert(channel, OffsetDateTime::now_utc());
+        }
+        cx.notify();
+    }
+
+    pub fn close_automations(&mut self, cx: &mut Context<Self>) {
+        self.automations.open = false;
+        cx.notify();
+    }
+
+    pub fn toggle_skipped(&mut self, cx: &mut Context<Self>) {
+        self.automations.show_skipped = !self.automations.show_skipped;
+        cx.notify();
+    }
+
+    pub fn unseen_failures(&self) -> usize {
+        let Some(channel) = self.selected else {
+            return 0;
+        };
+        let seen = self.automations.seen.get(&channel).copied();
+        let mut failures = 0;
+        for mark in &self.fires {
+            let failed = match mark.outcome {
+                v3::Outcome::Failed => true,
+                v3::Outcome::Ran => false,
+                v3::Outcome::Silent => false,
+                v3::Outcome::Skipped => false,
+                v3::Outcome::Unknown => false,
+            };
+            let unseen = match (mark.at, seen) {
+                (Some(at), Some(seen)) => at > seen,
+                (Some(_), None) => true,
+                (None, _) => false,
+            };
+            if failed && unseen {
+                failures += 1;
+            }
+        }
+        failures
+    }
+
+    pub fn channel_tasks(&self) -> Vec<&v3::Task> {
+        let Some(channel) = self.selected else {
+            return Vec::new();
+        };
+        let mut tasks = Vec::new();
+        for task in &self.tasks {
+            let live = match task.status {
+                v3::TaskStatus::Active => true,
+                v3::TaskStatus::Paused => true,
+                v3::TaskStatus::Completed => false,
+                v3::TaskStatus::Cancelled => false,
+                v3::TaskStatus::Unknown => false,
+            };
+            if live && task.surface_id.map(link::channel_id) == Some(channel) {
+                tasks.push(task);
+            }
+        }
+        tasks
+    }
+
     pub fn close_inspector(&mut self, cx: &mut Context<Self>) {
         self.inspector = None;
         self.settings = None;
@@ -2076,6 +2161,7 @@ impl AppState {
     pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
         if let Disclosure::Inspect(message) = disclosure {
             self.settings = None;
+            self.automations.open = false;
             self.inspector = Some(Inspector {
                 message,
                 filter: Filter::All,

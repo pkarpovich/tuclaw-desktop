@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::agent_settings::Target;
 use crate::agents::AgentsView;
+use crate::automations_panel;
 use crate::automations_view::AutomationsView;
 use crate::channels_view::ChannelsView;
 use crate::control::{self, button};
@@ -205,12 +206,65 @@ impl Shell {
                 ];
                 if let Some(panel) = self.settings_card() {
                     cards.push(panel);
+                } else if let Some(panel) = self.automations_card(cx) {
+                    cards.push(panel);
                 } else if let Some(panel) = self.inspector_card(cx) {
                     cards.push(panel);
                 }
                 cards
             }
         }
+    }
+
+    fn automations_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let state = self.state.read(cx);
+        if !state.automations_open() {
+            return None;
+        }
+        let selected = state.selected()?;
+        let mut channel = SharedString::default();
+        for candidate in state.channels() {
+            if candidate.id == selected {
+                channel = SharedString::from(candidate.name.clone());
+            }
+        }
+        let closer = self.state.clone();
+        let on_close: automations_panel::OnClose = std::rc::Rc::new(move |_window, cx| {
+            closer.update(cx, |state, cx| state.close_automations(cx));
+        });
+        let opener = self.state.clone();
+        let on_task: crate::automation::OnTask = std::rc::Rc::new(move |task, _window, cx| {
+            let task = task.clone();
+            opener.update(cx, |state, cx| state.open_task(task, cx));
+        });
+        let toggler = self.state.clone();
+        let on_toggle_skipped: automations_panel::OnToggle =
+            std::rc::Rc::new(move |_window, cx| {
+                toggler.update(cx, |state, cx| state.toggle_skipped(cx));
+            });
+        let panel = automations_panel::render(
+            automations_panel::PanelInput {
+                channel,
+                tasks: state.channel_tasks(),
+                fires: state.fires(),
+                show_skipped: state.show_skipped(),
+                now: time::OffsetDateTime::now_utc(),
+            },
+            automations_panel::PanelActions {
+                on_close,
+                on_task,
+                on_toggle_skipped,
+            },
+        );
+        Some(
+            card()
+                .id("automations-card")
+                .flex_none()
+                .w(px(automations_panel::WIDTH))
+                .overflow_hidden()
+                .child(panel)
+                .into_any_element(),
+        )
     }
 
     fn inspector_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {

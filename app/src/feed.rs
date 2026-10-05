@@ -349,12 +349,23 @@ impl Render for Feed {
             Focus::Taken => {}
         }
         let header = header(self.state.read(cx));
+        let pulse = pulse(self.state.read(cx));
+        let opener = self.state.clone();
+        let on_pulse: OnPulse = Rc::new(move |_window, cx| {
+            opener.update(cx, |state, cx| {
+                if state.automations_open() {
+                    state.close_automations(cx);
+                } else {
+                    state.open_automations(cx);
+                }
+            });
+        });
         div()
             .flex()
             .flex_col()
             .size_full()
             .min_h(px(0.))
-            .child(header_element(header))
+            .child(header_element(header, pulse, on_pulse))
             .child(self.body())
             .child(self.composer.clone())
     }
@@ -632,7 +643,91 @@ fn agent_count(agents: usize) -> String {
     }
 }
 
-fn header_element(header: Header) -> impl IntoElement {
+type OnPulse = Rc<dyn Fn(&mut Window, &mut gpui::App)>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Pulse {
+    automations: usize,
+    last: Option<OffsetDateTime>,
+    failed: usize,
+    open: bool,
+}
+
+fn pulse(state: &AppState) -> Option<Pulse> {
+    let tasks = state.channel_tasks();
+    if tasks.is_empty() {
+        return None;
+    }
+    let mut last = None;
+    for mark in state.fires() {
+        if let Some(at) = mark.at
+            && last.is_none_or(|known| at > known)
+        {
+            last = Some(at);
+        }
+    }
+    Some(Pulse {
+        automations: tasks.len(),
+        last,
+        failed: state.unseen_failures(),
+        open: state.automations_open(),
+    })
+}
+
+fn pulse_text(pulse: &Pulse) -> String {
+    let count = if pulse.automations == 1 {
+        "1 automation".to_string()
+    } else {
+        format!("{} automations", pulse.automations)
+    };
+    match pulse.last {
+        Some(at) => format!("{count} · checked {}", local::clock(at)),
+        None => count,
+    }
+}
+
+fn pulse_element(pulse: Pulse, on_pulse: OnPulse) -> impl IntoElement {
+    let dot = if pulse.failed > 0 {
+        theme::accent()
+    } else {
+        theme::status_idle()
+    };
+    let element = crate::control::button("feed-automations")
+        .accessibility_label("Automations of this channel")
+        .gap(px(6.))
+        .px(px(10.))
+        .h(px(26.))
+        .rounded(px(8.))
+        .border_1()
+        .border_color(theme::border())
+        .text_size(px(12.))
+        .text_color(theme::text_secondary())
+        .hover(|style| style.bg(theme::sunken()))
+        .on_click(move |_event, window, cx| on_pulse(window, cx))
+        .child(div().flex_none().size(px(7.)).rounded_full().bg(dot))
+        .child(SharedString::from(pulse_text(&pulse)));
+    let element = if pulse.failed > 0 {
+        element.child(
+            div()
+                .px(px(6.))
+                .rounded(px(5.))
+                .bg(theme::accent())
+                .text_size(px(11.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::chip_text())
+                .child(SharedString::from(format!("{} failed", pulse.failed))),
+        )
+    } else {
+        element
+    };
+    if pulse.open {
+        element.bg(theme::selection())
+    } else {
+        element
+    }
+}
+
+fn header_element(header: Header, pulse: Option<Pulse>, on_pulse: OnPulse) -> impl IntoElement {
     let lead = match header {
         Header::Channel { name, agents } => div()
             .flex()
@@ -682,6 +777,7 @@ fn header_element(header: Header) -> impl IntoElement {
         .border_color(theme::hairline())
         .child(lead)
         .child(div().flex_1())
+        .children(pulse.map(|pulse| pulse_element(pulse, on_pulse)))
         .child(chip().child(icon(Glyph::More, px(15.), theme::text_secondary())))
 }
 
@@ -1147,6 +1243,50 @@ mod tests {
         let recent = time::macros::datetime!(2026-10-05 05:20 UTC);
         let fresh = super::fold_quiet(vec![boundary(300), check(310)], recent);
         assert!(quiet_checks(&fresh).is_empty());
+    }
+
+    #[gpui::test]
+    fn the_header_counts_the_automations_and_opens_their_panel(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("feed-automations").is_some());
+        mock.fire_task(
+            &tuclaw_core::v3::TaskId("task-download-done".into()),
+            tuclaw_core::v3::Outcome::Failed,
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert_eq!(state.unseen_failures(), 1));
+        click(cx, "feed-automations".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert!(state.automations_open());
+            assert_eq!(state.unseen_failures(), 0);
+        });
+        click(cx, "feed-automations".to_string());
+        state.read_with(cx, |state, _cx| assert!(!state.automations_open()));
+    }
+
+    #[test]
+    fn the_pulse_names_its_count_and_last_check() {
+        let at = time::macros::datetime!(2026-10-05 13:15 UTC);
+        let pulse = super::Pulse {
+            automations: 1,
+            last: Some(at),
+            failed: 0,
+            open: false,
+        };
+        assert_eq!(
+            super::pulse_text(&pulse),
+            format!("1 automation · checked {}", crate::local::clock(at))
+        );
+        let idle = super::Pulse {
+            automations: 5,
+            last: None,
+            ..pulse
+        };
+        assert_eq!(super::pulse_text(&idle), "5 automations");
     }
 
     #[test]
