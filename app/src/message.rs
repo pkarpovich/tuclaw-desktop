@@ -42,6 +42,15 @@ pub struct Look {
     pub waveform: Option<Waveform>,
     pub run: Option<Pane>,
     pub trigger: Option<AnyElement>,
+    pub stripe: Stripe,
+    pub question: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stripe {
+    None,
+    Reply,
+    Activity,
 }
 
 struct Controls {
@@ -98,6 +107,8 @@ pub fn message_row(
         sent_at,
         voice,
         run,
+        weight: _,
+        reply_to: _,
     } = message;
     let Look {
         fold,
@@ -105,6 +116,8 @@ pub fn message_row(
         waveform,
         run: pane,
         trigger,
+        stripe,
+        question,
     } = look;
     let writer = writer(*author, people);
     let MessageId(raw) = *id;
@@ -136,6 +149,21 @@ pub fn message_row(
         .min_w(px(0.))
         .gap(px(2.))
         .child(line);
+    if let Some(asked) = question {
+        column = column.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(5.))
+                .text_size(px(11.5))
+                .text_color(theme::text_muted())
+                .child(icon(Glyph::Back, px(11.), theme::text_muted()))
+                .child(SharedString::from(format!(
+                    "to your question · {}",
+                    crate::local::clock(asked)
+                ))),
+        );
+    }
     if let Some(voice) = voice {
         let controls = Controls {
             player,
@@ -143,7 +171,7 @@ pub fn message_row(
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
-        return row(selector, face, column);
+        return row(selector, face, column, stripe);
     }
     if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
@@ -179,7 +207,7 @@ pub fn message_row(
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
-    row(selector, face, column)
+    row(selector, face, column, stripe)
 }
 
 fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPicture) -> AnyElement {
@@ -265,8 +293,9 @@ fn picture_fallback(key: &str, caption: &str, link: Option<&String>) -> AnyEleme
         .into_any_element()
 }
 
-fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {
-    div()
+fn row(selector: String, face: AnyElement, column: Div, stripe: Stripe) -> Stateful<Div> {
+    let marked = format!("{selector}-stripe");
+    let row = div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
         .w_full()
@@ -276,7 +305,22 @@ fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {
         .px(px(20.))
         .py(px(8.))
         .child(face)
-        .child(column)
+        .child(column);
+    let tone = match stripe {
+        Stripe::None => return row,
+        Stripe::Reply => theme::accent(),
+        Stripe::Activity => theme::border(),
+    };
+    row.relative().child(
+        div()
+            .debug_selector(move || marked)
+            .absolute()
+            .left(px(0.))
+            .top(px(0.))
+            .bottom(px(0.))
+            .w(px(3.))
+            .bg(tone),
+    )
 }
 
 pub fn source(body: &[Span]) -> String {

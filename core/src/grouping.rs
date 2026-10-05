@@ -27,7 +27,7 @@ pub struct DaySection {
 /// ```
 /// use time::macros::{datetime, offset};
 /// use tuclaw_core::grouping::group_by_day;
-/// use tuclaw_core::model::{Author, Message, MessageId, Span};
+/// use tuclaw_core::model::{Author, Message, MessageId, Span, Weight};
 ///
 /// let message = Message {
 ///     id: MessageId(1),
@@ -36,6 +36,8 @@ pub struct DaySection {
 ///     sent_at: datetime!(2026-08-26 09:00 UTC),
 ///     voice: None,
 ///     run: None,
+///     weight: Weight::Mine,
+///     reply_to: None,
 /// };
 /// let sections = group_by_day(&[message], offset!(UTC), datetime!(2026-08-26 21:00 UTC));
 /// assert_eq!(sections.len(), 1);
@@ -94,7 +96,7 @@ mod tests {
     use time::{Duration, OffsetDateTime};
 
     use super::group_by_day;
-    use crate::model::{Author, Message, MessageId, Span};
+    use crate::model::{Author, Message, MessageId, Span, Weight};
 
     fn message(id: i64, sent_at: OffsetDateTime) -> Message {
         Message {
@@ -104,6 +106,8 @@ mod tests {
             sent_at,
             voice: None,
             run: None,
+            weight: Weight::Mine,
+            reply_to: None,
         }
     }
 

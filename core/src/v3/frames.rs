@@ -294,6 +294,8 @@ pub struct SurfaceRead {
     pub last_read_message_id: Option<MessageId>,
     /// The messages still unread on it.
     pub unread: u32,
+    /// Those of them that answer the user.
+    pub unread_replies: u32,
     /// Whether it is marked unread.
     pub marked_unread: bool,
 }
@@ -302,6 +304,8 @@ pub struct SurfaceRead {
 struct ReadPayload {
     last_read_message_id: Option<MessageId>,
     unread: u32,
+    #[serde(default)]
+    unread_replies: u32,
     #[serde(default)]
     marked_unread: bool,
 }
@@ -648,6 +652,7 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
             let ReadPayload {
                 last_read_message_id,
                 unread,
+                unread_replies,
                 marked_unread,
             } = envelope.payload()?;
             let Some(surface_id) = envelope.surface_id else {
@@ -661,6 +666,7 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
                 surface_id,
                 last_read_message_id,
                 unread,
+                unread_replies,
                 marked_unread,
             })
         }
@@ -775,6 +781,7 @@ mod tests {
                 surface_id: SurfaceId(1),
                 last_read_message_id: Some(MessageId(9192)),
                 unread: 0,
+                unread_replies: 0,
                 marked_unread: false,
             }
         );

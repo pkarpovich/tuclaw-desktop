@@ -1409,6 +1409,7 @@ impl World {
             let cursor = self.cursors.get(&surface.id).copied();
             surface.last_read_message_id = cursor;
             surface.unread = self.unread(surface.id, cursor);
+            surface.unread_replies = self.unread_replies(surface.id, cursor);
             surface.marked_unread = self.marked.contains(&surface.id);
             surfaces.push(surface);
         }
@@ -1614,6 +1615,36 @@ impl World {
         to_json(&self.surfaces_view())
     }
 
+    fn unread_replies(&self, surface: SurfaceId, cursor: Option<MessageId>) -> u32 {
+        let mut replies = 0;
+        for message in &self.messages {
+            if message.surface_id != surface {
+                continue;
+            }
+            if cursor.is_some_and(|cursor| message.id <= cursor) {
+                continue;
+            }
+            let answers = match message.kind {
+                MessageKind::Answer => true,
+                MessageKind::Post => true,
+                MessageKind::User => false,
+                MessageKind::Notice => false,
+                MessageKind::A2a => false,
+                MessageKind::Unknown => false,
+            };
+            let agent = match message.author.kind {
+                AuthorKind::Agent => true,
+                AuthorKind::User => false,
+                AuthorKind::System => false,
+                AuthorKind::Unknown => false,
+            };
+            if answers && agent && message.origin == "user" {
+                replies += 1;
+            }
+        }
+        replies
+    }
+
     fn unread(&self, surface: SurfaceId, cursor: Option<MessageId>) -> u32 {
         let mut unread = 0;
         for message in &self.messages {
@@ -1686,6 +1717,7 @@ impl World {
         let answer = ReadAnswer {
             last_read_message_id: cursor,
             unread: self.unread(surface, cursor),
+            unread_replies: self.unread_replies(surface, cursor),
             marked_unread: self.marked.contains(&surface),
         };
         self.persist("surface.read", Some(surface), None, &json!(answer));
@@ -2809,6 +2841,7 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
             marked_unread: false,
         },
         Surface {
@@ -2835,6 +2868,7 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
             marked_unread: false,
         },
         Surface {
@@ -2861,6 +2895,7 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
             marked_unread: false,
         },
     ]
@@ -3053,6 +3088,7 @@ mod tests {
             ReadAnswer {
                 last_read_message_id: Some(newest),
                 unread: 0,
+                unread_replies: 0,
                 marked_unread: false,
             }
         );

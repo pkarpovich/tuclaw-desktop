@@ -29,6 +29,7 @@ struct Row {
     name: SharedString,
     lead: Lead,
     unread: usize,
+    replies: usize,
     marked: bool,
     working: Vec<String>,
     highlight: Highlight,
@@ -135,11 +136,12 @@ impl Sidebar {
             name,
             lead,
             unread,
+            replies,
             marked,
             working,
             highlight,
         } = row;
-        let attention = unread > 0 || marked;
+        let attention = replies > 0 || marked;
         let selector = format!("sidebar-row-{name}");
         let selector_name = name.clone();
         let element = row_frame(selector)
@@ -170,10 +172,12 @@ impl Sidebar {
         } else {
             element.child(working_dot(&selector_name))
         };
-        let element = if unread > 0 {
-            element.child(unread_badge(unread))
+        let element = if replies > 0 {
+            element.child(unread_badge(replies))
         } else if marked {
             element.child(marked_dot(&selector_name))
+        } else if unread > 0 {
+            element.child(activity_dot(&selector_name))
         } else {
             element
         };
@@ -293,6 +297,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         group,
         kind,
         unread,
+        replies,
         marked,
         sort_index: _,
     } in state.channels()
@@ -331,6 +336,7 @@ fn sections(state: &AppState) -> Vec<Section> {
             name: SharedString::from(name.clone()),
             lead,
             unread: *unread,
+            replies: *replies,
             marked: *marked,
             working: state.working(*id),
             highlight,
@@ -437,6 +443,18 @@ fn marked_dot(channel: &SharedString) -> impl IntoElement {
         .mr(px(4.))
         .rounded_full()
         .bg(theme::badge())
+}
+
+fn activity_dot(channel: &SharedString) -> impl IntoElement {
+    let selector = format!("sidebar-activity-{channel}");
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .flex_none()
+        .size(px(8.))
+        .mr(px(5.))
+        .rounded_full()
+        .bg(theme::text_label())
 }
 
 fn unread_badge(unread: usize) -> impl IntoElement {

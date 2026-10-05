@@ -327,13 +327,27 @@ Agreed 2026-10-05 with the desktop (Pavel's asks: groups with a title and an emo
   Both are read at send time, so a replay shows the current state. A deleted surface's update is skipped.
 - **Client side.** Collapsing a group is per client. An archived surface's `unread` is still computed (the browser can show it), and the client leaves it out of every badge.
 
-## v3.8 additions: marking a surface unread
+## v3.8 additions: mark as unread
 
-Agreed 2026-10-05 with the desktop; Pavel wanted "mark as unread" so a chat keeps a badge until he comes back to it. It is a flag beside the v3.6 cursor, never a cursor moved back, so the cursor stays forward-only. Telegram never touches it.
+Agreed 2026-10-05 with the desktop. Pavel wants a surface to keep a badge until he gets back to it. This is Telegram's semantics: a flag, not a cursor moved back. The v3.6 cursor stays forward-only, so clients never race on it.
 
-- `GET /surfaces` and `surface.updated` gain `marked_unread` (bool).
-- `POST /surfaces/{id}/unread` (no body) sets the flag and answers `200 {"last_read_message_id", "unread", "marked_unread": true}`. The cursor stays where it is. An unknown surface = `404`.
-- `POST /surfaces/{id}/read` clears the flag. It clears it even when the cursor does not move: opening the surface is the signal. `message_id` becomes optional; without it the read only clears the flag. With it, it is validated as in v3.6. The answer gains `marked_unread`.
-- Both writes record a persisted `surface.read` event; its payload gains `marked_unread`: `{last_read_message_id, unread, marked_unread}`.
+- **`GET /surfaces`** gains `marked_unread` (bool) next to `unread` and `last_read_message_id`. The client shows a dot when `unread == 0 && marked_unread`, else the count.
+- **`POST /surfaces/{id}/unread`** (no body) sets the flag and leaves the cursor. It answers `200 {"last_read_message_id", "unread", "marked_unread": true}`. An unknown surface = `404`.
 - In every read-state answer and `surface.read` frame, `last_read_message_id` is `null` while a surface has no cursor, as in `GET /surfaces`.
-- **Client side.** The desktop shows a dot when `unread` is 0 and the surface is marked, and the count otherwise. When the surface marked unread is the open one, the client does not read it on window activation or scroll. It clears the flag when the surface is opened again or a new message arrives on it.
+- **`POST /surfaces/{id}/read`** now clears the flag, even when the cursor does not move ("I opened it" is the signal). Its answer gains `marked_unread`.
+- **`message_id` on `/read` is now optional.** An empty body or `{}` only clears the flag, so a surface with nothing to read can be cleared too. A `message_id` that is given is validated as before.
+- **Both writes record a `surface.read` event**, whose payload gains the flag: `{last_read_message_id, unread, marked_unread}`. Every open client converges with no new frame type.
+- Telegram never touches the flag, the same as the cursor.
+
+## v3.9 additions: replies to the user
+
+Agreed 2026-10-05 with the desktop (Pavel's pick: the sidebar number counts only the replies to his own questions; everything else unread is a grey dot).
+
+- **`unread_replies`** sits beside `unread`, which stays the total, in four places:
+  - `GET /surfaces`;
+  - the `surface.read` payload;
+  - the `/read` answer;
+  - the `/unread` answer.
+
+  It counts the messages past the cursor written by an agent (`author.kind = agent`) in a run the user's own message started (`origin = user`), of kind `answer` or `post`. The posts count because a run may reply partly or wholly through them. a2a handoffs, notices and scheduled or a2a-origin messages do not count.
+- **`reply_to_message_id` on an answer** is now the user message the run answered: the message whose input the run claimed first. It stays `null` for scheduled, a2a-origin and task-notification answers. A migration backfills the existing answers whose run's input is still kept (inputs are pruned after 30 days). Telegram is unaffected; it still replies only for a2a handoffs.

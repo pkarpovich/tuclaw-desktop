@@ -344,6 +344,9 @@ pub struct Surface {
     /// The messages after the read cursor not written by the user.
     #[serde(default)]
     pub unread: u32,
+    /// Those of them that answer the user: agent answers and posts of runs the user started.
+    #[serde(default)]
+    pub unread_replies: u32,
     /// Whether the user marked it unread; cleared by the next read.
     #[serde(default)]
     pub marked_unread: bool,
@@ -481,6 +484,9 @@ pub struct ReadAnswer {
     pub last_read_message_id: Option<MessageId>,
     /// The messages still unread on it.
     pub unread: u32,
+    /// Those of them that answer the user.
+    #[serde(default)]
+    pub unread_replies: u32,
     /// Whether it is marked unread.
     #[serde(default)]
     pub marked_unread: bool,
@@ -1349,8 +1355,10 @@ mod tests {
             archived_at,
             last_read_message_id,
             unread,
+            unread_replies,
             marked_unread,
         } = &surfaces[0];
+        assert_eq!(*unread_replies, 1);
         assert!(!*marked_unread);
         assert!(surfaces[1].marked_unread);
         assert_eq!(*last_read_message_id, Some(MessageId(9191)));
@@ -1372,6 +1380,7 @@ mod tests {
             ReadAnswer {
                 last_read_message_id: Some(MessageId(9192)),
                 unread: 0,
+                unread_replies: 0,
                 marked_unread: false,
             }
         );
@@ -1382,6 +1391,7 @@ mod tests {
             ReadAnswer {
                 last_read_message_id: Some(MessageId(9192)),
                 unread: 0,
+                unread_replies: 0,
                 marked_unread: true,
             }
         );
