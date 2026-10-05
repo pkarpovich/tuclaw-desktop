@@ -632,6 +632,7 @@ impl AppState {
             changed |= self.seen.insert(message);
         }
         if changed {
+            self.read_to_newest(cx);
             cx.notify();
         }
     }
@@ -761,12 +762,22 @@ impl AppState {
         if self.held == Some(channel) {
             return;
         }
-        let mut newest = None;
+        let mut ordered = Vec::new();
         for message in &self.messages {
             let MessageId(raw) = message.id;
-            if raw > 0 && newest.is_none_or(|known: MessageId| message.id > known) {
-                newest = Some(message.id);
+            if raw > 0 {
+                ordered.push(message);
             }
+        }
+        ordered.sort_by_key(|message| message.id);
+        let mut newest = None;
+        let mut everything = true;
+        for message in ordered {
+            if self.is_fresh(message) {
+                everything = false;
+                break;
+            }
+            newest = Some(message.id);
         }
         let behind = newest.filter(|newest| {
             self.cursors
@@ -778,10 +789,12 @@ impl AppState {
         }
         if let Some(newest) = behind {
             self.cursors.insert(channel, newest);
-            for candidate in &mut self.channels {
-                if candidate.id == channel {
-                    candidate.unread = 0;
-                    candidate.replies = 0;
+            if everything {
+                for candidate in &mut self.channels {
+                    if candidate.id == channel {
+                        candidate.unread = 0;
+                        candidate.replies = 0;
+                    }
                 }
             }
         }

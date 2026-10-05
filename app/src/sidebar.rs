@@ -439,10 +439,10 @@ fn marked_dot(channel: &SharedString) -> impl IntoElement {
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
         .flex_none()
-        .size(px(10.))
-        .mr(px(4.))
+        .size(px(9.))
+        .mr(px(5.))
         .rounded_full()
-        .bg(theme::badge())
+        .bg(theme::accent())
 }
 
 fn activity_dot(channel: &SharedString) -> impl IntoElement {
@@ -467,7 +467,7 @@ fn unread_badge(unread: usize) -> impl IntoElement {
         .h(px(19.))
         .px(px(6.))
         .rounded_full()
-        .bg(theme::badge())
+        .bg(theme::accent())
         .text_size(px(11.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::chip_text())

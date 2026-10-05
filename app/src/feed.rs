@@ -1230,6 +1230,12 @@ mod tests {
         state.update(cx, |state, cx| state.select(home, cx));
         cx.run_until_parked();
         assert!(cx.debug_bounds("feed-unread").is_some());
+        assert_eq!(
+            unread_of(&state, cx, "Smart Home"),
+            1,
+            "opening is not reading: the message has not been seen yet"
+        );
+        see_everything_fresh(&state, cx);
         assert_eq!(unread_of(&state, cx, "Smart Home"), 0);
         let client = tuclaw_core::v3::Client::mock(&mock);
         let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
@@ -1324,11 +1330,46 @@ mod tests {
         assert_eq!(unread_of(&state, cx, "General"), 1);
         state.update(cx, |state, cx| state.set_window_active(true, cx));
         cx.run_until_parked();
-        assert_eq!(unread_of(&state, cx, "General"), 0);
+        assert_eq!(unread_of(&state, cx, "General"), 1, "unread until seen");
         assert!(
             cx.debug_bounds("feed-unread").is_some(),
             "the open channel marks where the new messages start"
         );
+        see_everything_fresh(&state, cx);
+        assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
+    fn an_unseen_reply_is_still_unread_after_a_restart(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        posted_by_jarvis(&mock, &state, cx, "Waiting for you.");
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        let client = tuclaw_core::v3::Client::mock(&mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let general = surfaces
+            .iter()
+            .find(|surface| surface.name == "General")
+            .expect("General exists");
+        assert_eq!(
+            (general.unread, general.unread_replies),
+            (1, 1),
+            "the daemon still counts it, so a restart shows it again"
+        );
+    }
+
+    fn see_everything_fresh(state: &Entity<AppState>, cx: &mut VisualTestContext) {
+        state.update(cx, |state, cx| {
+            let mut fresh = Vec::new();
+            for message in state.messages() {
+                if state.is_fresh(message) {
+                    fresh.push(message.id);
+                }
+            }
+            state.mark_seen(fresh, cx);
+        });
+        cx.run_until_parked();
     }
 
     #[gpui::test]
