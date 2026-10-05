@@ -143,6 +143,8 @@ pub struct Channel {
     pub kind: ChannelKind,
     /// How many messages the user has not read.
     pub unread: usize,
+    /// Whether the user marked it unread to come back to it.
+    pub marked: bool,
     /// The position of the channel in the rendered order, ascending.
     pub sort_index: i64,
 }

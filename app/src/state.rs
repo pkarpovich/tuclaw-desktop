@@ -178,6 +178,7 @@ pub struct AppState {
     viewer: Option<Viewed>,
     cursors: HashMap<ChannelId, MessageId>,
     divider: Option<MessageId>,
+    held: Option<ChannelId>,
     window_active: bool,
     recording: Recording,
     playback: Option<Playback>,
@@ -238,6 +239,7 @@ impl AppState {
             viewer: None,
             cursors: HashMap::new(),
             divider: None,
+            held: None,
             window_active: true,
             recording: Recording::Idle,
             playback: None,
@@ -640,12 +642,14 @@ impl AppState {
             surface_id,
             last_read_message_id,
             unread,
+            marked_unread,
         } = read;
         self.apply_read(
             link::channel_id(*surface_id),
             v3::ReadAnswer {
                 last_read_message_id: *last_read_message_id,
                 unread: *unread,
+                marked_unread: *marked_unread,
             },
         );
         cx.notify();
@@ -655,7 +659,12 @@ impl AppState {
         let v3::ReadAnswer {
             last_read_message_id,
             unread,
+            marked_unread,
         } = answer;
+        self.set_marked(channel, marked_unread);
+        let Some(last_read_message_id) = last_read_message_id else {
+            return;
+        };
         let cursor = link::message_id(last_read_message_id);
         let moved = match self.cursors.get(&channel) {
             Some(known) => cursor >= *known,
@@ -686,6 +695,9 @@ impl AppState {
         let Some(channel) = self.selected else {
             return;
         };
+        if self.held == Some(channel) {
+            return;
+        }
         let mut newest = None;
         for message in &self.messages {
             let MessageId(raw) = message.id;
@@ -693,25 +705,56 @@ impl AppState {
                 newest = Some(message.id);
             }
         }
-        let Some(newest) = newest else {
-            return;
-        };
-        if self
-            .cursors
-            .get(&channel)
-            .is_some_and(|cursor| *cursor >= newest)
-        {
+        let behind = newest.filter(|newest| {
+            self.cursors
+                .get(&channel)
+                .is_none_or(|cursor| *cursor < *newest)
+        });
+        if behind.is_none() && !self.is_marked(channel) {
             return;
         }
-        self.cursors.insert(channel, newest);
-        for candidate in &mut self.channels {
-            if candidate.id == channel {
-                candidate.unread = 0;
+        if let Some(newest) = behind {
+            self.cursors.insert(channel, newest);
+            for candidate in &mut self.channels {
+                if candidate.id == channel {
+                    candidate.unread = 0;
+                }
             }
         }
+        self.set_marked(channel, false);
         let request = self
             .client
-            .mark_read(link::surface_id(channel), link::v3_message_id(newest));
+            .mark_read(link::surface_id(channel), behind.map(link::v3_message_id));
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    pub fn mark_unread(&mut self, channel: ChannelId, cx: &mut Context<Self>) {
+        self.set_marked(channel, true);
+        if self.selected == Some(channel) {
+            self.held = Some(channel);
+        }
+        let request = self.client.mark_unread(link::surface_id(channel));
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    pub fn clear_unread_mark(&mut self, channel: ChannelId, cx: &mut Context<Self>) {
+        if self.held == Some(channel) {
+            self.held = None;
+        }
+        self.set_marked(channel, false);
+        let request = self.client.mark_read(link::surface_id(channel), None);
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    fn send_read(
+        &mut self,
+        channel: ChannelId,
+        request: impl Future<Output = Result<v3::ReadAnswer, v3::ApiError>> + 'static,
+        cx: &mut Context<Self>,
+    ) {
         cx.spawn(async move |this, cx| {
             let Ok(answer) = request.await else {
                 return;
@@ -723,7 +766,29 @@ impl AppState {
             .ok();
         })
         .detach();
-        cx.notify();
+    }
+
+    fn is_marked(&self, channel: ChannelId) -> bool {
+        let mut marked = false;
+        for candidate in &self.channels {
+            if candidate.id == channel {
+                marked = candidate.marked;
+            }
+        }
+        marked
+    }
+
+    fn set_marked(&mut self, channel: ChannelId, marked: bool) {
+        for candidate in &mut self.channels {
+            if candidate.id == channel {
+                candidate.marked = marked;
+            }
+        }
+        for surface in &mut self.surfaces {
+            if link::channel_id(surface.id) == channel {
+                surface.marked_unread = marked;
+            }
+        }
     }
 
     pub fn viewer(&self) -> Option<&Viewed> {
@@ -2095,7 +2160,12 @@ impl AppState {
             return;
         }
         self.view = View::Conversation;
+        if self.held == Some(channel) && self.selected == Some(channel) {
+            self.held = None;
+            self.read_to_newest(cx);
+        }
         if self.selected != Some(channel) {
+            self.held = None;
             self.divider = self.divider_for(channel);
             self.selected = Some(channel);
             self.halt();
@@ -2652,6 +2722,9 @@ impl AppState {
             cx.emit(StateEvent::RunsChanged);
         }
         let shown = self.selected == Some(link::channel_id(message.surface_id));
+        if shown && self.held == self.selected {
+            self.held = None;
+        }
         if !(shown && self.window_active) {
             self.count_unread(message, cx);
         }

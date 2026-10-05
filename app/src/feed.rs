@@ -510,6 +510,7 @@ fn header(state: &AppState) -> Header {
         group: _,
         kind,
         unread: _,
+        marked: _,
         sort_index: _,
     }) = found
     else {
@@ -828,6 +829,79 @@ mod tests {
             }
         }
         assert_eq!(served, Some(0));
+    }
+
+    fn marked_of(state: &Entity<AppState>, cx: &mut VisualTestContext, name: &str) -> bool {
+        state.read_with(cx, |state, _cx| {
+            let mut marked = None;
+            for channel in state.channels() {
+                if channel.name == name {
+                    marked = Some(channel.marked);
+                }
+            }
+            marked.expect("the channel exists")
+        })
+    }
+
+    fn served_marked(mock: &MockTransport, name: &str) -> bool {
+        let client = tuclaw_core::v3::Client::mock(mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let mut marked = None;
+        for surface in surfaces {
+            if surface.name == name {
+                marked = Some(surface.marked_unread);
+            }
+        }
+        marked.expect("the surface exists")
+    }
+
+    #[gpui::test]
+    fn a_channel_marked_unread_stays_marked_until_it_is_opened(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.mark_unread(home, cx));
+        cx.run_until_parked();
+        assert!(marked_of(&state, cx, "Smart Home"));
+        assert!(served_marked(&mock, "Smart Home"));
+        state.update(cx, |state, cx| state.select(home, cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "Smart Home"));
+        assert!(!served_marked(&mock, "Smart Home"));
+    }
+
+    #[gpui::test]
+    fn the_open_channel_marked_unread_stays_marked_until_it_is_opened_again(
+        cx: &mut TestAppContext,
+    ) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.mark_unread(general, cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.set_window_active(false, cx);
+            state.set_window_active(true, cx);
+            state.read_to_newest(cx);
+        });
+        cx.run_until_parked();
+        assert!(marked_of(&state, cx, "General"));
+        assert!(served_marked(&mock, "General"));
+        state.update(cx, |state, cx| state.select(general, cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "General"));
+        assert!(!served_marked(&mock, "General"));
+    }
+
+    #[gpui::test]
+    fn a_new_answer_releases_the_open_channel_marked_unread(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.mark_unread(general, cx));
+        cx.run_until_parked();
+        posted_by_jarvis(&mock, &state, cx, "Something new.");
+        state.update(cx, |state, cx| state.read_to_newest(cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "General"));
+        assert!(!served_marked(&mock, "General"));
     }
 
     #[gpui::test]

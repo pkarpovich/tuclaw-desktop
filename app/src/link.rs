@@ -68,6 +68,7 @@ pub fn channel(surface: &v3::Surface, groups: &[v3::Group]) -> Channel {
         group,
         kind: ChannelKind::Channel,
         unread: surface.unread as usize,
+        marked: surface.marked_unread,
         sort_index: surface.sort_order,
     }
 }
@@ -404,6 +405,7 @@ mod tests {
                 group: None,
                 kind: ChannelKind::Channel,
                 unread: 0,
+                marked: false,
                 sort_index: 2,
             }
         );
