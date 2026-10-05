@@ -642,6 +642,9 @@ impl AppState {
                 candidate.unread += 1;
             }
         }
+        if self.selected == Some(channel) && self.divider.is_none() {
+            self.divider = Some(self.cursors.get(&channel).copied().unwrap_or(MessageId(0)));
+        }
         cx.notify();
     }
 

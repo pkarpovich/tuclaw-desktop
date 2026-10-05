@@ -1055,12 +1055,17 @@ mod tests {
     #[gpui::test]
     fn an_inactive_window_keeps_new_messages_unread_until_it_is_back(cx: &mut TestAppContext) {
         let (mock, state, _feed, cx) = feed(cx);
+        assert!(cx.debug_bounds("feed-unread").is_none());
         state.update(cx, |state, cx| state.set_window_active(false, cx));
         posted_by_jarvis(&mock, &state, cx, "While you were away.");
         assert_eq!(unread_of(&state, cx, "General"), 1);
         state.update(cx, |state, cx| state.set_window_active(true, cx));
         cx.run_until_parked();
         assert_eq!(unread_of(&state, cx, "General"), 0);
+        assert!(
+            cx.debug_bounds("feed-unread").is_some(),
+            "the open channel marks where the new messages start"
+        );
     }
 
     #[gpui::test]
