@@ -479,6 +479,8 @@ impl Feed {
                                 },
                             )
                             .absolute()
+                            .top_0()
+                            .left_0()
                             .size_full(),
                         )
                         .into_any_element()
@@ -1628,7 +1630,7 @@ mod tests {
 
     #[gpui::test]
     fn a_reply_that_came_while_away_is_striped_until_it_has_been_seen(cx: &mut TestAppContext) {
-        let (mock, state, feed, cx) = feed(cx);
+        let (mock, state, _feed, cx) = feed(cx);
         cx.update(|window, _cx| window.activate_window());
         cx.run_until_parked();
         cx.deactivate_window();
@@ -1657,17 +1659,8 @@ mod tests {
             cx.debug_bounds(stripe).is_some(),
             "seen only after a moment on screen"
         );
-        feed.update(cx, |feed, cx| {
-            let viewport = feed.list.viewport_bounds();
-            let inside = gpui::Bounds::new(
-                viewport.origin,
-                gpui::size(viewport.size.width, gpui::px(40.)),
-            );
-            feed.painted
-                .borrow_mut()
-                .insert(tuclaw_core::model::MessageId(raw), inside);
-            feed.mark_visible_seen(cx);
-        });
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(3));
         cx.run_until_parked();
         assert!(cx.debug_bounds(stripe).is_none());
         assert!(
