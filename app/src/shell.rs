@@ -1,7 +1,9 @@
 use gpui::{
-    AnyElement, BoxShadow, Context, Div, Entity, FocusHandle, Hsla, IntoElement, Pixels, Point,
-    Render, SharedString, Subscription, Window, actions, div, phi, point, prelude::*, px,
+    AnyElement, BoxShadow, ClipboardItem, Context, Div, Entity, FocusHandle, Hsla, IntoElement,
+    MouseButton, MouseDownEvent, Pixels, Point, Render, SharedString, Subscription, Window,
+    actions, anchored, deferred, div, phi, point, prelude::*, px,
 };
+use gpui_kit::base::TextSelection;
 
 use crate::agent_settings::Target;
 use crate::agents::AgentsView;
@@ -45,6 +47,12 @@ pub fn traffic_light_position() -> Point<Pixels> {
     )
 }
 
+#[derive(Clone)]
+struct CopyMenu {
+    position: Point<Pixels>,
+    text: String,
+}
+
 pub struct Shell {
     state: Entity<AppState>,
     sidebar: Entity<Sidebar>,
@@ -53,6 +61,7 @@ pub struct Shell {
     automations: Entity<AutomationsView>,
     channels: Entity<ChannelsView>,
     settings: Option<SlotPanel>,
+    copy_menu: Option<CopyMenu>,
     viewer_focus: FocusHandle,
     _observation: Subscription,
     _events: Subscription,
@@ -99,6 +108,7 @@ impl Shell {
             automations,
             channels,
             settings: None,
+            copy_menu: None,
             viewer_focus: cx.focus_handle(),
             _observation: observation,
             _events: events,
@@ -461,9 +471,66 @@ impl Render for Shell {
             .on_action(cx.listener(|shell, _: &ToggleSidebar, _window, cx| {
                 shell.state.update(cx, |state, cx| state.toggle_sidebar(cx));
             }))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|shell, event: &MouseDownEvent, window, cx| {
+                    let text = TextSelection::selected_text(window, cx);
+                    let text = text.trim();
+                    if text.is_empty() {
+                        return;
+                    }
+                    shell.copy_menu = Some(CopyMenu {
+                        position: event.position,
+                        text: text.to_string(),
+                    });
+                    cx.notify();
+                }),
+            )
             .child(self.top_bar(cx))
             .child(columns.children(body))
             .children(viewer::viewer(&self.state, &self.viewer_focus, window, cx))
+            .children(self.copy_menu(cx))
+    }
+}
+
+impl Shell {
+    fn copy_menu(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let CopyMenu { position, text } = self.copy_menu.clone()?;
+        let menu = div()
+            .id("copy-menu")
+            .debug_selector(|| "copy-menu".to_string())
+            .p(px(4.))
+            .w(px(140.))
+            .rounded(px(8.))
+            .bg(theme::raised())
+            .border_1()
+            .border_color(theme::border())
+            .shadow(vec![BoxShadow {
+                color: theme::shadow(),
+                offset: point(px(0.), px(4.)),
+                blur_radius: px(12.),
+                spread_radius: px(0.),
+                inset: false,
+            }])
+            .on_mouse_down_out(cx.listener(|shell, _event, _window, cx| {
+                shell.copy_menu = None;
+                cx.notify();
+            }))
+            .child(
+                control::row_button("copy-menu-copy")
+                    .px(px(10.))
+                    .py(px(5.))
+                    .rounded(px(5.))
+                    .text_size(px(12.5))
+                    .hover(|style| style.bg(theme::sunken()))
+                    .on_click(cx.listener(move |shell, _event, _window, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+                        shell.copy_menu = None;
+                        cx.notify();
+                    }))
+                    .child("Copy"),
+            );
+        Some(deferred(anchored().position(position).snap_to_window().child(menu)).with_priority(2))
     }
 }
 
@@ -516,7 +583,7 @@ fn settings_affordance() -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
+    use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px};
 
     use crate::state::SidebarVisibility;
 
@@ -532,6 +599,52 @@ mod tests {
         let built = state.clone();
         let (_shell, cx) = cx.add_window_view(move |window, cx| Shell::new(built, window, cx));
         (state, cx)
+    }
+
+    #[gpui::test]
+    fn right_clicking_a_selection_offers_copy(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_root, cx) = cx.add_window_view(move |window, cx| {
+            let shell = gpui::AppContext::new(cx, |cx| Shell::new(built, window, cx));
+            gpui_kit::base::Root::new(shell, window, cx)
+        });
+        cx.run_until_parked();
+        let raw = state.read_with(cx, |state, _cx| {
+            let Some(last) = state.messages().last() else {
+                panic!("the first channel has history");
+            };
+            let tuclaw_core::model::MessageId(raw) = last.id;
+            raw
+        });
+        let selector: &'static str = Box::leak(format!("message-{raw}-md").into_boxed_str());
+        let text = cx
+            .debug_bounds(selector)
+            .expect("the last message text is drawn");
+        let start = point(text.left() + px(1.), text.top() + px(8.));
+        let end = point(text.right() - px(1.), text.top() + px(8.));
+        cx.simulate_mouse_down(start, MouseButton::Right, Modifiers::default());
+        cx.simulate_mouse_up(start, MouseButton::Right, Modifiers::default());
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("copy-menu").is_none(),
+            "no selection, no menu"
+        );
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(end, Some(MouseButton::Left), Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+        cx.run_until_parked();
+        cx.simulate_mouse_down(end, MouseButton::Right, Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Right, Modifiers::default());
+        cx.run_until_parked();
+        let copy = cx
+            .debug_bounds("copy-menu-copy")
+            .expect("a selection offers copy");
+        cx.simulate_click(copy.center(), Modifiers::default());
+        cx.run_until_parked();
+        let copied = cx.read_from_clipboard().and_then(|item| item.text());
+        assert!(copied.is_some_and(|text| !text.is_empty()));
+        assert!(cx.debug_bounds("copy-menu").is_none());
     }
 
     #[gpui::test]
