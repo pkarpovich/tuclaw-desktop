@@ -7,7 +7,7 @@ use tuclaw_core::v3::{FireMark, Outcome, Task, TaskId, TaskStatus};
 use crate::automation::{OnTask, label_of, outcome_tone, schedule_text};
 use crate::control::{button, row_button, switch};
 use crate::icon::{Glyph, icon};
-use crate::local::clock;
+use crate::local::{clock, when};
 use crate::theme;
 
 pub const WIDTH: f32 = 400.;
@@ -64,7 +64,7 @@ pub fn tally(task: &TaskId, fires: &[FireMark], since: OffsetDateTime) -> Tally 
     tally
 }
 
-pub fn tally_text(tally: &Tally, next: Option<OffsetDateTime>) -> String {
+pub fn tally_text(tally: &Tally, next: Option<OffsetDateTime>, now: OffsetDateTime) -> String {
     let checks = if tally.checks == 1 {
         "1 check".to_string()
     } else {
@@ -78,10 +78,10 @@ pub fn tally_text(tally: &Tally, next: Option<OffsetDateTime>) -> String {
         parts.push(format!("{} ran", tally.ran));
     }
     if let Some(at) = tally.last_failure {
-        parts.push(format!("{} failed, last at {}", tally.failed, clock(at)));
+        parts.push(format!("{} failed, last {}", tally.failed, when(at, now)));
     }
     if let Some(next) = next {
-        parts.push(format!("next {}", clock(next)));
+        parts.push(format!("next {}", when(next, now)));
     }
     parts.join(" · ")
 }
@@ -305,7 +305,7 @@ fn task_card(
             div()
                 .text_size(px(11.5))
                 .text_color(footer_tone)
-                .child(SharedString::from(tally_text(&tally, next))),
+                .child(SharedString::from(tally_text(&tally, next, now))),
         )
 }
 
@@ -452,17 +452,30 @@ mod tests {
                 last_failure: Some(failed_at),
             }
         );
+        let now = datetime!(2026-10-05 02:00 UTC);
         assert_eq!(
-            tally_text(&counted, None),
-            format!("3 checks · 1 ran · 1 failed, last at {}", clock(failed_at))
+            tally_text(&counted, None, now),
+            format!("3 checks · 1 ran · 1 failed, last {}", clock(failed_at))
+        );
+        let next = datetime!(2026-10-07 12:17 UTC);
+        assert_eq!(
+            tally_text(&counted, Some(next), now),
+            format!(
+                "3 checks · 1 ran · 1 failed, last {} · next Wed {}",
+                clock(failed_at),
+                clock(next)
+            )
         );
         let quiet = tally(&TaskId("c".into()), &fires, since);
-        assert_eq!(tally_text(&quiet, None), "0 checks");
+        assert_eq!(tally_text(&quiet, None, now), "0 checks");
         let skipped_only = Tally {
             checks: 141,
             ..Tally::default()
         };
-        assert_eq!(tally_text(&skipped_only, None), "141 checks · all skipped");
+        assert_eq!(
+            tally_text(&skipped_only, None, now),
+            "141 checks · all skipped"
+        );
     }
 
     #[test]

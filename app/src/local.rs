@@ -20,6 +20,32 @@ pub fn clock(at: OffsetDateTime) -> String {
     local(at).format(&description).unwrap_or_default()
 }
 
+pub fn when(at: OffsetDateTime, now: OffsetDateTime) -> String {
+    let day = local(at).date();
+    let today = local(now).date();
+    let time = clock(at);
+    let distance = (day - today).whole_days();
+    match distance {
+        0 => time,
+        1 => format!("tomorrow {time}"),
+        -1 => format!("yesterday {time}"),
+        -6..=6 => {
+            let description = format_description!("[weekday repr:short]");
+            format!(
+                "{} {time}",
+                local(at).format(&description).unwrap_or_default()
+            )
+        }
+        _ => {
+            let description = format_description!("[month repr:short] [day padding:none]");
+            format!(
+                "{} {time}",
+                local(at).format(&description).unwrap_or_default()
+            )
+        }
+    }
+}
+
 fn in_zone(at: OffsetDateTime, zone: &TimeZone) -> OffsetDateTime {
     let Ok(instant) = Timestamp::from_second(at.unix_timestamp()) else {
         return at;
@@ -36,7 +62,7 @@ mod tests {
     use jiff::tz::TimeZone;
     use time::macros::{datetime, offset};
 
-    use super::in_zone;
+    use super::{in_zone, when};
 
     #[test]
     fn warsaw_follows_its_daylight_saving_time() {
@@ -51,6 +77,20 @@ mod tests {
             in_zone(datetime!(2026-10-04 22:30 UTC), &warsaw).date(),
             datetime!(2026-10-05 00:00 UTC).date()
         );
+    }
+
+    #[test]
+    fn a_time_names_its_day_relative_to_now() {
+        let now = datetime!(2026-10-05 12:00 UTC);
+        let clock = super::clock;
+        let same = datetime!(2026-10-05 13:00 UTC);
+        assert_eq!(when(same, now), clock(same));
+        let next = datetime!(2026-10-06 12:00 UTC);
+        assert_eq!(when(next, now), format!("tomorrow {}", clock(next)));
+        let wednesday = datetime!(2026-10-07 12:00 UTC);
+        assert_eq!(when(wednesday, now), format!("Wed {}", clock(wednesday)));
+        let far = datetime!(2026-10-19 12:00 UTC);
+        assert_eq!(when(far, now), format!("Oct 19 {}", clock(far)));
     }
 
     #[test]

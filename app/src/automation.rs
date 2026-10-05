@@ -134,12 +134,54 @@ pub fn schedule_text(schedule: &Schedule) -> String {
     let Schedule { kind, value } = schedule;
     match kind {
         ScheduleKind::Once => format!("once · {value}"),
-        ScheduleKind::Cron => format!("cron · {value}"),
+        ScheduleKind::Cron => cron_text(value).unwrap_or_else(|| format!("cron · {value}")),
         ScheduleKind::Interval => format!("every {value}"),
         ScheduleKind::PollUntil => format!("every {value} until done"),
         ScheduleKind::Event => format!("on {value}"),
         ScheduleKind::Unknown => value.clone(),
     }
+}
+
+fn cron_text(value: &str) -> Option<String> {
+    let fields: Vec<&str> = value.split_whitespace().collect();
+    let [minute, hour, "*", "*", weekdays] = fields.as_slice() else {
+        return None;
+    };
+    let minute: u8 = minute.parse().ok().filter(|minute| *minute < 60)?;
+    let hour: u8 = hour.parse().ok().filter(|hour| *hour < 24)?;
+    let period = if hour < 12 { "AM" } else { "PM" };
+    let shown = match hour % 12 {
+        0 => 12,
+        other => other,
+    };
+    let time = format!("{shown}:{minute:02} {period}");
+    let days = match *weekdays {
+        "*" => "Daily".to_string(),
+        "1-5" => "Weekdays".to_string(),
+        "0,6" | "6,0" => "Weekends".to_string(),
+        list => {
+            let mut names = Vec::new();
+            for day in list.split(',') {
+                names.push(weekday_name(day)?);
+            }
+            names.join(", ")
+        }
+    };
+    Some(format!("{days} at {time}"))
+}
+
+fn weekday_name(day: &str) -> Option<&'static str> {
+    let name = match day {
+        "0" | "7" => "Sun",
+        "1" => "Mon",
+        "2" => "Tue",
+        "3" => "Wed",
+        "4" => "Thu",
+        "5" => "Fri",
+        "6" => "Sat",
+        _ => return None,
+    };
+    Some(name)
 }
 
 pub fn quiet_divider(quiet: &Quiet) -> Div {
@@ -269,7 +311,7 @@ mod tests {
     use time::macros::datetime;
     use tuclaw_core::v3::{Outcome, TaskId};
 
-    use super::{Quiet, label_of, quiet_span, quiet_text};
+    use super::{Quiet, cron_text, label_of, quiet_span, quiet_text};
     use crate::local::clock;
 
     #[test]
@@ -287,6 +329,23 @@ mod tests {
             quiet_span(&quiet),
             format!("{} – {}", clock(start), clock(end))
         );
+    }
+
+    #[test]
+    fn a_plain_cron_reads_as_days_and_a_time() {
+        assert_eq!(cron_text("13 8 * * *").as_deref(), Some("Daily at 8:13 AM"));
+        assert_eq!(
+            cron_text("17 14 * * 3,5").as_deref(),
+            Some("Wed, Fri at 2:17 PM")
+        );
+        assert_eq!(cron_text("7 3 * * 1").as_deref(), Some("Mon at 3:07 AM"));
+        assert_eq!(
+            cron_text("0 0 * * 1-5").as_deref(),
+            Some("Weekdays at 12:00 AM")
+        );
+        assert_eq!(cron_text("*/5 * * * *"), None);
+        assert_eq!(cron_text("0 9 1 * *"), None);
+        assert_eq!(cron_text("0 9 * * 8"), None);
     }
 
     #[test]

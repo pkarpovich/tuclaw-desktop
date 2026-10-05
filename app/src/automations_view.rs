@@ -563,15 +563,7 @@ fn outcome_word(outcome: Outcome) -> &'static str {
 }
 
 fn when(at: OffsetDateTime) -> String {
-    if local::local(at).date() == local::today() {
-        return clock(at);
-    }
-    let description = time::macros::format_description!("[month repr:short] [day padding:none]");
-    format!(
-        "{} {}",
-        local::local(at).format(&description).unwrap_or_default(),
-        clock(at)
-    )
+    local::when(at, OffsetDateTime::now_utc())
 }
 
 fn first_line(text: &str) -> String {
