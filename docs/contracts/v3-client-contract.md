@@ -332,7 +332,8 @@ Agreed 2026-10-05 with the desktop (Pavel's asks: groups with a title and an emo
 Agreed 2026-10-05 with the desktop; Pavel wanted "mark as unread" so a chat keeps a badge until he comes back to it. It is a flag beside the v3.6 cursor, never a cursor moved back, so the cursor stays forward-only. Telegram never touches it.
 
 - `GET /surfaces` and `surface.updated` gain `marked_unread` (bool).
-- `POST /surfaces/{id}/unread` (no body) sets the flag and answers `200 {"last_read_message_id", "unread", "marked_unread": true}`. The cursor stays where it is, so `last_read_message_id` may be `null`. An unknown surface = `404`.
+- `POST /surfaces/{id}/unread` (no body) sets the flag and answers `200 {"last_read_message_id", "unread", "marked_unread": true}`. The cursor stays where it is. An unknown surface = `404`.
 - `POST /surfaces/{id}/read` clears the flag. It clears it even when the cursor does not move: opening the surface is the signal. `message_id` becomes optional; without it the read only clears the flag. With it, it is validated as in v3.6. The answer gains `marked_unread`.
 - Both writes record a persisted `surface.read` event; its payload gains `marked_unread`: `{last_read_message_id, unread, marked_unread}`.
+- In every read-state answer and `surface.read` frame, `last_read_message_id` is `null` while a surface has no cursor, as in `GET /surfaces`.
 - **Client side.** The desktop shows a dot when `unread` is 0 and the surface is marked, and the count otherwise. When the surface marked unread is the open one, the client does not read it on window activation or scroll. It clears the flag when the surface is opened again or a new message arrives on it.
