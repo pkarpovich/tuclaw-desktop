@@ -2,8 +2,12 @@ use gpui::{
     Context, Div, Entity, FontWeight, Hsla, IntoElement, Render, SharedString, Subscription,
     Window, div, prelude::*, px,
 };
-use tuclaw_core::model::{Agent, AgentStatus};
+use tuclaw_core::model::{Agent, AgentId, AgentStatus};
 
+use crate::card::{self, CardActions, with_card};
+use crate::control::{AvatarSize, Face, avatar, button};
+use crate::icon::{Glyph, icon};
+use crate::people::People;
 use crate::state::AppState;
 use crate::theme;
 
@@ -13,10 +17,10 @@ pub struct AgentsView {
 }
 
 pub struct AgentCard {
+    pub agent: AgentId,
     pub name: SharedString,
-    pub initials: SharedString,
+    pub face: Face,
     pub role: SharedString,
-    pub tone: usize,
     pub status: Status,
 }
 
@@ -38,14 +42,17 @@ impl AgentsView {
 
 impl Render for AgentsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let cards = agent_cards(self.state.read(cx).agents());
+        let state = self.state.read(cx);
+        let people = state.people();
+        let cards = agent_cards(&people);
+        let actions = card::actions(&self.state);
         let total = cards.len();
         let mut busy = 0;
         for AgentCard {
+            agent: _,
             name: _,
-            initials: _,
+            face: _,
             role: _,
-            tone: _,
             status,
         } in &cards
         {
@@ -65,7 +72,7 @@ impl Render for AgentsView {
             .px(px(14.))
             .py(px(12.));
         for card in cards {
-            list = list.child(card_element(card));
+            list = list.child(card_element(card, &people, &actions));
         }
         div()
             .flex()
@@ -77,20 +84,21 @@ impl Render for AgentsView {
     }
 }
 
-pub fn agent_cards(agents: &[Agent]) -> Vec<AgentCard> {
+pub fn agent_cards(people: &People) -> Vec<AgentCard> {
     let mut ordered: Vec<&Agent> = Vec::new();
-    for agent in agents {
+    for agent in people.agents {
         ordered.push(agent);
     }
     ordered.sort_by_key(|agent| (agent.sort_index, agent.id.0));
     let mut cards = Vec::new();
     for Agent {
-        id: _,
+        id,
         name,
         initials,
         role,
         status,
         sort_index,
+        picture,
     } in ordered
     {
         let status = match status {
@@ -98,10 +106,14 @@ pub fn agent_cards(agents: &[Agent]) -> Vec<AgentCard> {
             AgentStatus::Busy(task) => Status::Busy(SharedString::from(task.clone())),
         };
         cards.push(AgentCard {
+            agent: *id,
             name: SharedString::from(name.clone()),
-            initials: SharedString::from(initials.clone()),
+            face: Face {
+                initials: SharedString::from(initials.clone()),
+                color: theme::agent_chip(*sort_index as usize),
+                picture: people.picture(picture.as_ref()),
+            },
             role: SharedString::from(role.clone()),
-            tone: *sort_index as usize,
             status,
         });
     }
@@ -132,14 +144,17 @@ fn header(total: usize, busy: usize) -> impl IntoElement {
         )
 }
 
-fn card_element(card: AgentCard) -> impl IntoElement {
+fn card_element(card: AgentCard, people: &People, actions: &CardActions) -> impl IntoElement {
     let AgentCard {
+        agent,
         name,
-        initials,
+        face,
         role,
-        tone,
         status,
     } = card;
+    let AgentId(raw) = agent;
+    let open = actions.on_settings.clone();
+    let name_label = name.clone();
     div()
         .flex()
         .flex_none()
@@ -150,7 +165,13 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         .bg(theme::raised())
         .border_1()
         .border_color(theme::border())
-        .child(chip(initials, tone))
+        .child(with_card(
+            format!("agents-card-{raw}"),
+            agent,
+            avatar(face, AvatarSize::Message),
+            people,
+            actions,
+        ))
         .child(
             div()
                 .flex()
@@ -172,22 +193,15 @@ fn card_element(card: AgentCard) -> impl IntoElement {
         )
         .child(div().flex_1())
         .child(status_element(status))
-}
-
-fn chip(initials: SharedString, tone: usize) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .w(px(34.))
-        .h(px(34.))
-        .rounded(px(10.))
-        .bg(theme::agent_chip(tone))
-        .text_size(px(11.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::chip_text())
-        .child(initials)
+        .child(
+            button(format!("agents-settings-{raw}"))
+                .accessibility_label(format!("Settings for {name_label}"))
+                .p(px(5.))
+                .rounded(px(7.))
+                .hover(|style| style.bg(theme::sunken()))
+                .on_click(move |_event, window, cx| open(agent, window, cx))
+                .child(icon(Glyph::Adjust, px(15.), theme::text_secondary())),
+        )
 }
 
 fn status_element(status: Status) -> Div {
@@ -215,36 +229,37 @@ fn status_frame(dot: Hsla, text: Hsla, weight: FontWeight) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
+    use gpui::{Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
     use tuclaw_core::model::{Agent, AgentId, AgentStatus};
-    use tuclaw_core::store::Store;
 
     use super::{AgentCard, AgentsView, Status, agent_cards};
-    use crate::input::bind_keys;
+    use crate::people::{Gallery, Me, People};
     use crate::shell::Shell;
-    use crate::state::{AppState, Segment, View};
+    use crate::state::{Segment, View};
+    use crate::testing::loaded;
 
-    fn seeded(cx: &mut TestAppContext) -> Entity<AppState> {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        cx.new(|_| state)
+    fn cards(agents: &[Agent]) -> Vec<AgentCard> {
+        let me = Me::default();
+        let gallery = Gallery::new();
+        agent_cards(&People {
+            agents,
+            directory: &[],
+            me: &me,
+            gallery: &gallery,
+        })
     }
 
     #[gpui::test]
     fn the_cards_follow_the_sort_index(cx: &mut TestAppContext) {
-        let state = seeded(cx);
-        let cards = state.read_with(cx, |state, _cx| agent_cards(state.agents()));
+        let (_mock, state) = loaded(cx);
+        let cards = state.read_with(cx, |state, _cx| agent_cards(&state.people()));
         let mut names = Vec::new();
         let mut statuses = Vec::new();
         for AgentCard {
+            agent: _,
             name,
-            initials: _,
+            face: _,
             role: _,
-            tone: _,
             status,
         } in &cards
         {
@@ -254,20 +269,18 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                SharedString::new_static("magnet feed sync"),
-                SharedString::new_static("allspeak"),
-                SharedString::new_static("media review"),
-                SharedString::new_static("tuclaw general"),
+                SharedString::new_static("Jarvis"),
+                SharedString::new_static("Home"),
+                SharedString::new_static("Magnet Feed"),
+                SharedString::new_static("Scout"),
             ]
         );
         assert_eq!(
             statuses,
             vec![
-                Status::Busy(SharedString::new_static(
-                    "Waiting for the download to finish"
-                )),
-                Status::Busy(SharedString::new_static("Syncing subtitles for tonight")),
                 Status::Idle,
+                Status::Idle,
+                Status::Busy(SharedString::new_static("in #Magnet Feed")),
                 Status::Idle,
             ]
         );
@@ -284,9 +297,10 @@ mod tests {
                 role: "role".to_string(),
                 status: AgentStatus::Idle,
                 sort_index,
+                picture: None,
             });
         }
-        let cards = agent_cards(&agents);
+        let cards = cards(&agents);
         let mut names = Vec::new();
         for card in &cards {
             names.push(card.name.clone());
@@ -313,9 +327,10 @@ mod tests {
                 role: "role".to_string(),
                 status: AgentStatus::Idle,
                 sort_index: 0,
+                picture: None,
             });
         }
-        let cards = agent_cards(&agents);
+        let cards = cards(&agents);
         let mut names = Vec::new();
         for card in &cards {
             names.push(card.name.clone());
@@ -331,7 +346,7 @@ mod tests {
 
     #[gpui::test]
     fn drawing_the_agents_view_does_not_panic(cx: &mut TestAppContext) {
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_view, cx) = cx.add_window_view(move |_window, cx| AgentsView::new(built, cx));
         state.update(cx, |state, cx| {
@@ -342,12 +357,29 @@ mod tests {
     }
 
     #[gpui::test]
+    fn the_gear_on_a_row_opens_the_agent_settings(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_view, cx) = cx.add_window_view(move |_window, cx| AgentsView::new(built, cx));
+        cx.run_until_parked();
+        let gear = cx
+            .debug_bounds("agents-settings-3")
+            .expect("the gear of agent 3 is drawn");
+        cx.simulate_click(gear.center(), Modifiers::default());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.settings().and_then(|settings| settings.agent()),
+                Some(AgentId(3))
+            );
+        });
+    }
+
+    #[gpui::test]
     fn a_channel_row_leaves_the_agents_view(cx: &mut TestAppContext) {
-        cx.update(bind_keys);
-        let state = seeded(cx);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_shell, cx): (Entity<Shell>, &mut VisualTestContext) =
-            cx.add_window_view(move |_window, cx| Shell::new(built, cx));
+            cx.add_window_view(move |window, cx| Shell::new(built, window, cx));
         let agents = cx
             .debug_bounds("sidebar-agents")
             .expect("the agents row is drawn");
@@ -356,8 +388,8 @@ mod tests {
             assert_eq!(state.active_segment(), Segment::Agents)
         });
         let channel = cx
-            .debug_bounds("sidebar-row-movie-night")
-            .expect("the movie-night row is drawn");
+            .debug_bounds("sidebar-row-Smart Home")
+            .expect("the Smart Home row is drawn");
         cx.simulate_click(channel.center(), Modifiers::default());
         state.read_with(cx, |state, _cx| {
             assert_eq!(state.active_segment(), Segment::Channel)

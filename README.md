@@ -4,13 +4,10 @@ A native macOS client for the tuclaw agent system, written in Rust on
 [GPUI](https://github.com/zed-industries/zed) — Zed's GPU-accelerated UI framework. It is the first
 step toward replacing Telegram as the interface to a set of AI agents.
 
-v1 shows the channels and direct messages of a single local workspace, renders one conversation
-grouped by day, lets you type and send a message, open a thread on any message and reply in it, and
-lists the agents. Data lives in SQLite, seeded once from fixtures on first launch. There is no
-network: no daemon connection, no sync, no notifications.
+The app runs on the daemon's `/api/v3` through `tuclaw_core::v3`: the surfaces (Telegram topics) in the sidebar, one conversation grouped by day, sending with an optimistic row, live runs over the event socket, and the agents. Every launch path (Finder, `mise run preview`, `mise run install`, `mise run dev`) talks to the live daemon on bravo, `http://192.168.199.72:9090`, with no token. `TUCLAW_DAEMON_URL` points it at another daemon and `TUCLAW_CLIENT_TOKEN` adds a bearer for a daemon that requires one. The mock runs only when asked for: `TUCLAW_MOCK=1` for the built-in world, `TUCLAW_MOCK_WORLD=<path>` for a snapshot world (the second wins when both are set). An app opened through LaunchServices sees none of these variables, so the bundle always uses the default daemon; the first launch asks for Local Network access, which it needs to reach bravo. Threads and direct messages are not in v3.0 and are hidden until they are.
 
 The window draws its own chrome. The titlebar is transparent, the traffic lights are positioned
-inside the app's own top bar, and the feed and thread are rounded cards floating on a warm
+inside the app's own top bar, and the feed is a rounded card floating on a warm
 background. Nothing on screen is a system control.
 
 Enter sends; Shift+Enter breaks the line. Clicking the composer focuses it, and it grows with its
@@ -23,15 +20,24 @@ shown in UTC, not in the local zone.
 
 | Path | What it is |
 |---|---|
-| `core/` | `tuclaw-core`: domain types, the SQLite store, the fixtures, day grouping. No `gpui` dependency, so it is testable without a window. |
-| `app/` | `tuclaw-desktop`: the binary — state, views, the text input element, the theme. |
+| `core/` | `tuclaw-core`: the domain types the views render, day grouping, and `v3`, the client of the daemon's `/api/v3`. No `gpui` dependency, so it is testable without a window. |
+| `app/` | `tuclaw-desktop`: a library (state, views, the theme) and a thin binary. |
 | `docs/design/` | The designer's mockup and five screenshots of it. Look here before touching a view. |
-| `docs/plans/completed/` | The implementation plan this repository was built from, archived complete. |
+| `docs/contracts/` | `v3-client-contract.md`, the wire contract with the daemon, a copy of tuclaw's. |
+| `docs/plans/completed/` | The implementation plans this repository was built from, archived complete. |
+
+## The daemon client
+
+`tuclaw_core::v3` speaks the daemon's `/api/v3` as `docs/contracts/v3-client-contract.md` defines it: REST with an optional bearer token, the event socket with replay and snapshots, a reducer that folds a run's frames into what a UI renders, and `MockTransport`, an in-process daemon the tests run against and the app runs on only when asked for.
+
+### A snapshot world for the mock
+
+The mock can start from a snapshot of the prod database instead of its built-in world. `mise run snapshot-world` (`script/snapshot-world.py`) reads `~/Library/Application Support/tuclaw-desktop/snapshot.db` and writes `world.json` next to it, shaped exactly like the contract's REST bodies; `TUCLAW_MOCK_WORLD=<that path> mise run dev` starts the app on it (the toolbar says `snapshot`). It is never picked up on its own. Both files hold real chats: they stay outside the repository, are never committed or turned into fixtures, and are deleted once the daemon serves v3. Posting still plays the mock's canned run. Voice recordings come along when `attachments/` sits next to `world.json`: `attachments.json` lists `{id, message_id, kind, mime, size_bytes, duration_ms}` per recording and `<id>.<ext>` holds its bytes, shaped like the v3.1 draft's `attachments` field and `GET /api/v3/attachments/{id}`.
 
 ## Building
 
 Prerequisites: macOS, [mise](https://mise.jdx.dev) — the Rust pin is enforced through it, see
-Toolchain traps — and Xcode's Metal toolchain. Run `mise install` in the repository root to fetch the
+Toolchain traps. Run `mise install` in the repository root to fetch the
 version named in `mise.toml`.
 
 Everything runs through mise tasks, defined in `mise.toml`. Read the Toolchain traps below before
@@ -40,23 +46,33 @@ running anything else.
 ```
 mise run build       # cargo build --workspace --all-targets
 mise run dev         # cargo run -p tuclaw-desktop
+mise run snapshot General   # render the window offscreen to target/snapshots/General.png
 mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all
 mise run fmt-check   # cargo fmt --all -- --check
+mise run bundle      # target/release/bundle/Tuclaw Preview.app, ad-hoc signed
+mise run preview     # the bundle, opened (quits a running preview first)
+mise run install     # the same, copied to /Applications
 ```
 
 The four gates that must be green before any change lands: `mise run fmt-check`, `mise run lint`,
 `mise run test`, `mise run build`. A clean build takes about a minute; incremental builds are a few
 seconds.
 
+## The app bundle
+
+`mise run bundle` (`script/bundle-mac.fish`) builds the release binary and assembles `target/release/bundle/Tuclaw Preview.app` by hand, without `cargo-bundle`: `app/resources/Info.plist` with the version from `Cargo.toml`, the commit count as the build number and the short commit as `TuclawCommit`; the icon compiled by `xcrun actool` from the Icon Composer source `app/resources/AppIcon.icon` (taken from the tuclaw-app iOS project) into `AppIcon.icns` plus `Assets.car`; an ad-hoc `codesign` with the microphone entitlement. The local bundle is the preview: `Tuclaw Preview` with the bundle identifier `dev.pkarpovich.tuclaw.preview`, so it runs beside the released `Tuclaw` (`dev.pkarpovich.tuclaw`, installed with `brew install --cask pkarpovich/apps/tuclaw`) and neither quits, overwrites nor shares a microphone grant with the other. `script/bundle-mac.fish --sign <identity>` builds the release bundle instead: `Tuclaw.app`, Developer ID with the hardened runtime, which is what the release workflow runs. The minimum macOS is 14.0. `mise run preview` opens the fresh bundle after quitting a running preview; `mise run install` copies it to `/Applications`.
+
+A `v*` tag matching the workspace version runs `.github/workflows/release.yml`: the checks, the signed bundle, notarization and stapling, the zip on the GitHub release, and the `tuclaw` cask written to `pkarpovich/homebrew-apps`. Pull requests run `.github/workflows/ci.yml`. The same commands are Zed tasks in `.zed/tasks.json` (`task: spawn`, prefix `tuclaw:`).
+
+`app/build.rs` bakes the short commit into the binary as `TUCLAW_COMMIT` (overridable from the environment), and the app menu's About Tuclaw shows `version (commit)`; Cmd+Q quits. A bare `mise run dev` binary has the menu too, but no icon and the executable's name in the menu bar.
+
 ## Toolchain traps
 
 Four things about this project's toolchain are non-obvious, and each one has cost a build.
 
-**Rust 1.98.0, pinned in `mise.toml`.** The floor is 1.97: GPUI's main branch uses
-`std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.0 is verified
-against the pinned revision and compiles the whole dependency tree clean.
+**Rust 1.98.1, pinned in `mise.toml`.** The floor is 1.97: GPUI uses `std::hint::cold_path`, and anything earlier fails to compile `gpui` with `E0658`. 1.98.1 (zed's own `rust-toolchain.toml`) compiles the whole dependency tree clean.
 
 **Never run a bare `cargo`.** The pin does not reach it. On the author's machine `which cargo`
 resolves to an older install placed ahead of mise's shims by the global mise config, and a
@@ -68,60 +84,39 @@ runs inside the environment `mise.toml` declares, which is what makes the pin ef
 mise exec -- rustc --version
 ```
 
-**The entry point lives in `gpui_platform`, not `gpui`.** At the pinned revision `gpui::Application`
-has no `new()`. The app starts with `gpui_platform::application().run(|cx: &mut App| { ... })`, opens
-its window with `cx.open_window(options, |_, cx| cx.new(...))` and calls `cx.activate(true)`. Every
-published GPUI example starts with `Application::new()`, which does not compile here.
+**The entry point lives in `gpui_platform`, not `gpui`.** `gpui::Application` takes a platform, so the app starts with `gpui_platform::application().run(|cx: &mut App| { ... })`, opens its window with `cx.open_window(options, |_, cx| cx.new(...))` and calls `cx.activate(true)`.
 
-**Xcode's Metal toolchain must be installed.** `gpui_apple` compiles `shaders.metal` in a build
-script. Without the toolchain the build fails with `cannot execute tool 'metal'`. Install it with:
-
-```
-xcodebuild -downloadComponent MetalToolchain
-```
-
-It is about 690 MB.
+**No Metal toolchain is needed.** GPUI Kit turns on `runtime_shaders` in the platform crate, so the build stitches `shaders.metal` into the binary as text and Metal compiles it when the app starts, instead of running Xcode's `metal` tool in a build script.
 
 ## Dependencies
 
-GPUI is pinned to a git revision, not a crates.io version — only a stale `gpui` core is published and
-`gpui_platform` is not published at all, so the pin is mandatory:
+GPUI comes from crates.io as the weekly snapshots GPUI Kit publishes and builds on, renamed back to the crate names the code uses:
 
 ```toml
-gpui = { git = "https://github.com/zed-industries/zed", rev = "fecc3273ed32643c2ea1b04a74c8780e2c9ffaf8" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "fecc3273ed32643c2ea1b04a74c8780e2c9ffaf8", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "=0.3.7" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.7", features = ["font-kit"] }
+gpui-kit = { version = "=0.7.0" }
 ```
 
-Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under
-`[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
+`gpui-pre` is zed's own GPUI, published every week (0.3.7 is from 2026-09-28) together with the matching [GPUI Kit](https://gpui-kit.com) (`gpui-kit`, `gpui-base`, `gpui-component`): Markdown, inputs, lists and other components the app would otherwise write by hand. Both are pinned exactly and move together; a GPUI Kit release is a real task, not a version bump, because 0.x releases break APIs. The app moved off a git pin of zed's `main` on 2026-10-04: two `gpui` crates cannot share an app, and GPUI Kit only builds on its own snapshot.
 
-`rusqlite` carries `bundled` and `time`: `time` is what makes `OffsetDateTime` bind and read back,
-and `bundled` alone does not.
+Voice messages play through [rodio](https://crates.io/crates/rodio) (`playback` and `mp4` only: the cpal output and symphonia's AAC/ISO-MP4 decoders for the Watch's m4a recordings) and [opus-pure](https://crates.io/crates/opus-pure), a pure-Rust Ogg Opus decoder for Telegram's recordings, since symphonia has no Opus. Both decode in memory; nothing touches disk.
 
-GPUI is pre-1.0 and the pin was taken while its platform crates were being split apart. Moving the
-pin is a real task, not a version bump.
+Without the `font-kit` feature text lays out but renders no glyphs. `gpui` appears again under `[dev-dependencies]` with `features = ["test-support"]`, which is what `#[gpui::test]` needs.
 
 ## Data
 
-The database lives at `~/Library/Application Support/tuclaw-desktop/tuclaw.sqlite`. It is created and
-seeded from the fixtures on first launch; the seed marker is written in the same transaction as the
-fixtures, so an interrupted first run leaves either everything or nothing. Delete the file to get a
-fresh workspace on the next launch.
-
-If the store cannot be opened, the window still opens and shows a failure view naming the path and
-the error.
+The only thing stored locally is the voice waveform cache (`~/Library/Caches/tuclaw-desktop/waveforms/`, 64 bytes per recording). On start the app connects to the event socket, then fetches the surfaces, the agents and the selected surface's newest page; everything after that arrives on the socket. A dropped socket reconnects with backoff and replays from the last event it applied. If the daemon URL is not `http://`, the window opens on a failure view naming the URL and the error.
 
 ## Tests
 
 Two tiers, split by what they need to run.
 
-`tuclaw-core` uses plain `#[test]` — no window, no GPU. It covers domain invariants, the body
-encoding round trip, day grouping, the schema and every store method, seeding idempotence, and the
-fixture data itself. Store tests run against a fresh in-memory database each, so they are
-order-independent and parallel-safe.
+`tuclaw-core` uses plain `#[test]` — no window, no GPU. It covers domain invariants and day grouping. The v3 client is tested against golden JSON in `core/testdata/v3/`, against
+`FakeDaemon` for the HTTP transport, and end to end over the mock in `core/tests/v3_mock.rs`.
 
-`tuclaw-desktop` uses `#[gpui::test]`, which needs `gpui` with `test-support`. It covers state
-transitions through `AppState` methods, the input element through `simulate_input` and
+`tuclaw-desktop` uses `#[gpui::test]`, which needs `gpui` with `test-support`. Every state is built over the mock daemon in stepped mode, so frames are played from the test thread. It covers state
+transitions through `AppState` methods (the fresh start, sending, live runs, reconnect and gap), the input element through `simulate_input` and
 `simulate_keystrokes`, click paths through `debug_selector` + `debug_bounds` + `simulate_click`, pure
 view-model functions, and one draw test per view.
 

@@ -1,0 +1,276 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use gpui::{AppContext, HeadlessAppContext, Size, px};
+use tuclaw_core::v3::{Client, MockTransport, Pace, Scenario};
+use tuclaw_desktop::audio::{PeakCache, RodioSpeaker};
+use tuclaw_desktop::icon::Icons;
+use tuclaw_desktop::link::Source;
+use tuclaw_desktop::recorder::{Recorder, Take};
+use tuclaw_desktop::runlog::Disclosure;
+use tuclaw_desktop::shell::Shell;
+use tuclaw_desktop::state::AppState;
+
+fn main() {
+    let channel = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "Magnet Feed".to_string());
+    let open_logs = std::env::args().any(|arg| arg == "--open-logs");
+    let inspect = std::env::args().any(|arg| arg == "--inspect");
+    let profile = std::env::args().any(|arg| arg == "--profile");
+    let automations = std::env::args().any(|arg| arg == "--automations");
+    let recording = std::env::args().any(|arg| arg == "--recording");
+    let picture = std::env::args().any(|arg| arg == "--picture");
+    let unread = std::env::args().any(|arg| arg == "--unread");
+    let browse = std::env::args().any(|arg| arg == "--browse");
+    let grouped = browse || std::env::args().any(|arg| arg == "--groups");
+    let mut settings = None;
+    let mut task = None;
+    for arg in std::env::args() {
+        if let Some(name) = arg.strip_prefix("--settings=") {
+            settings = Some(name.to_string());
+        }
+        if let Some(id) = arg.strip_prefix("--task=") {
+            task = Some(id.to_string());
+        }
+    }
+    let height = match std::env::var("SNAPSHOT_HEIGHT") {
+        Ok(height) => height.parse::<f32>().expect("a height in points"),
+        Err(_) => 820.,
+    };
+    let platform = gpui_platform::current_platform(true);
+    let mut cx = HeadlessAppContext::with_platform(
+        platform.text_system(),
+        Arc::new(Icons),
+        gpui_platform::current_headless_renderer,
+    );
+    cx.update(gpui_kit::init);
+    let mock = match std::env::var("TUCLAW_MOCK_WORLD") {
+        Ok(path) => {
+            let seed = tuclaw_desktop::link::load_seed(std::path::Path::new(&path))
+                .expect("the world loads");
+            MockTransport::seeded(seed, Scenario::default(), Pace::Stepped)
+        }
+        Err(_) => MockTransport::new(Scenario::default(), Pace::Stepped),
+    };
+    let client = Client::mock(&mock);
+    let cache = PeakCache::new(std::env::temp_dir().join("tuclaw-snapshot-peaks"));
+    let state = cx.update(|cx| {
+        cx.new(|_| {
+            AppState::new(client, Source::Mock, Box::new(RodioSpeaker::default()))
+                .with_peak_cache(cache)
+        })
+    });
+    cx.update(|cx| state.update(cx, |state, cx| state.start(cx)));
+    cx.run_until_parked();
+    mock.pump_control();
+    cx.run_until_parked();
+    let mut found = None;
+    cx.update(|cx| {
+        for candidate in state.read(cx).channels() {
+            if candidate.name == channel {
+                found = Some(candidate.id);
+            }
+        }
+    });
+    let Some(selected) = found else {
+        eprintln!("no channel named {channel}");
+        std::process::exit(1);
+    };
+    if unread {
+        let target = tuclaw_desktop::link::surface_id(selected);
+        for text in [
+            "Two new releases are out tonight.",
+            "Both are queued; the first finishes in 20 minutes.",
+        ] {
+            mock.agent_posts(target, tuclaw_core::v3::AgentId(3), text);
+        }
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(3),
+            tuclaw_core::v3::AgentId(2),
+            "The living room lights are off.",
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+    }
+    cx.update(|cx| state.update(cx, |state, cx| state.select(selected, cx)));
+    cx.run_until_parked();
+    if open_logs {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let mut ids = Vec::new();
+                for message in state.messages() {
+                    if message.run.is_some() {
+                        ids.push(message.id);
+                    }
+                }
+                for id in ids {
+                    state.toggle(Disclosure::Log(id), cx);
+                }
+            })
+        });
+        cx.run_until_parked();
+    }
+    if inspect {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let mut last = None;
+                for message in state.messages() {
+                    if message.run.is_some() {
+                        last = Some(message.id);
+                    }
+                }
+                if let Some(id) = last {
+                    state.toggle(Disclosure::Inspect(id), cx);
+                }
+            })
+        });
+        cx.run_until_parked();
+    }
+    if let Some(name) = settings {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let mut found = None;
+                for agent in state.agents() {
+                    if agent.name == name {
+                        found = Some(agent.id);
+                    }
+                }
+                if let Some(agent) = found {
+                    state.open_settings(agent, cx);
+                }
+            })
+        });
+        cx.run_until_parked();
+    }
+    if profile {
+        cx.update(|cx| state.update(cx, |state, cx| state.open_profile(cx)));
+        cx.run_until_parked();
+    }
+    if grouped {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.create_group("🎬 Movie nights".into(), cx);
+                state.create_group("🏠 Home".into(), cx);
+            })
+        });
+        cx.run_until_parked();
+        let groups = cx.update(|cx| state.read(cx).groups().to_vec());
+        let movies = groups[0].id;
+        let home = groups[1].id;
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let channels = state.channels().to_vec();
+                for channel in channels {
+                    if channel.name == "Magnet Feed" {
+                        state.file_channel(channel.id, Some(movies), cx);
+                        state.rename_channel(channel.id, "Torrents".into(), cx);
+                    }
+                    if channel.name == "Smart Home" {
+                        state.file_channel(channel.id, Some(home), cx);
+                    }
+                }
+            })
+        });
+        cx.run_until_parked();
+        if browse {
+            cx.update(|cx| state.update(cx, |state, cx| state.open_channels(cx)));
+            cx.run_until_parked();
+        }
+    }
+    if picture {
+        mock.serve_public(
+            "https://media.example.test/turtle.png",
+            include_bytes!("../../core/testdata/v3/media/avatar_agent.png").to_vec(),
+        );
+        cx.update(|cx| {
+            let Some(selected) = state.read(cx).selected() else {
+                return;
+            };
+            mock.agent_posts(
+                tuclaw_desktop::link::surface_id(selected),
+                tuclaw_core::v3::AgentId(1),
+                "Готово, сэр, вот новая черепашка:\n\n![Little turtle on the beach](https://media.example.test/turtle.png)",
+            );
+        });
+        while mock.step() {}
+        cx.run_until_parked();
+    }
+    if recording {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.set_recorder(Box::new(Stub));
+                state.start_recording(cx);
+            })
+        });
+        cx.run_until_parked();
+    }
+    if automations {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.activate_segment(tuclaw_desktop::state::Segment::Automations, cx)
+            })
+        });
+        cx.run_until_parked();
+    }
+    if let Some(id) = task.clone() {
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.activate_segment(tuclaw_desktop::state::Segment::Automations, cx);
+                state.open_task(tuclaw_core::v3::TaskId(id), cx);
+            })
+        });
+        cx.run_until_parked();
+    }
+    let built = state.clone();
+    let window = cx
+        .open_window(
+            Size {
+                width: px(1280.),
+                height: px(height),
+            },
+            move |window, cx| cx.new(|cx| Shell::new(built, window, cx)),
+        )
+        .expect("the window opens");
+    cx.run_until_parked();
+    let image = cx
+        .capture_screenshot(window.into())
+        .expect("the frame renders");
+    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("target")
+        .join("snapshots");
+    std::fs::create_dir_all(&directory).expect("the directory exists");
+    let name = if automations || task.is_some() {
+        "Automations".to_string()
+    } else if browse {
+        "Channels".to_string()
+    } else if grouped {
+        format!("{}-groups", channel.replace(' ', "-"))
+    } else if unread {
+        format!("{}-unread", channel.replace(' ', "-"))
+    } else if picture {
+        format!("{}-picture", channel.replace(' ', "-"))
+    } else if recording {
+        format!("{}-recording", channel.replace(' ', "-"))
+    } else {
+        channel.replace(' ', "-")
+    };
+    let path = directory.join(format!("{name}.png"));
+    image.save(&path).expect("the png is written");
+    println!("{}", path.display());
+}
+
+struct Stub;
+
+impl Recorder for Stub {
+    fn start(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<Take, String> {
+        Err("a snapshot records nothing".to_string())
+    }
+
+    fn cancel(&mut self) {}
+}

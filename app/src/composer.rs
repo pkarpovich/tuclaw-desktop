@@ -1,18 +1,27 @@
 use anyhow::Result;
 use gpui::{
-    App, BoxShadow, Context, Div, Entity, FocusHandle, FontWeight, IntoElement, Render,
-    SharedString, Subscription, Window, div, prelude::*, px,
+    App, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement,
+    KeyBinding, Render, SharedString, Subscription, Window, actions, div, prelude::*, px,
 };
+use gpui_kit::base::input::{Enter, Textarea, TextareaState};
 
-use crate::input::{Submitted, TextInput};
+use crate::control::button;
+use crate::icon::{Glyph, icon, spinner};
+use crate::state::{AppState, Recording};
 use crate::theme;
 
-pub enum ComposerKind {
-    Feed,
-    Thread,
-}
+actions!(composer, [ToggleTalk]);
+
+const REASON_LIMIT: usize = 60;
 
 pub type OnSubmit = Box<dyn Fn(String, &mut App) -> Result<()>>;
+
+const MAX_ROWS: usize = 10;
+
+enum Talk {
+    Start,
+    Send,
+}
 
 enum Sendable {
     Blank,
@@ -20,99 +29,276 @@ enum Sendable {
 }
 
 pub struct Composer {
-    input: Entity<TextInput>,
-    kind: ComposerKind,
+    input: Entity<TextareaState>,
     on_submit: OnSubmit,
+    voice: Option<Entity<AppState>>,
     _observation: Subscription,
-    _submissions: Subscription,
+    _voice_observation: Option<Subscription>,
+}
+
+pub fn bind_keys(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new("alt-space", ToggleTalk, None)]);
 }
 
 impl Composer {
     pub fn new(
-        kind: ComposerKind,
         placeholder: impl Into<SharedString>,
         on_submit: OnSubmit,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Composer {
-        let selector = match kind {
-            ComposerKind::Feed => "input-feed",
-            ComposerKind::Thread => "input-thread",
-        };
-        let input = cx.new(|cx| TextInput::new(placeholder, selector, cx));
-        let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
-        let submissions = cx.subscribe(&input, |composer, _input, _event: &Submitted, cx| {
-            composer.submit(cx);
+        let placeholder = placeholder.into();
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, MAX_ROWS)
+                .submit_on_enter(true)
+                .placeholder(placeholder)
         });
+        let observation = cx.observe(&input, |_composer, _input, cx| cx.notify());
         Composer {
             input,
-            kind,
             on_submit,
+            voice: None,
             _observation: observation,
-            _submissions: submissions,
+            _voice_observation: None,
+        }
+    }
+
+    pub fn with_voice(mut self, state: Entity<AppState>, cx: &mut Context<Self>) -> Composer {
+        self._voice_observation = Some(cx.observe(&state, |_composer, _state, cx| cx.notify()));
+        self.voice = Some(state);
+        self
+    }
+
+    fn toggle_talk(&mut self, _action: &ToggleTalk, _window: &mut Window, cx: &mut Context<Self>) {
+        self.talk(cx);
+    }
+
+    fn talk(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.voice.clone() else {
+            return;
+        };
+        state.update(cx, |state, cx| match state.recording() {
+            Recording::Live {
+                since: _,
+                channel: _,
+            } => state.finish_recording(cx),
+            Recording::Idle => state.start_recording(cx),
+            Recording::Failed(_) => state.start_recording(cx),
+            Recording::Sending => {}
+        });
+    }
+
+    fn cancel_recording(&mut self, cx: &mut Context<Self>) {
+        let Some(state) = self.voice.clone() else {
+            return;
+        };
+        state.update(cx, |state, cx| state.cancel_recording(cx));
+    }
+
+    fn voice_controls(&self, cx: &mut Context<Self>) -> Div {
+        let recording = match &self.voice {
+            Some(state) => state.read(cx).recording().clone(),
+            None => Recording::Idle,
+        };
+        let row = div().flex().flex_none().items_center().gap(px(8.));
+        match recording {
+            Recording::Idle => row.child(hint()).child(self.talk_chip(Talk::Start, cx)),
+            Recording::Live { since, channel: _ } => {
+                let elapsed = cx
+                    .background_executor()
+                    .now()
+                    .saturating_duration_since(since);
+                row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme::accent())
+                        .child(div().size(px(8.)).rounded_full().bg(theme::accent()))
+                        .child(SharedString::from(format!(
+                            "Recording {}:{:02}",
+                            elapsed.as_secs() / 60,
+                            elapsed.as_secs() % 60
+                        ))),
+                )
+                .child(
+                    button("composer-cancel-recording")
+                        .px(px(8.))
+                        .py(px(5.))
+                        .rounded(px(7.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .text_size(px(12.5))
+                        .text_color(theme::text_secondary())
+                        .on_click(cx.listener(|composer, _event, _window, cx| {
+                            composer.cancel_recording(cx)
+                        }))
+                        .child("Cancel"),
+                )
+                .child(self.talk_chip(Talk::Send, cx))
+            }
+            Recording::Sending => row.child(
+                div()
+                    .id("composer-transcribing")
+                    .debug_selector(|| "composer-transcribing".to_string())
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .px(px(12.))
+                    .text_size(px(12.5))
+                    .text_color(theme::text_muted())
+                    .child(spinner(px(13.), theme::text_muted()))
+                    .child("Transcribing…"),
+            ),
+            Recording::Failed(reason) => {
+                let mut reason: String = reason.chars().take(REASON_LIMIT).collect();
+                if reason.chars().count() == REASON_LIMIT {
+                    reason.push('…');
+                }
+                row.child(
+                    div()
+                        .id("composer-voice-error")
+                        .debug_selector(|| "composer-voice-error".to_string())
+                        .text_size(px(11.5))
+                        .text_color(theme::accent())
+                        .child(SharedString::from(reason)),
+                )
+                .child(
+                    button("composer-dismiss-voice-error")
+                        .accessibility_label("Dismiss")
+                        .p(px(4.))
+                        .rounded(px(6.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .on_click(cx.listener(|composer, _event, _window, cx| {
+                            composer.cancel_recording(cx)
+                        }))
+                        .child(icon(Glyph::Close, px(12.), theme::text_muted())),
+                )
+                .child(self.talk_chip(Talk::Start, cx))
+            }
+        }
+    }
+
+    fn talk_chip(&self, talk: Talk, cx: &mut Context<Self>) -> gpui_kit::base::Button {
+        let chip = button("composer-talk")
+            .flex_none()
+            .gap(px(7.))
+            .px(px(12.))
+            .py(px(6.))
+            .rounded_full()
+            .border_1()
+            .text_size(px(12.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .on_click(cx.listener(|composer, _event, _window, cx| composer.talk(cx)));
+        match talk {
+            Talk::Start => chip
+                .accessibility_label("Record a voice message")
+                .border_color(theme::border())
+                .bg(theme::raised())
+                .text_color(theme::text_secondary())
+                .child(icon(Glyph::Voice, px(13.), theme::accent()))
+                .child("Talk"),
+            Talk::Send => chip
+                .accessibility_label("Send the voice message")
+                .border_color(theme::accent())
+                .bg(theme::accent())
+                .text_color(theme::chip_text())
+                .child(icon(Glyph::Send, px(13.), theme::chip_text()))
+                .child("Send voice"),
         }
     }
 
     pub fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.input.read(cx).focus_handle().clone()
+        self.input.read(cx).focus_handle(cx)
     }
 
     pub fn set_placeholder(
         &mut self,
         placeholder: impl Into<SharedString>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.input
-            .update(cx, |input, cx| input.set_placeholder(placeholder, cx));
+        self.input.update(cx, |input, cx| {
+            input.set_placeholder(placeholder, window, cx)
+        });
     }
 
-    fn submit(&mut self, cx: &mut Context<Self>) {
-        let input = self.input.read(cx);
-        if input.is_blank() {
+    #[cfg(test)]
+    pub fn text(&self, cx: &App) -> String {
+        self.input.read(cx).value().to_string()
+    }
+
+    pub fn restore(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.input.update(cx, |input, cx| {
+            input.set_value(text, window, cx);
+            let end = input.value().len();
+            input.set_selected_range(end..end, cx);
+        });
+    }
+
+    pub fn insert(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.input.update(cx, |input, cx| {
+            input.insert(text.to_string(), window, cx);
+            input.focus_handle(cx).focus(window, cx);
+        });
+    }
+
+    fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        let Enter {
+            secondary: _,
+            shift,
+        } = action;
+        if *shift {
+            cx.propagate();
             return;
         }
-        let body = input.text().to_string();
+        self.submit(window, cx);
+    }
+
+    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let body = self.input.read(cx).value().to_string();
+        if body.trim().is_empty() {
+            return;
+        }
         let Ok(()) = (self.on_submit)(body, cx) else {
             return;
         };
-        self.input.update(cx, |input, cx| input.clear(cx));
+        self.input
+            .update(cx, |input, cx| input.set_value("", window, cx));
     }
 
     fn send_button(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        let (selector, size) = match self.kind {
-            ComposerKind::Feed => ("composer-send-feed", px(32.)),
-            ComposerKind::Thread => ("composer-send-thread", px(30.)),
-        };
-        let button = div()
-            .id(selector)
-            .debug_selector(move || selector.to_string())
-            .flex()
+        let size = px(32.);
+        let send = button("composer-send-feed")
+            .accessibility_label("Send")
             .flex_none()
-            .items_center()
-            .justify_center()
             .w(size)
             .h(size)
             .ml(px(7.))
             .rounded_full()
-            .text_size(px(14.))
-            .font_weight(FontWeight::BOLD)
-            .child("↑");
+            .on_click(cx.listener(|composer, _event, window, cx| composer.submit(window, cx)));
         match sendable {
-            Sendable::Blank => button.bg(theme::sunken()).text_color(theme::text_muted()),
-            Sendable::Ready => button
+            Sendable::Blank => send
+                .disabled(true)
+                .cursor_default()
+                .bg(theme::sunken())
+                .child(icon(Glyph::Send, px(16.), theme::text_muted())),
+            Sendable::Ready => send
                 .bg(theme::accent())
-                .text_color(theme::chip_text())
-                .cursor_pointer()
                 .shadow(vec![
                     BoxShadow::new(px(0.), px(3.), theme::shadow())
                         .blur_radius(px(8.))
                         .spread_radius(px(-3.)),
                 ])
-                .on_click(cx.listener(|composer, _event, _window, cx| composer.submit(cx))),
+                .child(icon(Glyph::Send, px(16.), theme::chip_text())),
         }
     }
 
     fn feed_shape(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .on_action(cx.listener(Self::toggle_talk))
             .flex()
             .flex_none()
             .flex_col()
@@ -140,7 +326,15 @@ impl Composer {
                             .min_w(px(0.))
                             .text_size(px(14.5))
                             .line_height(px(21.))
-                            .child(self.input.clone()),
+                            .child(
+                                div()
+                                    .id("input-feed")
+                                    .debug_selector(|| "input-feed".to_string())
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .on_action(cx.listener(Self::enter))
+                                    .child(Textarea::new(&self.input)),
+                            ),
                     )
                     .child(
                         div()
@@ -150,61 +344,12 @@ impl Composer {
                             .px(px(9.))
                             .pt(px(6.))
                             .pb(px(9.))
-                            .child(mention_icon())
-                            .child(attachment_icon())
-                            .child(emoji_icon())
-                            .child(format_icon())
+                            .child(tool(Glyph::Mention))
+                            .child(tool(Glyph::Attach))
+                            .child(tool(Glyph::Emoji))
+                            .child(tool(Glyph::Format))
                             .child(div().flex_1())
-                            .child(hint())
-                            .child(talk_chip())
-                            .child(self.send_button(sendable, cx)),
-                    ),
-            )
-    }
-
-    fn thread_shape(&self, sendable: Sendable, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_none()
-            .flex_col()
-            .px(px(14.))
-            .pt(px(8.))
-            .pb(px(14.))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .rounded(px(12.))
-                    .bg(theme::raised())
-                    .border_1()
-                    .border_color(theme::border())
-                    .shadow(vec![
-                        BoxShadow::new(px(0.), px(2.), theme::shadow())
-                            .blur_radius(px(8.))
-                            .spread_radius(px(-4.)),
-                    ])
-                    .child(
-                        div()
-                            .flex()
-                            .px(px(13.))
-                            .pt(px(12.))
-                            .pb(px(6.))
-                            .min_w(px(0.))
-                            .text_size(px(13.5))
-                            .line_height(px(20.))
-                            .child(self.input.clone()),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(2.))
-                            .px(px(8.))
-                            .pt(px(4.))
-                            .pb(px(8.))
-                            .child(mention_icon())
-                            .child(microphone_icon())
-                            .child(div().flex_1())
+                            .child(self.voice_controls(cx))
                             .child(self.send_button(sendable, cx)),
                     ),
             )
@@ -213,19 +358,16 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sendable = if self.input.read(cx).is_blank() {
+        let sendable = if self.input.read(cx).value().trim().is_empty() {
             Sendable::Blank
         } else {
             Sendable::Ready
         };
-        match self.kind {
-            ComposerKind::Feed => self.feed_shape(sendable, cx).into_any_element(),
-            ComposerKind::Thread => self.thread_shape(sendable, cx).into_any_element(),
-        }
+        self.feed_shape(sendable, cx)
     }
 }
 
-fn icon() -> Div {
+fn tool(glyph: Glyph) -> impl IntoElement {
     div()
         .flex()
         .flex_none()
@@ -234,73 +376,7 @@ fn icon() -> Div {
         .w(px(30.))
         .h(px(30.))
         .rounded(px(8.))
-        .text_color(theme::text_secondary())
-}
-
-fn mention_icon() -> impl IntoElement {
-    icon().text_size(px(15.)).child("@")
-}
-
-fn attachment_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .w(px(7.))
-            .h(px(15.))
-            .rounded(px(4.))
-            .border_1()
-            .border_color(theme::text_secondary()),
-    )
-}
-
-fn emoji_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(3.))
-            .w(px(15.))
-            .h(px(15.))
-            .rounded_full()
-            .border_1()
-            .border_color(theme::text_secondary())
-            .child(eye())
-            .child(eye()),
-    )
-}
-
-fn eye() -> Div {
-    div()
-        .w(px(2.))
-        .h(px(2.))
-        .rounded_full()
-        .bg(theme::text_secondary())
-}
-
-fn microphone_icon() -> impl IntoElement {
-    icon().child(
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(2.))
-            .child(
-                div()
-                    .w(px(6.))
-                    .h(px(9.))
-                    .rounded(px(3.))
-                    .border_1()
-                    .border_color(theme::text_secondary()),
-            )
-            .child(div().w(px(10.)).h(px(1.)).bg(theme::text_secondary())),
-    )
-}
-
-fn format_icon() -> impl IntoElement {
-    icon()
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .child("Aa")
+        .child(icon(glyph, px(16.), theme::text_secondary()))
 }
 
 fn hint() -> impl IntoElement {
@@ -309,66 +385,33 @@ fn hint() -> impl IntoElement {
         .mr(px(6.))
         .text_size(px(11.5))
         .text_color(theme::text_muted())
-        .child("Hold ⌥Space to talk")
-}
-
-fn talk_chip() -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(7.))
-        .px(px(12.))
-        .py(px(6.))
-        .rounded_full()
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::raised())
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::text_secondary())
-        .child(
-            div()
-                .flex_none()
-                .w(px(6.))
-                .h(px(11.))
-                .rounded(px(3.))
-                .bg(theme::accent()),
-        )
-        .child("Talk")
+        .child("⌥Space to talk")
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::bail;
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
+    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
     use tuclaw_core::model::Span;
-    use tuclaw_core::store::Store;
 
-    use super::{Composer, ComposerKind, OnSubmit};
-    use crate::input::bind_keys;
+    use super::{Composer, OnSubmit};
     use crate::state::AppState;
+    use crate::testing::loaded;
 
     fn mount(
         cx: &mut TestAppContext,
         on_submit: OnSubmit,
     ) -> (Entity<Composer>, &mut VisualTestContext) {
-        cx.update(bind_keys);
-        cx.add_window_view(move |_window, cx| {
-            Composer::new(ComposerKind::Feed, "Message #movie-night", on_submit, cx)
+        cx.update(gpui_kit::init);
+        cx.add_window_view(move |window, cx| {
+            Composer::new("Message #General", on_submit, window, cx)
         })
     }
 
     fn sending(
         cx: &mut TestAppContext,
     ) -> (Entity<AppState>, Entity<Composer>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+        let (_mock, state) = loaded(cx);
         let sender = state.clone();
         let (composer, cx) = mount(
             cx,
@@ -386,9 +429,7 @@ mod tests {
     }
 
     fn typed(composer: &Entity<Composer>, cx: &mut VisualTestContext) -> String {
-        composer.read_with(cx, |composer, cx| {
-            composer.input.read(cx).text().to_string()
-        })
+        composer.read_with(cx, |composer, cx| composer.text(cx))
     }
 
     #[gpui::test]
@@ -457,5 +498,41 @@ mod tests {
             assert_eq!(last.body, vec![Span::Text("hi".to_string())]);
         });
         assert_eq!(typed(&composer, cx), "");
+    }
+
+    #[gpui::test]
+    fn restore_puts_a_failed_body_back(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        composer.update_in(cx, |composer, window, cx| {
+            composer.restore("Лисички 🍄".to_string(), window, cx)
+        });
+        assert_eq!(typed(&composer, cx), "Лисички 🍄");
+        focus(&composer, cx);
+        cx.simulate_input("!");
+        assert_eq!(typed(&composer, cx), "Лисички 🍄!");
+    }
+
+    #[gpui::test]
+    fn pasting_inserts_the_clipboard_text(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        focus(&composer, cx);
+        cx.simulate_input("ask ");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+            "лисички со сливками\nи луком".to_string(),
+        ));
+        cx.simulate_keystrokes("cmd-v");
+        assert_eq!(typed(&composer, cx), "ask лисички со сливками\nи луком");
+    }
+
+    #[gpui::test]
+    fn select_all_then_typing_replaces_the_text(cx: &mut TestAppContext) {
+        let (composer, cx) = mount(cx, Box::new(|_body, _cx| Ok(())));
+        focus(&composer, cx);
+        cx.simulate_input("draft one");
+        cx.simulate_keystrokes("cmd-a");
+        cx.simulate_input("final");
+        assert_eq!(typed(&composer, cx), "final");
+        cx.simulate_keystrokes("shift-left shift-left backspace");
+        assert_eq!(typed(&composer, cx), "fin");
     }
 }

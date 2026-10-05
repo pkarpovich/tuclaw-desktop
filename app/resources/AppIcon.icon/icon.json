@@ -1,0 +1,39 @@
+{
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.30704,0.05198,0.40416,1.00000"
+  },
+  "groups" : [
+    {
+      "blur-material" : 0.9,
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "Generated Image February 28, 2026 - 10_22PM_clean.png",
+          "name" : "Generated Image February 28, 2026 - 10_22PM_clean",
+          "position" : {
+            "scale" : 0.26,
+            "translation-in-points" : [
+              -30.03000000000003,
+              12.504999481774462
+            ]
+          }
+        }
+      ],
+      "lighting" : "combined",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

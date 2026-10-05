@@ -1,16 +1,29 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Div, Entity, FontWeight, IntoElement, ListAlignment, ListState, Render,
-    SharedString, Subscription, Window, div, list, prelude::*, px,
+    AnyElement, Context, Div, Entity, FollowMode, FontWeight, IntoElement, ListAlignment,
+    ListOffset, ListScrollEvent, ListState, Render, SharedString, Subscription, Window, div, list,
+    prelude::*, px,
 };
-use time::{OffsetDateTime, UtcOffset};
-use tuclaw_core::grouping::{DaySection, group_by_day};
-use tuclaw_core::model::{Agent, AgentId, AgentStatus, Author, Channel, ChannelKind, Message};
+use time::OffsetDateTime;
+use tuclaw_core::grouping::day_title;
+use tuclaw_core::model::{Agent, AgentId, Channel, ChannelKind, Message, MessageId};
+use tuclaw_core::v3;
 
-use crate::composer::{Composer, ComposerKind};
-use crate::message::{OnOpen, Replies, message_row};
-use crate::state::{AppState, StateEvent};
+use crate::automation::{FireRow, OnTask, fire_row, trigger_tag};
+use crate::card;
+use crate::composer::Composer;
+use crate::control::{AvatarSize, Face, avatar};
+use crate::icon::{Glyph, icon};
+use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
+use crate::local;
+use crate::message::{Actions, Fold, Look, OnPicture, OnPlay, OnToggle, message_row};
+use crate::people::People;
+use crate::runlog::{self, OnDisclose};
+use crate::state::{AppState, History, StateEvent};
+
+const PREFETCH: usize = 3;
 use crate::theme;
 
 pub struct Feed {
@@ -21,6 +34,7 @@ pub struct Feed {
     focus: Focus,
     _observation: Subscription,
     _events: Subscription,
+    _activation: Subscription,
 }
 
 enum Focus {
@@ -30,12 +44,16 @@ enum Focus {
 
 enum Item {
     Separator(SharedString),
-    Message(Message),
+    Message(Message, Option<FireRow>),
+    Unread,
+    Fire(FireRow),
+    Run(RunView),
 }
 
 enum Resync {
     Reset,
-    Repaint,
+    Runs,
+    Labels,
 }
 
 enum Header {
@@ -44,49 +62,92 @@ enum Header {
         agents: usize,
     },
     Direct {
-        initials: SharedString,
-        tone: usize,
+        face: Face,
         name: SharedString,
         role: SharedString,
     },
 }
 
-struct Busy {
-    name: SharedString,
-    task: SharedString,
-}
-
 impl Feed {
-    pub fn new(state: Entity<AppState>, cx: &mut Context<Self>) -> Feed {
+    pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Feed {
         let observation = cx.observe(&state, |_feed, _state, cx| cx.notify());
-        let events = cx.subscribe(&state, |feed, _state, event: &StateEvent, cx| match event {
-            StateEvent::SelectionChanged => {
-                feed.resync(Resync::Reset, cx);
-                feed.refresh_placeholder(cx);
-            }
-            StateEvent::MessageAppended => {
-                feed.resync(Resync::Reset, cx);
-                feed.list.scroll_to_end();
-            }
-            StateEvent::ReplyAppended => feed.resync(Resync::Repaint, cx),
-            StateEvent::ThreadOpened => {}
-            StateEvent::ThreadClosed => {
-                feed.focus = Focus::Requested;
-                cx.notify();
-            }
+        let events = cx.subscribe_in(
+            &state,
+            window,
+            |feed, _state, event: &StateEvent, window, cx| match event {
+                StateEvent::SelectionChanged => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.refresh_placeholder(window, cx);
+                }
+                StateEvent::MessagesLoaded => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.list.scroll_to_end();
+                    feed.read_to_newest(cx);
+                }
+                StateEvent::MessageAppended => {
+                    feed.resync(Resync::Reset, cx);
+                    feed.list.scroll_to_end();
+                    feed.read_to_newest(cx);
+                }
+                StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
+                StateEvent::FoldToggled => {
+                    feed.list.remeasure();
+                    cx.notify();
+                }
+                StateEvent::OlderLoaded => feed.keep_position(cx),
+                StateEvent::SendFailed(text) => {
+                    let text = text.clone();
+                    feed.composer
+                        .update(cx, |composer, cx| composer.restore(text, window, cx));
+                }
+                StateEvent::Mention(text) => {
+                    let text = text.clone();
+                    feed.composer
+                        .update(cx, |composer, cx| composer.insert(&text, window, cx));
+                }
+                StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
+                StateEvent::ChannelsChanged => {}
+                StateEvent::PictureOpened => {}
+                StateEvent::PicturesLoaded => {
+                    feed.list.remeasure();
+                    cx.notify();
+                }
+            },
+        );
+        let watcher = state.clone();
+        let activation = cx.observe_window_activation(window, move |_feed, window, cx| {
+            let active = window.is_window_active();
+            watcher.update(cx, |state, cx| state.set_window_active(active, cx));
         });
         let items = items(state.read(cx), OffsetDateTime::now_utc());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
+        list.set_follow_mode(FollowMode::Tail);
+        let pager = state.downgrade();
+        list.set_scroll_handler(move |event: &ListScrollEvent, _window, cx| {
+            if !near_top(event) {
+                return;
+            }
+            pager
+                .update(cx, |state, cx| match state.history() {
+                    History::More => state.load_older(cx),
+                    History::Unknown => {}
+                    History::Loading => {}
+                    History::Complete => {}
+                })
+                .ok();
+        });
         let placeholder = placeholder(state.read(cx));
         let sender = state.clone();
         let composer = cx.new(|cx| {
             Composer::new(
-                ComposerKind::Feed,
                 placeholder,
                 Box::new(move |body, cx| sender.update(cx, |state, cx| state.send(body, cx))),
+                window,
                 cx,
             )
+            .with_voice(state.clone(), cx)
         });
+        state.update(cx, |state, cx| state.read_to_newest(cx));
         Feed {
             state,
             list,
@@ -95,26 +156,74 @@ impl Feed {
             focus: Focus::Requested,
             _observation: observation,
             _events: events,
+            _activation: activation,
         }
     }
 
-    #[cfg(test)]
-    pub fn input_focus(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        self.composer.read(cx).focus_handle(cx)
+    fn refresh_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let placeholder = placeholder(self.state.read(cx));
+        self.composer.update(cx, |composer, cx| {
+            composer.set_placeholder(placeholder, window, cx)
+        });
     }
 
-    fn refresh_placeholder(&mut self, cx: &mut Context<Self>) {
-        let placeholder = placeholder(self.state.read(cx));
-        self.composer
-            .update(cx, |composer, cx| composer.set_placeholder(placeholder, cx));
+    fn keep_position(&mut self, cx: &mut Context<Self>) {
+        let ListOffset {
+            item_ix,
+            offset_in_item,
+        } = self.list.logical_scroll_top();
+        let (anchor, offset_in_item) = match anchor_from(&self.items, item_ix) {
+            Some((anchor, moved)) if moved => (Some(anchor), px(0.)),
+            Some((anchor, _)) => (Some(anchor), offset_in_item),
+            None => (None, offset_in_item),
+        };
+        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let mut found = None;
+        if let Some(anchor) = anchor {
+            for (index, item) in items.iter().enumerate() {
+                if key(item) == anchor {
+                    found = Some(index);
+                    break;
+                }
+            }
+        }
+        let count = items.len();
+        self.items = Rc::new(items);
+        self.list.reset(count);
+        if let Some(index) = found {
+            self.list.scroll_to(ListOffset {
+                item_ix: index,
+                offset_in_item,
+            });
+        }
+        cx.notify();
+    }
+
+    fn read_to_newest(&mut self, cx: &mut Context<Self>) {
+        self.state.update(cx, |state, cx| state.read_to_newest(cx));
     }
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
         let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let before = self.items.len();
+        let first_run = first_run(&items);
         self.items = Rc::new(items);
         match resync {
             Resync::Reset => self.list.reset(self.items.len()),
-            Resync::Repaint => {}
+            Resync::Labels => {
+                if self.items.len() == before {
+                    self.list.remeasure();
+                } else {
+                    self.list.reset(self.items.len());
+                }
+            }
+            Resync::Runs => {
+                if self.items.len() == before {
+                    self.list.remeasure_items(first_run..self.items.len());
+                } else {
+                    self.list.reset(self.items.len());
+                }
+            }
         }
         cx.notify();
     }
@@ -125,9 +234,37 @@ impl Feed {
         }
         let items = self.items.clone();
         let state = self.state.clone();
+        let folder = self.state.clone();
+        let on_toggle: OnToggle = Rc::new(move |message, _window, cx| {
+            folder.update(cx, |state, cx| state.toggle_thinking(message, cx));
+        });
+        let player = self.state.clone();
+        let on_play: OnPlay = Rc::new(move |message, _window, cx| {
+            player.update(cx, |state, cx| state.toggle_voice(message, cx));
+        });
+        let discloser = self.state.clone();
+        let on_disclose: OnDisclose = Rc::new(move |disclosure, _window, cx| {
+            discloser.update(cx, |state, cx| state.toggle(disclosure, cx));
+        });
+        let viewer = self.state.clone();
+        let on_picture: OnPicture = Rc::new(move |viewed, _window, cx| {
+            viewer.update(cx, |state, cx| state.view_picture(viewed, cx));
+        });
+        let actions = Actions {
+            on_toggle,
+            on_play,
+            on_disclose,
+            on_picture,
+            card: card::actions(&self.state),
+        };
+        let stopper = self.state.clone();
+        let on_stop: OnStop = Rc::new(move |run, _window, cx| {
+            stopper.update(cx, |state, cx| state.interrupt(run, cx));
+        });
         let opener = self.state.clone();
-        let on_open: OnOpen = Rc::new(move |root, _window, cx| {
-            opener.update(cx, |state, cx| state.open_thread(root, cx));
+        let on_task: OnTask = Rc::new(move |task, _window, cx| {
+            let task = task.clone();
+            opener.update(cx, |state, cx| state.open_task(task, cx));
         });
         list(self.list.clone(), move |index, _window, cx| {
             let Some(item) = items.get(index) else {
@@ -135,12 +272,61 @@ impl Feed {
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
-                Item::Message(message) => message_row(
-                    message,
-                    state.read(cx).agents(),
-                    Replies::Affordance(on_open.clone()),
-                )
-                .into_any_element(),
+                Item::Unread => unread_divider().into_any_element(),
+                Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
+                Item::Message(message, trigger) => {
+                    let state = state.read(cx);
+                    let fold = if state.is_expanded(message.id) {
+                        Fold::Expanded
+                    } else {
+                        Fold::Collapsed
+                    };
+                    let waveform = match &message.voice {
+                        Some(voice) => state.waveform(voice.recording),
+                        None => None,
+                    };
+                    let run = match &message.run {
+                        Some(run) => {
+                            let answer =
+                                crate::rich::split_thinking(&crate::message::source(&message.body))
+                                    .answer;
+                            runlog::pane(
+                                runlog::PaneInput {
+                                    message: message.id,
+                                    run,
+                                    answer: &answer,
+                                    log: state.run_log(&run.id),
+                                },
+                                &|disclosure, by_default| state.is_open(disclosure, by_default),
+                            )
+                        }
+                        None => None,
+                    };
+                    let look = Look {
+                        fold,
+                        player: state.player(message.id),
+                        waveform,
+                        run,
+                        trigger: trigger
+                            .as_ref()
+                            .map(|row| trigger_tag(row, on_task.clone()).into_any_element()),
+                    };
+                    message_row(message, &state.people(), look, &actions, state.pictures())
+                        .into_any_element()
+                }
+                Item::Run(run) => {
+                    let state = state.read(cx);
+                    let rows =
+                        runlog::views(owner(run), run.steps.clone(), &|disclosure, by_default| {
+                            state.is_open(disclosure, by_default)
+                        });
+                    let look = LiveLook {
+                        rows,
+                        on_stop: on_stop.clone(),
+                        on_disclose: actions.on_disclose.clone(),
+                    };
+                    run_card(run, &state.people(), look).into_any_element()
+                }
             }
         })
         .flex_1()
@@ -159,11 +345,7 @@ impl Render for Feed {
             }
             Focus::Taken => {}
         }
-        let state = self.state.read(cx);
-        let header = header(state);
-        let agents = state.agents();
-        let busy = busy_agents(agents);
-        let total = agents.len();
+        let header = header(self.state.read(cx));
         div()
             .flex()
             .flex_col()
@@ -172,29 +354,149 @@ impl Render for Feed {
             .child(header_element(header))
             .child(self.body())
             .child(self.composer.clone())
-            .child(status_bar(busy, total))
     }
 }
 
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
-    let sections = group_by_day(state.messages(), UtcOffset::UTC, now);
-    let mut items = Vec::new();
-    for DaySection {
-        date: _,
-        title,
-        messages,
-    } in sections
-    {
-        items.push(Item::Separator(SharedString::from(title)));
-        for message in messages {
-            items.push(Item::Message(message));
+    let today = local::local(now).date();
+    let mut triggers: HashMap<MessageId, FireRow> = HashMap::new();
+    let mut loose = Vec::new();
+    for mark in state.fires() {
+        let Some(at) = mark.at else {
+            continue;
+        };
+        let row = FireRow::new(mark, at, state.tasks());
+        let answer = match mark.outcome {
+            v3::Outcome::Ran => mark.message_id.map(|v3::MessageId(id)| MessageId(id)),
+            v3::Outcome::Silent => None,
+            v3::Outcome::Skipped => None,
+            v3::Outcome::Failed => None,
+            v3::Outcome::Unknown => None,
+        };
+        let Some(answer) = answer.filter(|answer| has_message(state, *answer)) else {
+            loose.push((at, row));
+            continue;
+        };
+        triggers.insert(answer, row);
+    }
+    let mut timeline = Vec::new();
+    for message in state.messages() {
+        let trigger = triggers.remove(&message.id);
+        timeline.push((message.sent_at, Item::Message(message.clone(), trigger)));
+    }
+    for (at, row) in loose {
+        timeline.push((at, Item::Fire(row)));
+    }
+    timeline.sort_by_key(|(at, _item)| *at);
+    let mut items: Vec<Item> = Vec::new();
+    let mut day = None;
+    let mut divider = state.divider();
+    for (at, item) in timeline {
+        if let (Some(cursor), Item::Message(message, _trigger)) = (divider, &item)
+            && message.id > cursor
+            && message.id > MessageId(0)
+        {
+            divider = None;
+            items.push(Item::Unread);
         }
+        let date = local::local(at).date();
+        if day != Some(date) {
+            day = Some(date);
+            items.push(Item::Separator(SharedString::from(day_title(date, today))));
+        }
+        if let Item::Fire(next) = &item
+            && let Some(Item::Fire(previous)) = items.last_mut()
+            && previous.absorbs(next)
+        {
+            previous.absorb(next.clone());
+            continue;
+        }
+        items.push(item);
+    }
+    for run in state.live_runs() {
+        items.push(Item::Run(run_view(run)));
     }
     items
 }
 
+fn has_message(state: &AppState, id: MessageId) -> bool {
+    let mut found = false;
+    for message in state.messages() {
+        if message.id == id {
+            found = true;
+            break;
+        }
+    }
+    found
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Key {
+    Separator(SharedString),
+    Unread,
+    Message(tuclaw_core::model::MessageId),
+    Fire(tuclaw_core::v3::TaskId, i64),
+    Run(Option<tuclaw_core::v3::RunId>),
+}
+
+fn key(item: &Item) -> Key {
+    match item {
+        Item::Separator(title) => Key::Separator(title.clone()),
+        Item::Unread => Key::Unread,
+        Item::Message(message, _trigger) => Key::Message(message.id),
+        Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+        Item::Run(run) => Key::Run(run.id.clone()),
+    }
+}
+
+fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
+    for (index, item) in items.iter().enumerate().skip(from) {
+        match item {
+            Item::Message(message, _trigger) => {
+                return Some((Key::Message(message.id), index != from));
+            }
+            Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
+            Item::Fire(row) => {
+                return Some((
+                    Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+                    index != from,
+                ));
+            }
+            Item::Separator(_) => {}
+            Item::Unread => {}
+        }
+    }
+    None
+}
+
+fn near_top(event: &ListScrollEvent) -> bool {
+    event.is_scrolled && event.visible_range.start <= PREFETCH
+}
+
+fn first_run(items: &[Item]) -> usize {
+    let mut first = items.len();
+    for (index, item) in items.iter().enumerate() {
+        match item {
+            Item::Run(_) => {
+                first = index;
+                break;
+            }
+            Item::Separator(_) => {}
+            Item::Unread => {}
+            Item::Message(_, _) => {}
+            Item::Fire(_) => {}
+        }
+    }
+    first
+}
+
 fn header(state: &AppState) -> Header {
-    let selected = state.selected();
+    let Some(selected) = state.selected() else {
+        return Header::Channel {
+            name: SharedString::new_static(""),
+            agents: 0,
+        };
+    };
     let mut found = None;
     for channel in state.channels() {
         if channel.id == selected {
@@ -219,15 +521,15 @@ fn header(state: &AppState) -> Header {
     match kind {
         ChannelKind::Channel => Header::Channel {
             name: SharedString::from(name.clone()),
-            agents: agent_authors(state.messages()),
+            agents: state.wired_agents(selected),
         },
-        ChannelKind::Direct(agent) => direct_header(state.agents(), *agent, name),
+        ChannelKind::Direct(agent) => direct_header(&state.people(), *agent, name),
     }
 }
 
-fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
+fn direct_header(people: &People, agent: AgentId, channel: &str) -> Header {
     let mut found = None;
-    for candidate in agents {
+    for candidate in people.agents {
         if candidate.id == agent {
             found = Some(candidate);
             break;
@@ -240,6 +542,7 @@ fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
         role,
         status: _,
         sort_index,
+        picture,
     }) = found
     else {
         return Header::Channel {
@@ -248,8 +551,11 @@ fn direct_header(agents: &[Agent], agent: AgentId, channel: &str) -> Header {
         };
     };
     Header::Direct {
-        initials: SharedString::from(initials.clone()),
-        tone: *sort_index as usize,
+        face: Face {
+            initials: SharedString::from(initials.clone()),
+            color: theme::agent_chip(*sort_index as usize),
+            picture: people.picture(picture.as_ref()),
+        },
         name: SharedString::from(name.clone()),
         role: SharedString::from(role.clone()),
     }
@@ -259,54 +565,18 @@ fn placeholder(state: &AppState) -> SharedString {
     match header(state) {
         Header::Channel { name, agents: _ } => SharedString::from(format!("Message #{name}")),
         Header::Direct {
-            initials: _,
-            tone: _,
+            face: _,
             name,
             role: _,
         } => SharedString::from(format!("Message {name}")),
     }
 }
 
-fn agent_authors(messages: &[Message]) -> usize {
-    let mut seen: Vec<AgentId> = Vec::new();
-    for Message {
-        id: _,
-        author,
-        body: _,
-        sent_at: _,
-        reply_count: _,
-    } in messages
-    {
-        let Author::Agent(agent) = author else {
-            continue;
-        };
-        if !seen.contains(agent) {
-            seen.push(*agent);
-        }
+fn agent_count(agents: usize) -> String {
+    match agents {
+        1 => "1 agent".to_string(),
+        count => format!("{count} agents"),
     }
-    seen.len()
-}
-
-fn busy_agents(agents: &[Agent]) -> Vec<Busy> {
-    let mut busy = Vec::new();
-    for Agent {
-        id: _,
-        name,
-        initials: _,
-        role: _,
-        status,
-        sort_index: _,
-    } in agents
-    {
-        let AgentStatus::Busy(task) = status else {
-            continue;
-        };
-        busy.push(Busy {
-            name: SharedString::from(name.clone()),
-            task: SharedString::from(task.clone()),
-        });
-    }
-    busy
 }
 
 fn header_element(header: Header) -> impl IntoElement {
@@ -316,12 +586,7 @@ fn header_element(header: Header) -> impl IntoElement {
             .items_center()
             .gap(px(10.))
             .min_w(px(0.))
-            .child(
-                div()
-                    .text_size(px(16.))
-                    .text_color(theme::text_label())
-                    .child("#"),
-            )
+            .child(icon(Glyph::Channel, px(16.), theme::text_label()))
             .child(
                 div()
                     .text_size(px(15.))
@@ -332,33 +597,14 @@ fn header_element(header: Header) -> impl IntoElement {
                 div()
                     .text_size(px(12.5))
                     .text_color(theme::text_muted())
-                    .child(format!("{agents} agents")),
+                    .child(agent_count(agents)),
             ),
-        Header::Direct {
-            initials,
-            tone,
-            name,
-            role,
-        } => div()
+        Header::Direct { face, name, role } => div()
             .flex()
             .items_center()
             .gap(px(10.))
             .min_w(px(0.))
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .w(px(26.))
-                    .h(px(26.))
-                    .rounded(px(8.))
-                    .bg(theme::agent_chip(tone))
-                    .text_size(px(10.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(theme::chip_text())
-                    .child(initials),
-            )
+            .child(avatar(face, AvatarSize::Header))
             .child(
                 div()
                     .text_size(px(15.))
@@ -383,13 +629,7 @@ fn header_element(header: Header) -> impl IntoElement {
         .border_color(theme::hairline())
         .child(lead)
         .child(div().flex_1())
-        .child(chip().child(thread_glyph()))
-        .child(
-            chip()
-                .text_size(px(14.))
-                .text_color(theme::text_secondary())
-                .child("···"),
-        )
+        .child(chip().child(icon(Glyph::More, px(15.), theme::text_secondary())))
 }
 
 fn chip() -> Div {
@@ -403,15 +643,6 @@ fn chip() -> Div {
         .rounded(px(8.))
         .border_1()
         .border_color(theme::border())
-}
-
-fn thread_glyph() -> impl IntoElement {
-    div()
-        .w(px(13.))
-        .h(px(11.))
-        .rounded(px(3.))
-        .border_1()
-        .border_color(theme::text_secondary())
 }
 
 fn day_separator(title: SharedString) -> impl IntoElement {
@@ -432,6 +663,28 @@ fn day_separator(title: SharedString) -> impl IntoElement {
                 .child(title),
         )
         .child(rule())
+}
+
+fn unread_divider() -> impl IntoElement {
+    div()
+        .id("feed-unread")
+        .debug_selector(|| "feed-unread".to_string())
+        .w_full()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .px(px(20.))
+        .pt(px(10.))
+        .pb(px(6.))
+        .child(div().flex_1().h(px(1.)).bg(theme::accent().opacity(0.6)))
+        .child(
+            div()
+                .flex_none()
+                .text_size(px(11.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::accent())
+                .child("New"),
+        )
 }
 
 fn rule() -> Div {
@@ -461,285 +714,624 @@ fn empty_state() -> impl IntoElement {
         )
 }
 
-fn status_bar(busy: Vec<Busy>, total: usize) -> impl IntoElement {
-    let count = busy.len();
-    let mut left = div().flex().items_center().gap(px(14.)).min_w(px(0.));
-    for Busy { name, task } in busy {
-        left = left.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .w(px(6.))
-                        .h(px(6.))
-                        .flex_none()
-                        .rounded_full()
-                        .bg(theme::status_busy()),
-                )
-                .child(
-                    div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme::text_secondary())
-                        .child(name),
-                )
-                .child(div().text_color(theme::text_muted()).child(task)),
-        );
-    }
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(12.))
-        .h(px(30.))
-        .px(px(20.))
-        .border_t_1()
-        .border_color(theme::hairline())
-        .text_size(px(11.5))
-        .child(left)
-        .child(div().flex_1())
-        .child(
-            div()
-                .flex_none()
-                .text_color(theme::text_muted())
-                .child(format!("{count} of {total} agents busy")),
-        )
-}
-
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
-    use tuclaw_core::model::{
-        Agent, AgentId, AgentStatus, Author, ChannelId, ChannelKind, Message, MessageId, Span,
-    };
-    use tuclaw_core::store::Store;
+    use gpui::{Entity, TestAppContext, VisualTestContext};
+    use tuclaw_core::model::{AgentId, Author, Span};
+    use tuclaw_core::v3::MockTransport;
 
-    use super::{Busy, Feed, Item, agent_authors, busy_agents};
-    use crate::state::AppState;
+    use tuclaw_core::v3::RunState;
 
-    fn from(author: Author, id: i64) -> Message {
-        Message {
-            id: MessageId(id),
-            author,
-            body: vec![Span::Text("hi".to_string())],
-            sent_at: datetime!(2026-08-26 09:00 UTC),
-            reply_count: 0,
-        }
-    }
+    use super::{Feed, Header, Item, header};
+    use crate::live::RunView;
+    use crate::runlog::{Row, StepStatus};
+    use crate::state::{AppState, Recording};
+    use crate::testing::{FakeRecorder, channel_named, loaded, play};
 
-    fn agent(id: i64, status: AgentStatus) -> Agent {
-        Agent {
-            id: AgentId(id),
-            name: format!("agent {id}"),
-            initials: "AG".to_string(),
-            role: "role".to_string(),
-            status,
-            sort_index: id,
-        }
-    }
-
-    fn feed(cx: &mut TestAppContext) -> (Entity<AppState>, Entity<Feed>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+    fn feed(
+        cx: &mut TestAppContext,
+    ) -> (
+        MockTransport,
+        Entity<AppState>,
+        Entity<Feed>,
+        &mut VisualTestContext,
+    ) {
+        let (mock, state) = loaded(cx);
         let built = state.clone();
-        let (feed, cx) = cx.add_window_view(move |_window, cx| Feed::new(built, cx));
-        (state, feed, cx)
+        let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
+        (mock, state, feed, cx)
     }
 
-    fn channel_named(state: &Entity<AppState>, cx: &mut TestAppContext, name: &str) -> ChannelId {
+    const TURTLE: &[u8] = include_bytes!("../../core/testdata/v3/media/avatar_agent.png");
+
+    fn posted_by_jarvis(
+        mock: &MockTransport,
+        state: &Entity<AppState>,
+        cx: &mut VisualTestContext,
+        text: &str,
+    ) -> i64 {
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(1),
+            tuclaw_core::v3::AgentId(1),
+            text,
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        last_agent_message(state, cx)
+    }
+
+    #[gpui::test]
+    fn a_linked_picture_loads_and_is_drawn_in_the_message(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.serve_public("https://media.example.test/turtle.png", TURTLE.to_vec());
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "Here it is:\n\n![A turtle](https://media.example.test/turtle.png)",
+        );
+        let selector: &'static str =
+            Box::leak(format!("message-{raw}-md-1-picture").into_boxed_str());
+        assert!(cx.debug_bounds(selector).is_some());
+    }
+
+    #[gpui::test]
+    fn a_picture_that_is_not_https_is_never_fetched(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.serve_public("http://media.example.test/turtle.png", TURTLE.to_vec());
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "![A turtle](http://media.example.test/turtle.png)",
+        );
+        state.read_with(cx, |state, _cx| assert!(state.pictures().is_empty()));
+        let picture: &'static str = Box::leak(format!("message-{raw}-md-picture").into_boxed_str());
+        assert!(cx.debug_bounds(picture).is_none());
+    }
+
+    fn unread_of(state: &Entity<AppState>, cx: &mut VisualTestContext, name: &str) -> usize {
         state.read_with(cx, |state, _cx| {
-            let mut found = None;
+            let mut unread = None;
             for channel in state.channels() {
                 if channel.name == name {
-                    found = Some(channel.id);
-                    break;
+                    unread = Some(channel.unread);
                 }
             }
-            found.expect("the fixtures carry that channel")
+            unread.expect("the channel exists")
         })
     }
 
-    fn first_direct(state: &Entity<AppState>, cx: &mut TestAppContext) -> ChannelId {
-        state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for channel in state.channels() {
-                match channel.kind {
-                    ChannelKind::Channel => {}
-                    ChannelKind::Direct(_) => {
-                        found = Some(channel.id);
-                        break;
-                    }
-                }
-            }
-            found.expect("the fixtures carry a direct channel")
-        })
-    }
-
-    #[test]
-    fn the_header_counts_each_agent_once_and_skips_the_user() {
-        let messages = vec![
-            from(Author::Agent(AgentId(2)), 1),
-            from(Author::User, 2),
-            from(Author::Agent(AgentId(2)), 3),
-            from(Author::Agent(AgentId(5)), 4),
-        ];
-        assert_eq!(agent_authors(&messages), 2);
-        assert_eq!(agent_authors(&[]), 0);
-        assert_eq!(agent_authors(&[from(Author::User, 1)]), 0);
-    }
-
-    #[test]
-    fn the_status_bar_lists_only_the_busy_agents() {
-        let agents = vec![
-            agent(1, AgentStatus::Busy("Syncing subtitles".to_string())),
-            agent(2, AgentStatus::Idle),
-            agent(3, AgentStatus::Busy("Downloading".to_string())),
-        ];
-        let busy = busy_agents(&agents);
-        let mut named = Vec::new();
-        for Busy { name, task } in &busy {
-            named.push((name.clone(), task.clone()));
-        }
-        assert_eq!(
-            named,
-            vec![
-                (
-                    SharedString::new_static("agent 1"),
-                    SharedString::new_static("Syncing subtitles")
-                ),
-                (
-                    SharedString::new_static("agent 3"),
-                    SharedString::new_static("Downloading")
-                ),
-            ]
+    #[gpui::test]
+    fn a_message_elsewhere_counts_until_its_channel_is_opened(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        mock.agent_posts(
+            tuclaw_core::v3::SurfaceId(3),
+            tuclaw_core::v3::AgentId(2),
+            "The lights are on.",
         );
-        assert!(busy_agents(&[agent(4, AgentStatus::Idle)]).is_empty());
-    }
-
-    #[gpui::test]
-    fn drawing_the_busiest_channel_does_not_panic(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 58));
-        feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.list.item_count(), feed.items.len());
-            assert_eq!(feed.items.len(), 58 + 15);
-        });
-    }
-
-    #[gpui::test]
-    fn selecting_the_empty_channel_empties_the_list(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let personal = channel_named(&state, cx, "personal");
-        state.update(cx, |state, cx| state.select(personal, cx));
+        while mock.step() {}
         cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.list.item_count(), 0);
-            assert!(feed.items.is_empty());
-        });
-    }
-
-    #[gpui::test]
-    fn selecting_a_direct_channel_draws_its_agent(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let direct = first_direct(&state, cx);
-        state.update(cx, |state, cx| state.select(direct, cx));
+        assert_eq!(unread_of(&state, cx, "Smart Home"), 1);
+        assert!(cx.debug_bounds("feed-unread").is_none());
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.select(home, cx));
         cx.run_until_parked();
-        feed.read_with(cx, |feed, _cx| {
-            assert!(!feed.items.is_empty());
-            assert_eq!(feed.list.item_count(), feed.items.len());
-        });
-    }
-
-    #[gpui::test]
-    fn clicking_the_reply_affordance_opens_that_thread(cx: &mut TestAppContext) {
-        let (state, _feed, cx) = feed(cx);
-        let root = state.read_with(cx, |state, _cx| {
-            let mut found = None;
-            for message in state.messages() {
-                if message.reply_count > 0 {
-                    found = Some(message.id);
-                    break;
-                }
+        assert!(cx.debug_bounds("feed-unread").is_some());
+        assert_eq!(unread_of(&state, cx, "Smart Home"), 0);
+        let client = tuclaw_core::v3::Client::mock(&mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let mut served = None;
+        for surface in surfaces {
+            if surface.name == "Smart Home" {
+                served = Some(surface.unread);
             }
-            found.expect("movie-night carries a thread root")
-        });
-        let MessageId(raw) = root;
-        let selector: &'static str = format!("message-reply-{raw}").leak();
-        let affordance = cx
-            .debug_bounds(selector)
-            .expect("the replies affordance is drawn");
-        cx.simulate_click(affordance.center(), Modifiers::default());
+        }
+        assert_eq!(served, Some(0));
+    }
+
+    #[gpui::test]
+    fn an_inactive_window_keeps_new_messages_unread_until_it_is_back(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        posted_by_jarvis(&mock, &state, cx, "While you were away.");
+        assert_eq!(unread_of(&state, cx, "General"), 1);
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
+    fn talk_records_and_a_second_press_posts_the_voice(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        let tape = recorder.0.clone();
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        assert!(tape.borrow().recording);
+        assert!(cx.debug_bounds("composer-cancel-recording").is_some());
+        click(cx, "composer-talk".to_string());
         state.read_with(cx, |state, _cx| {
-            let thread = state.thread().expect("the thread is open");
-            assert_eq!(thread.root.id, root);
-            assert_eq!(thread.replies.len(), 4);
+            assert_eq!(state.recording(), &Recording::Idle);
+        });
+        let mut steps = 0;
+        while mock.step() && steps < 4 {
+            steps += 1;
+        }
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let Some(last) = state.messages().last() else {
+                panic!("the voice message arrived");
+            };
+            assert_eq!(last.author, Author::User);
+            assert!(last.voice.is_some());
         });
     }
 
     #[gpui::test]
-    fn a_reply_keeps_the_list_length_and_raises_the_root_count(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let root = state.read_with(cx, |state, _cx| {
+    fn a_cancelled_recording_posts_nothing(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        let tape = recorder.0.clone();
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        let before = state.read_with(cx, |state, _cx| state.messages().len());
+        click(cx, "composer-talk".to_string());
+        click(cx, "composer-cancel-recording".to_string());
+        assert_eq!(tape.borrow().cancelled, 1);
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.recording(), &Recording::Idle);
+            assert_eq!(state.messages().len(), before);
+        });
+    }
+
+    #[gpui::test]
+    fn a_recording_the_daemon_refuses_shows_its_reason(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        recorder.0.borrow_mut().take = Some(vec![0; 21 * 1024 * 1024]);
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        click(cx, "composer-talk".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.recording(),
+                &Recording::Failed("the recording must be at most 20971520 bytes".into())
+            );
+        });
+        assert!(cx.debug_bounds("composer-voice-error").is_some());
+    }
+
+    #[gpui::test]
+    fn a_microphone_that_refuses_shows_why(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let recorder = FakeRecorder::default();
+        recorder.0.borrow_mut().refuse = Some("the microphone is not available".into());
+        state.update(cx, |state, _cx| state.set_recorder(Box::new(recorder)));
+        click(cx, "composer-talk".to_string());
+        assert!(cx.debug_bounds("composer-voice-error").is_some());
+        click(cx, "composer-dismiss-voice-error".to_string());
+        assert!(cx.debug_bounds("composer-voice-error").is_none());
+    }
+
+    fn last_agent_message(state: &Entity<AppState>, cx: &mut VisualTestContext) -> i64 {
+        state.read_with(cx, |state, _cx| {
             let mut found = None;
             for message in state.messages() {
-                if message.reply_count > 0 {
-                    found = Some(message.id);
-                    break;
+                if let Author::Agent(_) = message.author {
+                    let tuclaw_core::model::MessageId(raw) = message.id;
+                    found = Some(raw);
                 }
             }
-            found.expect("movie-night carries a thread root")
-        });
-        state.update(cx, |state, cx| state.open_thread(root, cx));
+            found.expect("the surface has an agent message")
+        })
+    }
+
+    fn click(cx: &mut VisualTestContext, selector: String) {
+        let bounds = cx
+            .debug_bounds(Box::leak(selector.clone().into_boxed_str()))
+            .unwrap_or_else(|| panic!("{selector} is drawn"));
+        cx.simulate_click(bounds.center(), gpui::Modifiers::default());
         cx.run_until_parked();
-        let before = feed.read_with(cx, |feed, _cx| feed.items.len());
-        state.update(cx, |state, cx| {
-            state
-                .reply_in_thread("me too".to_string(), cx)
-                .expect("the reply is written")
-        });
+    }
+
+    #[gpui::test]
+    fn the_avatar_card_mentions_the_agent_in_the_composer(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
         cx.run_until_parked();
+        let raw = last_agent_message(&state, cx);
+        click(cx, format!("card-{raw}-trigger"));
+        assert!(cx.debug_bounds("agent-card").is_some());
+        click(cx, "card-mention".to_string());
+        assert_eq!(typed(&feed, cx), "@tuclaw ");
+        assert!(cx.debug_bounds("agent-card").is_none());
+    }
+
+    #[gpui::test]
+    fn the_avatar_card_opens_the_agent_settings(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        cx.run_until_parked();
+        let raw = last_agent_message(&state, cx);
+        click(cx, format!("card-{raw}-trigger"));
+        click(cx, "card-settings".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.settings().and_then(|settings| settings.agent()),
+                Some(tuclaw_core::model::AgentId(1))
+            );
+        });
+    }
+
+    fn typed(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> String {
+        feed.read_with(cx, |feed, cx| feed.composer.read(cx).text(cx).to_string())
+    }
+
+    #[test]
+    fn the_agent_count_agrees_in_number() {
+        assert_eq!(super::agent_count(0), "0 agents");
+        assert_eq!(super::agent_count(1), "1 agent");
+        assert_eq!(super::agent_count(4), "4 agents");
+    }
+
+    #[gpui::test]
+    fn the_first_surface_is_drawn_with_its_history(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         feed.read_with(cx, |feed, _cx| {
-            assert_eq!(feed.items.len(), before);
             assert_eq!(feed.list.item_count(), feed.items.len());
-            let mut counted = None;
+            let mut fires = Vec::new();
+            let mut triggered = 0;
             for item in feed.items.iter() {
                 match item {
-                    Item::Message(message) => {
-                        if message.id == root {
-                            counted = Some(message.reply_count);
-                        }
+                    Item::Fire(row) => {
+                        assert_ne!(row.label, "An automation");
+                        fires.push(row.outcome);
                     }
+                    Item::Message(_, Some(_)) => triggered += 1,
+                    Item::Message(_, None) => {}
                     Item::Separator(_) => {}
+                    Item::Unread => {}
+                    Item::Run(_) => {}
                 }
             }
-            assert_eq!(counted, Some(5));
+            assert_eq!(fires, vec![tuclaw_core::v3::Outcome::Silent]);
+            assert_eq!(triggered, 1);
+            assert_eq!(feed.items.len(), 31 + fires.len());
         });
     }
 
     #[gpui::test]
-    fn sending_a_message_grows_the_list_and_resyncs_it(cx: &mut TestAppContext) {
-        let (state, feed, cx) = feed(cx);
-        let before = feed.read_with(cx, |feed, _cx| feed.items.len());
-        state.update(cx, |state, cx| {
-            state.send("on it".to_string(), cx).expect("it is written")
-        });
+    fn the_header_counts_the_wired_agents(cx: &mut TestAppContext) {
+        let (_mock, state, _feed, cx) = feed(cx);
+        let Header::Channel { name, agents } = state.read_with(cx, |state, _cx| header(state))
+        else {
+            panic!("a surface draws a channel header");
+        };
+        assert_eq!(name.as_ref(), "General");
+        assert_eq!(agents, 2);
+    }
+
+    #[gpui::test]
+    fn selecting_another_surface_resets_the_list(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.select(home, cx));
         cx.run_until_parked();
         feed.read_with(cx, |feed, _cx| {
-            assert!(feed.items.len() > before);
+            assert_eq!(feed.items.len(), 13);
             assert_eq!(feed.list.item_count(), feed.items.len());
-            match feed.items.last() {
-                Some(Item::Message(message)) => {
-                    assert_eq!(message.body, vec![Span::Text("on it".to_string())])
+        });
+    }
+
+    #[gpui::test]
+    fn a_sent_message_is_answered_over_the_socket(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state
+                .send("Лисички появились, что приготовить?".to_string(), cx)
+                .expect("the post is queued")
+        });
+        cx.run_until_parked();
+        play(&mock, cx);
+        state.read_with(cx, |state, _cx| {
+            let messages = state.messages();
+            assert_eq!(messages.len(), 32);
+            let question = &messages[30];
+            assert_eq!(question.author, Author::User);
+            assert!(question.id.0 > 0, "the optimistic row took the daemon's id");
+            assert_eq!(
+                question.body,
+                vec![Span::Text(
+                    "Лисички появились, что приготовить?".to_string()
+                )]
+            );
+            let answer = &messages[31];
+            assert_eq!(answer.author, Author::Agent(AgentId(1)));
+        });
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len());
+        });
+    }
+
+    #[gpui::test]
+    fn a_failed_post_hands_the_text_back(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        mock.fail_next_call();
+        state.update(cx, |state, cx| {
+            state
+                .send("не дойдёт".to_string(), cx)
+                .expect("the post is queued")
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
+        assert_eq!(typed(&feed, cx), "не дойдёт");
+    }
+
+    fn runs(feed: &Entity<Feed>, cx: &mut VisualTestContext) -> Vec<RunView> {
+        feed.read_with(cx, |feed, _cx| {
+            let mut runs = Vec::new();
+            for item in feed.items.iter() {
+                match item {
+                    Item::Run(run) => runs.push(run.clone()),
+                    Item::Separator(_) => {}
+                    Item::Unread => {}
+                    Item::Message(_, _) => {}
+                    Item::Fire(_) => {}
                 }
-                Some(Item::Separator(_)) => panic!("the sent message is the last item"),
-                None => panic!("the sent message is the last item"),
             }
+            runs
+        })
+    }
+
+    #[gpui::test]
+    fn a_streaming_run_is_drawn_and_then_replaced_by_its_answer(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        mock.step();
+        cx.run_until_parked();
+        let queued = runs(&feed, cx);
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].state, RunState::Queued);
+        assert_eq!(queued[0].id, None);
+        for _ in 0..3 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        let streaming = runs(&feed, cx);
+        assert_eq!(streaming.len(), 1);
+        assert_eq!(streaming[0].state, RunState::Running);
+        assert_eq!(streaming[0].segment, "Посмотрю, ");
+        let Some(tuclaw_core::v3::RunId(id)) = streaming[0].id.clone() else {
+            panic!("a started run carries its id");
+        };
+        let selector: &'static str = format!("run-{id}").leak();
+        assert!(cx.debug_bounds(selector).is_some(), "the run card is drawn");
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len())
+        });
+        play(&mock, cx);
+        assert!(runs(&feed, cx).is_empty());
+        state.read_with(cx, |state, _cx| {
+            let last = state.messages().last().expect("the answer arrived");
+            assert_eq!(last.author, Author::Agent(AgentId(1)));
+        });
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len())
+        });
+    }
+
+    #[gpui::test]
+    fn the_live_run_of_a_surface_shows_its_steps(cx: &mut TestAppContext) {
+        let (_mock, state, feed, cx) = feed(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        let live = runs(&feed, cx);
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].author, Author::Agent(AgentId(3)));
+        let steps = &live[0].steps;
+        assert_eq!(steps.len(), 3);
+        assert_eq!(
+            steps[0],
+            Row::Thought {
+                seq: 0,
+                text: "Проверяю новые релизы.".to_string()
+            }
+        );
+        let Row::Tool(call) = &steps[1] else {
+            panic!("the second step is the tool, got {:?}", steps[1]);
+        };
+        assert_eq!(call.name, "WebFetch");
+        assert_eq!(call.arg, "example.org/releases");
+        assert_eq!(call.status, StepStatus::Ok);
+        assert_eq!(
+            steps[2],
+            Row::Status {
+                seq: 2,
+                text: "compacting · context 91%".to_string()
+            }
+        );
+        assert_eq!(live[0].segment, "Нашёл три новых релиза, ");
+    }
+
+    #[gpui::test]
+    fn stop_interrupts_the_run_and_keeps_its_text(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..4 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        let streaming = runs(&feed, cx);
+        let Some(tuclaw_core::v3::RunId(id)) = streaming[0].id.clone() else {
+            panic!("a started run carries its id");
+        };
+        let selector: &'static str = format!("run-stop-{id}").leak();
+        let stop = cx
+            .debug_bounds(selector)
+            .expect("a working run offers Stop");
+        cx.simulate_click(stop.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(runs(&feed, cx)[0].state, RunState::Stopping);
+        assert!(
+            cx.debug_bounds(selector).is_none(),
+            "Stop leaves once it is pressed"
+        );
+        let before = state.read_with(cx, |state, _cx| state.messages().len());
+        play(&mock, cx);
+        let stopped = runs(&feed, cx);
+        assert_eq!(stopped.len(), 1);
+        assert_eq!(stopped[0].state, RunState::Interrupted);
+        assert_eq!(stopped[0].segment, "Посмотрю, ");
+        state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), before));
+    }
+
+    fn folded_world() -> tuclaw_core::v3::Seed {
+        let surfaces = serde_json::from_str(include_str!("../../core/testdata/v3/surfaces.json"))
+            .expect("surfaces");
+        let agents = serde_json::from_str(include_str!("../../core/testdata/v3/agents.json"))
+            .expect("agents");
+        let message = serde_json::json!({
+            "id": 7, "surface_id": 1, "kind": "answer", "author": {"kind": "agent", "agent_id": 1},
+            "text": "<details><summary>Thinking</summary>\n\n- checked the notes\n\n</details>\n\n## Готово\n\n- **лисички** со сливками\n- [рецепт](https://example.org)",
+            "created_at": "2026-10-03T15:26:13Z"
+        });
+        tuclaw_core::v3::Seed {
+            surfaces,
+            agents,
+            messages: vec![serde_json::from_value(message).expect("message")],
+            runs: Vec::new(),
+            media: Vec::new(),
+            me: None,
+            tasks: Vec::new(),
+        }
+    }
+
+    #[gpui::test]
+    fn a_thinking_fold_starts_collapsed_and_toggles(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, folded_world());
+        let built = state.clone();
+        let (_feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("message-7").is_some(),
+            "the answer is drawn"
+        );
+        let toggle = cx.debug_bounds("thinking-7").expect("the fold is drawn");
+        let collapsed = cx.debug_bounds("message-7").expect("drawn").size.height;
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert!(state.is_expanded(tuclaw_core::model::MessageId(7)))
+        });
+        let expanded = cx.debug_bounds("message-7").expect("drawn").size.height;
+        assert!(expanded > collapsed, "{expanded:?} > {collapsed:?}");
+        let toggle = cx
+            .debug_bounds("thinking-7")
+            .expect("the fold is still drawn");
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert!(!state.is_expanded(tuclaw_core::model::MessageId(7)))
+        });
+    }
+
+    fn spoken_world() -> tuclaw_core::v3::Seed {
+        let mut world = folded_world();
+        let message = serde_json::json!({
+            "id": 8, "surface_id": 1, "kind": "user", "author": {"kind": "user"},
+            "text": "[Voice message]\nПоставь кроваво-красный везде.",
+            "created_at": "2026-10-03T15:27:00Z",
+            "attachments": [{"id": 5, "kind": "voice", "mime": "audio/mp4", "size_bytes": 1, "duration_ms": 2000}]
+        });
+        world
+            .messages
+            .push(serde_json::from_value(message).expect("message"));
+        world.media.push(tuclaw_core::v3::SeedMedia {
+            id: tuclaw_core::v3::AttachmentId(5),
+            path: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../core/testdata/v3/media/tone.m4a"),
+        });
+        world
+    }
+
+    #[gpui::test]
+    fn the_play_button_plays_the_original_recording(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, spoken_world());
+        let built = state.clone();
+        let (_feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
+        cx.run_until_parked();
+        let button = cx
+            .debug_bounds("voice-8")
+            .expect("the play button is drawn");
+        cx.simulate_click(button.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        let player = state.read_with(cx, |state, _cx| {
+            state.player(tuclaw_core::model::MessageId(8))
+        });
+        let crate::state::Player::Playing { position: _, total } = player else {
+            panic!("the click plays the recording, got {player:?}");
+        };
+        assert!((total.as_secs_f64() - 2.0).abs() < 0.1, "{total:?}");
+        assert!(
+            cx.debug_bounds("voice-7").is_none(),
+            "a message without a recording has no player"
+        );
+    }
+
+    #[test]
+    fn only_a_scroll_near_the_top_asks_for_older_messages() {
+        let event = |start: usize, is_scrolled: bool| gpui::ListScrollEvent {
+            visible_range: start..start + 10,
+            count: 10,
+            is_scrolled,
+            is_following_tail: false,
+        };
+        assert!(super::near_top(&event(0, true)));
+        assert!(super::near_top(&event(super::PREFETCH, true)));
+        assert!(!super::near_top(&event(super::PREFETCH + 1, true)));
+        assert!(!super::near_top(&event(0, false)));
+    }
+
+    #[gpui::test]
+    fn loading_older_messages_keeps_the_visible_message_in_place(cx: &mut TestAppContext) {
+        let (_mock, state) = crate::testing::seeded(cx, crate::testing::long_world(120));
+        let built = state.clone();
+        let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
+        cx.run_until_parked();
+        let anchored = tuclaw_core::model::MessageId(75);
+        feed.update(cx, |feed, _cx| {
+            let mut index = None;
+            for (position, item) in feed.items.iter().enumerate() {
+                if super::key(item) == super::Key::Message(anchored) {
+                    index = Some(position);
+                }
+            }
+            feed.list.scroll_to(gpui::ListOffset {
+                item_ix: index.expect("message 75 is on the first page"),
+                offset_in_item: gpui::px(4.),
+            });
+        });
+        state.update(cx, |state, cx| state.load_older(cx));
+        cx.run_until_parked();
+        feed.read_with(cx, |feed, _cx| {
+            let gpui::ListOffset {
+                item_ix,
+                offset_in_item,
+            } = feed.list.logical_scroll_top();
+            assert_eq!(
+                feed.items.get(item_ix).map(super::key),
+                Some(super::Key::Message(anchored))
+            );
+            assert_eq!(offset_in_item, gpui::px(4.));
+            assert!(feed.items.len() > 100);
         });
     }
 }

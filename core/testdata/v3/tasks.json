@@ -1,0 +1,31 @@
+[{
+  "id": "task-1759500000000000000-1a2b3c4d",
+  "agent_id": 3,
+  "surface_id": 4,
+  "prompt": "Check the feeds for new releases",
+  "schedule": {"type": "cron", "value": "0 9 * * *"},
+  "recurring": false,
+  "condition": "check-feeds.sh",
+  "status": "active",
+  "next_run_at": "2026-10-05T07:00:00Z",
+  "last_run_at": "2026-10-04T07:00:00Z",
+  "last_outcome": "skipped",
+  "active_from": null,
+  "active_until": null,
+  "created_at": "2026-09-20T10:00:00Z"
+}, {
+  "id": "task-1759600000000000000-5e6f7a8b",
+  "agent_id": null,
+  "surface_id": null,
+  "prompt": "Wake me when the build is done",
+  "schedule": {"type": "event", "value": "tuclaw.jobs.done.>"},
+  "recurring": true,
+  "condition": null,
+  "status": "paused",
+  "next_run_at": null,
+  "last_run_at": null,
+  "last_outcome": null,
+  "active_from": null,
+  "active_until": "2026-10-31T00:00:00Z",
+  "created_at": "2026-10-01T08:30:00Z"
+}]

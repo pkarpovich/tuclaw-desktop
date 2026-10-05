@@ -44,6 +44,22 @@ pub fn text_label() -> Hsla {
     rgb(0x8d887f).into()
 }
 
+pub fn voice_card() -> Hsla {
+    rgb(0xf7f5f2).into()
+}
+
+pub fn ink_soft() -> Hsla {
+    rgb(0x57534e).into()
+}
+
+pub fn wave_rest() -> Hsla {
+    rgb(0xc4bfb8).into()
+}
+
+pub fn failure_tint() -> Hsla {
+    rgba(0xb45c3c14).into()
+}
+
 pub fn field() -> Hsla {
     rgba(0xffffff99).into()
 }
@@ -62,14 +78,6 @@ pub fn chip_text() -> Hsla {
 
 pub fn accent() -> Hsla {
     rgb(0xb45c3c).into()
-}
-
-pub fn mention_field() -> Hsla {
-    rgba(0xb8452c1a).into()
-}
-
-pub fn mention_text() -> Hsla {
-    rgb(0x94331f).into()
 }
 
 pub fn status_idle() -> Hsla {

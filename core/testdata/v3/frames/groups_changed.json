@@ -1,0 +1,1 @@
+{"v": 1, "seq": 1310, "type": "groups.changed", "surface_id": null, "run_id": null, "at": "2026-10-05T08:00:00Z", "payload": {"groups": [{"id": 2, "name": "Movie nights", "emoji": "🎬", "sort_order": 0}, {"id": 3, "name": "Home", "emoji": null, "sort_order": 1}]}}

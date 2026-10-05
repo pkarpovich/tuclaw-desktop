@@ -1,5 +1,5 @@
 [tools]
-rust = "1.98.0"
+rust = { version = "1.98.1", components = "rustfmt,clippy" }
 
 [tasks.build]
 description = "Build the workspace, tests included"
@@ -8,6 +8,10 @@ run = "cargo build --workspace --all-targets"
 [tasks.dev]
 description = "Build and run the app"
 run = "cargo run -p tuclaw-desktop"
+
+[tasks.snapshot]
+description = "Render the app offscreen to target/snapshots/<channel>.png (mock, or TUCLAW_MOCK_WORLD)"
+run = "cargo run -q -p tuclaw-desktop --example snapshot --"
 
 [tasks.test]
 description = "Run both test tiers"
@@ -24,3 +28,19 @@ run = "cargo fmt --all"
 [tasks.fmt-check]
 description = "Fail on unformatted code"
 run = "cargo fmt --all -- --check"
+
+[tasks.bundle]
+description = "Build target/release/bundle/Tuclaw Preview.app (ad-hoc signed, its own bundle id)"
+run = "fish script/bundle-mac.fish"
+
+[tasks.preview]
+description = "Build Tuclaw Preview.app and open it, quitting a running preview first"
+run = "fish script/bundle-mac.fish --open"
+
+[tasks.install]
+description = "Build Tuclaw Preview.app and copy it to /Applications"
+run = "fish script/bundle-mac.fish --install"
+
+[tasks.snapshot-world]
+description = "Turn a prod snapshot DB into the mock's world.json (outside git)"
+run = "python3 script/snapshot-world.py"

@@ -1,13 +1,9 @@
-use std::path::Path;
-
-use anyhow::{Result, bail};
 use gpui::{
     BoxShadow, Context, FontWeight, IntoElement, Render, SharedString, Window, div, prelude::*, px,
 };
-use time::OffsetDateTime;
-use tuclaw_core::paths::database_path;
-use tuclaw_core::store::Store;
 
+use crate::audio::{PeakCache, RodioSpeaker};
+use crate::link::{self, Config};
 use crate::state::AppState;
 use crate::theme;
 
@@ -17,41 +13,29 @@ pub enum Startup {
 }
 
 pub struct FailureView {
-    path: SharedString,
+    source: SharedString,
     error: SharedString,
 }
 
-pub fn start(now: OffsetDateTime) -> Startup {
-    let path = match database_path() {
-        Ok(path) => path,
-        Err(error) => {
-            return Startup::Failed(FailureView {
-                path: SharedString::new_static("~/Library/Application Support/tuclaw-desktop"),
-                error: SharedString::from(format!("{error:#}")),
-            });
+pub fn start(config: Config) -> Startup {
+    let source = SharedString::from(config.label());
+    match config.client() {
+        Ok((client, source)) => {
+            let peaks = link::peak_directory(&source);
+            let state = AppState::new(client, source, Box::new(RodioSpeaker::default()));
+            #[cfg(target_os = "macos")]
+            let state = state.with_recorder(Box::new(crate::recorder::AvRecorder::default()));
+            let state = match peaks {
+                Some(directory) => state.with_peak_cache(PeakCache::new(directory)),
+                None => state,
+            };
+            Startup::Ready(Box::new(state))
         }
-    };
-    start_at(&path, now)
-}
-
-pub fn start_at(path: &Path, now: OffsetDateTime) -> Startup {
-    match load(path, now) {
-        Ok(state) => Startup::Ready(Box::new(state)),
         Err(error) => Startup::Failed(FailureView {
-            path: SharedString::from(path.display().to_string()),
-            error: SharedString::from(format!("{error:#}")),
+            source,
+            error: SharedString::from(error),
         }),
     }
-}
-
-fn load(path: &Path, now: OffsetDateTime) -> Result<AppState> {
-    let Some(directory) = path.parent() else {
-        bail!("the database path {} names no directory", path.display());
-    };
-    std::fs::create_dir_all(directory)?;
-    let store = Store::open(path)?;
-    store.seed_if_needed(now)?;
-    AppState::new(store)
 }
 
 impl Render for FailureView {
@@ -86,7 +70,7 @@ impl Render for FailureView {
                         div()
                             .text_size(px(16.))
                             .font_weight(FontWeight::BOLD)
-                            .child("The workspace could not be opened"),
+                            .child("Tuclaw could not start"),
                     )
                     .child(
                         div()
@@ -97,7 +81,7 @@ impl Render for FailureView {
                                 div()
                                     .text_size(px(11.5))
                                     .text_color(theme::text_label())
-                                    .child("Database"),
+                                    .child("Daemon"),
                             )
                             .child(
                                 div()
@@ -105,7 +89,7 @@ impl Render for FailureView {
                                     .rounded(px(8.))
                                     .bg(theme::sunken())
                                     .text_color(theme::text_secondary())
-                                    .child(self.path.clone()),
+                                    .child(self.source.clone()),
                             ),
                     )
                     .child(
@@ -127,77 +111,54 @@ impl Render for FailureView {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::PathBuf;
+    use gpui::{SharedString, TestAppContext};
 
-    use gpui::TestAppContext;
-    use time::macros::datetime;
+    use super::{FailureView, Startup, start};
+    use crate::link::{Config, Source};
 
-    use super::{FailureView, SharedString, Startup, start_at};
-
-    fn scratch(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("tuclaw-desktop-{name}-{}", std::process::id()))
+    #[test]
+    fn the_mock_config_starts_on_the_mock() {
+        let startup = start(Config::Mock);
+        let Startup::Ready(state) = startup else {
+            panic!("the mock always starts");
+        };
+        assert_eq!(state.source(), &Source::Mock);
     }
 
     #[test]
-    fn a_missing_directory_is_created_and_the_workspace_is_seeded() {
-        let directory = scratch("startup").join("nested");
-        let _ = fs::remove_dir_all(
-            directory
-                .parent()
-                .expect("the scratch directory has a parent"),
-        );
-        let path = directory.join("tuclaw.sqlite");
-        let startup = start_at(&path, datetime!(2026-08-26 21:00 UTC));
-        match startup {
-            Startup::Failed(FailureView { path, error }) => {
-                panic!("the workspace must open at {path}: {error}")
-            }
-            Startup::Ready(state) => {
-                assert_eq!(state.channels().len(), 10);
-                assert_eq!(state.agents().len(), 4);
-                assert!(!state.messages().is_empty());
-            }
-        }
-        assert!(path.exists(), "the database file is written");
-        let _ = fs::remove_dir_all(
-            directory
-                .parent()
-                .expect("the scratch directory has a parent"),
-        );
+    fn a_daemon_url_without_a_token_starts_on_the_open_daemon() {
+        let startup = start(Config::Daemon {
+            url: "http://host:9090".into(),
+            token: None,
+        });
+        let Startup::Ready(state) = startup else {
+            panic!("an open daemon needs no token");
+        };
+        assert_eq!(state.source(), &Source::Daemon("http://host:9090".into()));
     }
 
     #[test]
-    fn an_unwritable_path_produces_the_failure_state() {
-        let directory = scratch("failure-view");
-        fs::create_dir_all(&directory).expect("the temporary directory is created");
-        let blocker = directory.join("blocker");
-        fs::write(&blocker, b"not a directory").expect("the blocking file is written");
-        let path = blocker.join("tuclaw.sqlite");
-        let startup = start_at(&path, datetime!(2026-08-26 21:00 UTC));
-        fs::remove_dir_all(&directory).expect("the temporary directory is removed");
-        match startup {
-            Startup::Ready(_) => panic!("a database under a file must not open"),
-            Startup::Failed(FailureView { path, error }) => {
-                assert!(path.ends_with("blocker/tuclaw.sqlite"), "{path}");
-                assert!(!error.is_empty());
-            }
-        }
+    fn a_daemon_url_that_is_not_http_produces_the_failure_state() {
+        let startup = start(Config::Daemon {
+            url: "ftp://host".into(),
+            token: None,
+        });
+        let Startup::Failed(FailureView { source, error: _ }) = startup else {
+            panic!("a non-http URL must not start");
+        };
+        assert_eq!(source, SharedString::from("ftp://host"));
     }
 
     #[gpui::test]
     fn drawing_the_failure_view_does_not_panic(cx: &mut TestAppContext) {
         let view = FailureView {
-            path: SharedString::new_static("/tmp/tuclaw-desktop/tuclaw.sqlite"),
-            error: SharedString::new_static("unable to open database file"),
+            source: SharedString::new_static("http://host:9090"),
+            error: SharedString::new_static("invalid request"),
         };
         let (view, cx) = cx.add_window_view(move |_window, _cx| view);
         cx.run_until_parked();
         view.read_with(cx, |view, _cx| {
-            assert_eq!(
-                view.error,
-                SharedString::new_static("unable to open database file")
-            )
+            assert_eq!(view.error, SharedString::new_static("invalid request"))
         });
     }
 }

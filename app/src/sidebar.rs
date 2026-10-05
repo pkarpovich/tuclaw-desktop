@@ -2,8 +2,13 @@ use gpui::{
     Context, Div, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window, div,
     prelude::*, px,
 };
+use gpui_kit::base::Button;
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
+use crate::control::{AvatarSize, Face, avatar, button, row_button};
+use crate::icon::{Glyph, icon};
+use crate::link;
+use crate::people::{Me, People};
 use crate::state::{AppState, Segment, View};
 use crate::theme;
 
@@ -24,6 +29,7 @@ struct Row {
     name: SharedString,
     lead: Lead,
     unread: usize,
+    working: Vec<String>,
     highlight: Highlight,
 }
 
@@ -35,11 +41,7 @@ enum Highlight {
 
 enum Lead {
     Hash,
-    Chip {
-        initials: SharedString,
-        tone: usize,
-        status: Status,
-    },
+    Chip { face: Face, status: Status },
 }
 
 enum Status {
@@ -56,22 +58,55 @@ impl Sidebar {
         }
     }
 
+    fn channels_row(
+        &self,
+        channels: usize,
+        highlight: Highlight,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let row = row_frame("sidebar-channels")
+            .py(px(6.))
+            .on_click(cx.listener(|sidebar, _event, _window, cx| {
+                sidebar
+                    .state
+                    .update(cx, |state, cx| state.open_channels(cx));
+            }))
+            .child(icon(Glyph::Channels, px(16.), theme::text_secondary()))
+            .child(
+                div()
+                    .font_weight(match highlight {
+                        Highlight::On => FontWeight::SEMIBOLD,
+                        Highlight::Off => FontWeight::NORMAL,
+                    })
+                    .child("Channels"),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .text_color(theme::text_muted())
+                    .child(channels.to_string()),
+            );
+        match highlight {
+            Highlight::On => row.bg(theme::selection()),
+            Highlight::Off => row,
+        }
+    }
+
     fn agents_row(
         &self,
         agents: usize,
         highlight: Highlight,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let row = row_frame()
-            .id("sidebar-agents")
-            .debug_selector(|| "sidebar-agents".to_string())
+        let row = row_frame("sidebar-agents")
             .py(px(6.))
             .on_click(cx.listener(|sidebar, _event, _window, cx| {
                 sidebar
                     .state
                     .update(cx, |state, cx| state.activate_segment(Segment::Agents, cx));
             }))
-            .child(agents_glyph())
+            .child(icon(Glyph::Agents, px(16.), theme::text_secondary()))
             .child(
                 div()
                     .font_weight(match highlight {
@@ -99,12 +134,12 @@ impl Sidebar {
             name,
             lead,
             unread,
+            working,
             highlight,
         } = row;
         let selector = format!("sidebar-row-{name}");
-        let element = row_frame()
-            .id(SharedString::from(selector.clone()))
-            .debug_selector(move || selector)
+        let selector_name = name.clone();
+        let element = row_frame(selector)
             .py(px(5.))
             .on_click(cx.listener(move |sidebar, _event, _window, cx| {
                 sidebar
@@ -127,6 +162,11 @@ impl Sidebar {
                     .child(name),
             )
             .child(div().flex_1());
+        let element = if working.is_empty() {
+            element
+        } else {
+            element.child(working_dot(&selector_name))
+        };
         let element = if unread > 0 {
             element.child(unread_badge(unread))
         } else {
@@ -145,9 +185,19 @@ impl Render for Sidebar {
         let agents = state.agents().len();
         let on_agents = match state.view() {
             View::Agents => Highlight::On,
+            View::Automations => Highlight::Off,
+            View::Conversation => Highlight::Off,
+            View::Channels => Highlight::Off,
+        };
+        let on_channels = match state.view() {
+            View::Channels => Highlight::On,
+            View::Agents => Highlight::Off,
+            View::Automations => Highlight::Off,
             View::Conversation => Highlight::Off,
         };
+        let channel_count = state.channels().len();
         let sections = sections(state);
+        let footer = footer(&state.people(), self.state.clone());
         let mut rows = div()
             .id("sidebar-rows")
             .flex()
@@ -158,7 +208,8 @@ impl Render for Sidebar {
             .px(px(6.))
             .pt(px(2.))
             .pb(px(14.))
-            .child(self.agents_row(agents, on_agents, cx));
+            .child(self.agents_row(agents, on_agents, cx))
+            .child(self.channels_row(channel_count, on_channels, cx));
         for Section { title, rows: group } in sections {
             if let Some(title) = title {
                 rows = rows.child(section_title(title));
@@ -174,13 +225,18 @@ impl Render for Sidebar {
             .min_h(px(0.))
             .child(search_field())
             .child(rows)
-            .child(footer())
+            .child(footer)
     }
 }
 
 fn sections(state: &AppState) -> Vec<Section> {
-    let selected = state.selected();
-    let agents = state.agents();
+    let selected = match state.view() {
+        View::Conversation => state.selected(),
+        View::Agents => None,
+        View::Automations => None,
+        View::Channels => None,
+    };
+    let people = state.people();
     let mut sections: Vec<Section> = Vec::new();
     for Channel {
         id,
@@ -197,7 +253,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         };
         let lead = match kind {
             ChannelKind::Channel => Lead::Hash,
-            ChannelKind::Direct(agent) => lead_of(agents, *agent),
+            ChannelKind::Direct(agent) => lead_of(&people, *agent),
         };
         let continues = match sections.last() {
             Some(Section {
@@ -215,7 +271,7 @@ fn sections(state: &AppState) -> Vec<Section> {
         let Some(Section { title: _, rows }) = sections.last_mut() else {
             continue;
         };
-        let highlight = if *id == selected {
+        let highlight = if Some(*id) == selected {
             Highlight::On
         } else {
             Highlight::Off
@@ -225,15 +281,16 @@ fn sections(state: &AppState) -> Vec<Section> {
             name: SharedString::from(name.clone()),
             lead,
             unread: *unread,
+            working: state.working(*id),
             highlight,
         });
     }
     sections
 }
 
-fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
+fn lead_of(people: &People, agent: AgentId) -> Lead {
     let mut found = None;
-    for candidate in agents {
+    for candidate in people.agents {
         if candidate.id == agent {
             found = Some(candidate);
             break;
@@ -246,6 +303,7 @@ fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
         role: _,
         status,
         sort_index,
+        picture,
     }) = found
     else {
         return Lead::Hash;
@@ -255,21 +313,21 @@ fn lead_of(agents: &[Agent], agent: AgentId) -> Lead {
         AgentStatus::Busy(_) => Status::Busy,
     };
     Lead::Chip {
-        initials: SharedString::from(initials.clone()),
-        tone: *sort_index as usize,
+        face: Face {
+            initials: SharedString::from(initials.clone()),
+            color: theme::agent_chip(*sort_index as usize),
+            picture: people.picture(picture.as_ref()),
+        },
         status,
     }
 }
 
-fn row_frame() -> Div {
-    div()
-        .flex()
-        .items_center()
+fn row_frame(selector: impl Into<SharedString>) -> Button {
+    row_button(selector)
         .gap(px(10.))
         .px(px(10.))
         .rounded(px(8.))
         .text_size(px(13.5))
-        .cursor_pointer()
         .hover(|style| style.bg(theme::sunken()))
 }
 
@@ -280,27 +338,11 @@ fn lead_element(lead: Lead) -> Div {
             .flex_none()
             .flex()
             .justify_center()
-            .text_size(px(14.))
-            .text_color(theme::text_label())
-            .child("#"),
-        Lead::Chip {
-            initials,
-            tone,
-            status,
-        } => div()
+            .child(icon(Glyph::Channel, px(14.), theme::text_label())),
+        Lead::Chip { face, status } => div()
             .relative()
             .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .w(px(24.))
-            .h(px(24.))
-            .rounded(px(7.))
-            .bg(theme::agent_chip(tone))
-            .text_size(px(9.5))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(theme::chip_text())
-            .child(initials)
+            .child(avatar(face, AvatarSize::Row))
             .child(status_dot(status)),
     }
 }
@@ -320,6 +362,18 @@ fn status_dot(status: Status) -> Div {
         .bg(tone)
         .border_2()
         .border_color(theme::window())
+}
+
+fn working_dot(channel: &SharedString) -> impl IntoElement {
+    let selector = format!("sidebar-working-{channel}");
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .flex_none()
+        .size(px(8.))
+        .mr(px(4.))
+        .rounded_full()
+        .bg(theme::status_busy())
 }
 
 fn unread_badge(unread: usize) -> impl IntoElement {
@@ -352,8 +406,10 @@ fn section_title(title: SharedString) -> impl IntoElement {
 }
 
 fn search_field() -> impl IntoElement {
-    div().flex_none().pt(px(10.)).px(px(6.)).pb(px(8.)).child(
+    div().flex_none().px(px(6.)).pb(px(8.)).child(
         div()
+            .id("sidebar-search")
+            .debug_selector(|| "sidebar-search".to_string())
             .flex()
             .items_center()
             .gap(px(8.))
@@ -364,7 +420,7 @@ fn search_field() -> impl IntoElement {
             .border_1()
             .border_color(theme::border())
             .cursor_pointer()
-            .child(search_glyph())
+            .child(icon(Glyph::Search, px(14.), theme::text_label()))
             .child(
                 div()
                     .text_size(px(13.))
@@ -381,57 +437,22 @@ fn search_field() -> impl IntoElement {
     )
 }
 
-fn search_glyph() -> impl IntoElement {
-    div()
-        .relative()
-        .flex_none()
-        .w(px(14.))
-        .h(px(14.))
-        .child(
-            div()
-                .w(px(11.))
-                .h(px(11.))
-                .rounded_full()
-                .border_1()
-                .border_color(theme::text_label()),
-        )
-        .child(
-            div()
-                .absolute()
-                .right(px(0.))
-                .bottom(px(1.))
-                .w(px(4.))
-                .h(px(1.5))
-                .rounded(px(1.))
-                .bg(theme::text_label()),
-        )
-}
-
-fn agents_glyph() -> impl IntoElement {
-    div()
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(3.))
-        .w(px(16.))
-        .h(px(13.))
-        .rounded(px(4.))
-        .border_1()
-        .border_color(theme::text_secondary())
-        .child(eye())
-        .child(eye())
-}
-
-fn eye() -> Div {
-    div()
-        .w(px(2.5))
-        .h(px(2.5))
-        .rounded_full()
-        .bg(theme::text_secondary())
-}
-
-fn footer() -> impl IntoElement {
+fn footer(people: &People, state: Entity<AppState>) -> Div {
+    let Me {
+        name,
+        description,
+        picture,
+    } = people.me;
+    let tagline = match description.lines().next() {
+        Some(line) if !line.trim().is_empty() => SharedString::from(line.trim().to_string()),
+        Some(_) => SharedString::new_static("the only human here"),
+        None => SharedString::new_static("the only human here"),
+    };
+    let face = Face {
+        initials: SharedString::from(link::initials(name)),
+        color: theme::accent(),
+        picture: people.picture(picture.as_ref()),
+    };
     div()
         .flex()
         .flex_none()
@@ -444,149 +465,131 @@ fn footer() -> impl IntoElement {
             div()
                 .relative()
                 .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(px(30.))
-                .h(px(30.))
-                .rounded(px(9.))
-                .bg(theme::accent())
-                .text_size(px(11.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::chip_text())
-                .child("YO")
+                .child(avatar(face, AvatarSize::Account))
                 .child(status_dot(Status::Idle)),
         )
         .child(
             div()
                 .flex()
                 .flex_col()
+                .flex_1()
+                .min_w(px(0.))
                 .child(
                     div()
                         .text_size(px(13.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("You"),
+                        .child(SharedString::from(name.clone())),
                 )
                 .child(
                     div()
                         .text_size(px(11.5))
                         .text_color(theme::text_label())
-                        .child("the only human here"),
+                        .text_ellipsis()
+                        .child(tagline),
                 ),
         )
-        .child(div().flex_1())
-        .child(gear())
-}
-
-fn gear() -> impl IntoElement {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .w(px(15.))
-        .h(px(15.))
-        .rounded_full()
-        .border_1()
-        .border_color(theme::text_secondary())
-        .cursor_pointer()
         .child(
-            div()
-                .w(px(5.))
-                .h(px(5.))
-                .rounded_full()
-                .border_1()
-                .border_color(theme::text_secondary()),
+            button("sidebar-profile")
+                .accessibility_label("Your profile")
+                .flex_none()
+                .p(px(5.))
+                .rounded(px(7.))
+                .hover(|style| style.bg(theme::sunken()))
+                .on_click(move |_event, _window, cx| {
+                    state.update(cx, |state, cx| state.open_profile(cx));
+                })
+                .child(icon(Glyph::Settings, px(15.), theme::text_secondary())),
         )
 }
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext, Entity, Modifiers, TestAppContext, VisualTestContext};
-    use time::macros::datetime;
-    use tuclaw_core::store::Store;
+    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
     use super::{Highlight, Lead, Section, Sidebar, sections};
     use crate::state::{AppState, Segment};
+    use crate::testing::loaded;
 
     fn sidebar(cx: &mut TestAppContext) -> (Entity<AppState>, &mut VisualTestContext) {
-        let store = Store::open_in_memory().expect("the schema is created");
-        store
-            .seed_if_needed(datetime!(2026-08-26 21:00 UTC))
-            .expect("the fixtures are written");
-        let state = AppState::new(store).expect("the workspace loads");
-        let state = cx.new(|_| state);
+        let (_mock, state) = loaded(cx);
         let built = state.clone();
         let (_sidebar, cx) = cx.add_window_view(move |_window, cx| Sidebar::new(built, cx));
         (state, cx)
     }
 
     #[gpui::test]
-    fn drawing_the_sidebar_does_not_panic(cx: &mut TestAppContext) {
-        let (state, cx) = sidebar(cx);
-        state.read_with(cx, |state, _cx| assert_eq!(state.channels().len(), 10));
+    fn a_channel_with_a_working_agent_carries_a_dot(cx: &mut TestAppContext) {
+        let (_state, cx) = sidebar(cx);
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("sidebar-working-Magnet Feed").is_some());
+        assert!(cx.debug_bounds("sidebar-working-General").is_none());
     }
 
     #[gpui::test]
-    fn the_sections_follow_the_channel_groups(cx: &mut TestAppContext) {
+    fn drawing_the_sidebar_does_not_panic(cx: &mut TestAppContext) {
+        let (state, cx) = sidebar(cx);
+        state.read_with(cx, |state, _cx| assert_eq!(state.channels().len(), 3));
+    }
+
+    #[gpui::test]
+    fn the_surfaces_form_one_untitled_section_in_order(cx: &mut TestAppContext) {
         let (state, cx) = sidebar(cx);
         state.read_with(cx, |state, _cx| {
             let sections = sections(state);
-            let mut titles = Vec::new();
-            let mut counts = Vec::new();
-            for Section { title, rows } in &sections {
-                titles.push(title.clone());
-                counts.push(rows.len());
-            }
-            assert_eq!(
-                titles,
-                vec![
-                    Some("🎬 Movie nights".into()),
-                    Some("🏠 Home".into()),
-                    None,
-                    Some("Direct messages".into()),
-                ]
-            );
-            assert_eq!(counts, vec![3, 2, 1, 4]);
-            let Some(Section { title: _, rows }) = sections.first() else {
-                panic!("the first section is built");
+            assert_eq!(sections.len(), 1);
+            let Some(Section { title, rows }) = sections.first() else {
+                panic!("the section is built");
             };
-            assert!(rows[0].highlight == Highlight::On);
-            assert!(rows[1].highlight == Highlight::Off);
-            let Some(Section { title: _, rows }) = sections.last() else {
-                panic!("the direct section is built");
-            };
+            assert_eq!(*title, None);
+            let mut names = Vec::new();
             for row in rows {
+                names.push(row.name.to_string());
                 match &row.lead {
-                    Lead::Chip {
-                        initials: _,
-                        tone: _,
-                        status: _,
-                    } => {}
-                    Lead::Hash => panic!("a direct row carries its agent's chip"),
+                    Lead::Hash => {}
+                    Lead::Chip { face: _, status: _ } => panic!("a surface row carries a hash"),
                 }
             }
-            assert_eq!(rows[1].unread, 2);
+            assert_eq!(names, vec!["General", "Magnet Feed", "Smart Home"]);
+            assert!(rows[0].highlight == Highlight::On);
+            assert!(rows[1].highlight == Highlight::Off);
         });
     }
 
     #[gpui::test]
-    fn clicking_a_channel_row_selects_it(cx: &mut TestAppContext) {
+    fn the_agents_view_highlights_no_channel_row(cx: &mut TestAppContext) {
         let (state, cx) = sidebar(cx);
-        let personal = cx
-            .debug_bounds("sidebar-row-personal")
-            .expect("the personal row is drawn");
-        cx.simulate_click(personal.center(), Modifiers::default());
+        state.update(cx, |state, cx| state.activate_segment(Segment::Agents, cx));
+        state.read_with(cx, |state, _cx| {
+            for Section { title: _, rows } in sections(state) {
+                for row in rows {
+                    assert!(
+                        row.highlight == Highlight::Off,
+                        "{} is highlighted",
+                        row.name
+                    );
+                }
+            }
+        });
+    }
+
+    #[gpui::test]
+    fn clicking_a_channel_row_selects_it_and_loads_its_history(cx: &mut TestAppContext) {
+        let (state, cx) = sidebar(cx);
+        let home = cx
+            .debug_bounds("sidebar-row-Smart Home")
+            .expect("the Smart Home row is drawn");
+        cx.simulate_click(home.center(), Modifiers::default());
+        cx.run_until_parked();
         state.read_with(cx, |state, _cx| {
             let mut name = None;
             for channel in state.channels() {
-                if channel.id == state.selected() {
+                if Some(channel.id) == state.selected() {
                     name = Some(channel.name.clone());
                     break;
                 }
             }
-            assert_eq!(name, Some("personal".to_string()));
-            assert!(state.messages().is_empty());
+            assert_eq!(name, Some("Smart Home".to_string()));
+            assert_eq!(state.messages().len(), 12);
         });
     }
 

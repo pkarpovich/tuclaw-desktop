@@ -1,5 +1,5 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
 use time::OffsetDateTime;
 
 /// Identifies a channel.
@@ -24,8 +24,9 @@ pub struct ChannelId(pub i64);
 ///
 /// let MessageId(raw) = MessageId(42);
 /// assert_eq!(raw, 42);
+/// assert!(MessageId(41) < MessageId(42));
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MessageId(pub i64);
 
 /// Identifies an agent.
@@ -75,6 +76,8 @@ pub enum Author {
     User,
     /// The agent with the given identifier.
     Agent(AgentId),
+    /// The daemon itself, e.g. a notice that a run failed.
+    System,
 }
 
 /// Reports whether an agent is working, and on what.
@@ -110,7 +113,22 @@ pub struct Agent {
     pub status: AgentStatus,
     /// The position of the agent in the rendered order, ascending.
     pub sort_index: i64,
+    /// Its avatar, when it has one; otherwise its initials are drawn.
+    pub picture: Option<Picture>,
 }
+
+/// Where an avatar picture is fetched from; a changed picture has a new address.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::Picture;
+///
+/// let Picture(url) = Picture("/api/v3/agents/7/avatar?v=ab12".into());
+/// assert!(url.ends_with("v=ab12"));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Picture(pub String);
 
 /// A conversation in the sidebar, either a channel or a direct message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,8 +158,102 @@ pub struct Message {
     pub body: Vec<Span>,
     /// When the message was sent.
     pub sent_at: OffsetDateTime,
-    /// How many replies the message's thread holds.
-    pub reply_count: usize,
+    /// The original recording, when the message was spoken.
+    pub voice: Option<Voice>,
+    /// The run that produced the message, when it came from one.
+    pub run: Option<RunRef>,
+}
+
+/// How a run ended.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::RunOutcome;
+///
+/// assert_ne!(RunOutcome::Ok, RunOutcome::Error);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// It is still going.
+    Running,
+    /// It finished with an answer.
+    Ok,
+    /// It failed.
+    Error,
+    /// It was stopped.
+    Interrupted,
+    /// A status this build does not know.
+    Unknown,
+}
+
+/// The run behind a message, as its summary describes it.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use tuclaw_core::model::{RunOutcome, RunRef};
+///
+/// let run = RunRef {
+///     id: "6763eb02".to_string(),
+///     outcome: RunOutcome::Ok,
+///     steps: 6,
+///     tools: 1,
+///     duration: Duration::from_millis(13_029),
+/// };
+/// assert_eq!(run.tools, 1);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRef {
+    /// The run's identifier.
+    pub id: String,
+    /// How it ended.
+    pub outcome: RunOutcome,
+    /// How many steps it took.
+    pub steps: u32,
+    /// How many of those were tool calls.
+    pub tools: u32,
+    /// How long it ran.
+    pub duration: Duration,
+}
+
+/// Identifies a recording the daemon keeps.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::RecordingId;
+///
+/// let RecordingId(raw) = RecordingId(7);
+/// assert_eq!(raw, 7);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RecordingId(pub i64);
+
+/// The original recording of a spoken message.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use tuclaw_core::model::{RecordingId, Voice};
+///
+/// let voice = Voice {
+///     recording: RecordingId(1),
+///     mime: "audio/ogg".to_string(),
+///     duration: Some(Duration::from_millis(3006)),
+/// };
+/// assert_eq!(voice.duration, Some(Duration::from_millis(3006)));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Voice {
+    /// The recording to fetch.
+    pub recording: RecordingId,
+    /// Its media type, e.g. `audio/ogg` or `audio/mp4`.
+    pub mime: String,
+    /// Its length, when the daemon knows it.
+    pub duration: Option<Duration>,
 }
 
 /// One run of a message body: plain text, an agent mention, or inline code.
@@ -157,7 +269,7 @@ pub struct Message {
 /// ];
 /// assert_eq!(body.len(), 2);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Span {
     /// Plain text, rendered word by word.
     Text(String),
@@ -165,126 +277,4 @@ pub enum Span {
     Mention(String),
     /// Inline code, rendered as a chip.
     Code(String),
-}
-
-/// Encodes a message body as the JSON stored in the `body` column.
-///
-/// # Panics
-///
-/// Panics if `serde_json` cannot serialize the spans, which cannot happen for
-/// the string payloads [`Span`] carries.
-///
-/// # Examples
-///
-/// ```
-/// use tuclaw_core::model::{encode, Span};
-///
-/// let json = encode(&[Span::Text("on it".to_string())]);
-/// assert_eq!(json, r#"[{"Text":"on it"}]"#);
-/// ```
-pub fn encode(body: &[Span]) -> String {
-    serde_json::to_string(body).expect("spans hold only strings and always serialize")
-}
-
-/// Decodes a message body from the JSON stored in the `body` column.
-///
-/// # Errors
-///
-/// Returns an error if the input is not the JSON [`encode`] produces.
-///
-/// # Examples
-///
-/// ```
-/// use tuclaw_core::model::{decode, Span};
-///
-/// let body = decode(r#"[{"Code":"mise run dev"}]"#).unwrap();
-/// assert_eq!(body, vec![Span::Code("mise run dev".to_string())]);
-/// assert!(decode("not json").is_err());
-/// ```
-pub fn decode(json: &str) -> Result<Vec<Span>> {
-    let body = serde_json::from_str(json)?;
-    Ok(body)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Span, decode, encode};
-
-    fn round_trip(body: Vec<Span>) {
-        let json = encode(&body);
-        let decoded = decode(&json).expect("encoded body decodes");
-        assert_eq!(decoded, body);
-    }
-
-    #[test]
-    fn plain_text_round_trips() {
-        round_trip(vec![Span::Text("watched it last night".to_string())]);
-    }
-
-    #[test]
-    fn mention_mid_sentence_round_trips() {
-        round_trip(vec![
-            Span::Text("asking ".to_string()),
-            Span::Mention("allspeak".to_string()),
-            Span::Text(" for subtitles".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn inline_code_round_trips() {
-        round_trip(vec![
-            Span::Text("dropped it in ".to_string()),
-            Span::Code("~/Media/inbox".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn several_spans_in_one_body_round_trip() {
-        round_trip(vec![
-            Span::Text("hey ".to_string()),
-            Span::Mention("magnet feed sync".to_string()),
-            Span::Text(", check ".to_string()),
-            Span::Code("/tmp/list.txt".to_string()),
-            Span::Text(" and report back".to_string()),
-            Span::Mention("media review".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn empty_body_round_trips() {
-        round_trip(Vec::new());
-    }
-
-    #[test]
-    fn punctuation_and_escapes_round_trip() {
-        round_trip(vec![
-            Span::Text(r#"a [bracket] a {brace} a "quote" a \backslash"#.to_string()),
-            Span::Code(r#"{"key": "value\\"}"#.to_string()),
-        ]);
-    }
-
-    #[test]
-    fn non_ascii_round_trips() {
-        round_trip(vec![
-            Span::Text("привет 🐢 ".to_string()),
-            Span::Mention("allspeak".to_string()),
-        ]);
-    }
-
-    #[test]
-    fn encoded_form_is_externally_tagged() {
-        let json = encode(&[
-            Span::Text("on it ".to_string()),
-            Span::Mention("allspeak".to_string()),
-        ]);
-        assert_eq!(json, r#"[{"Text":"on it "},{"Mention":"allspeak"}]"#);
-    }
-
-    #[test]
-    fn malformed_json_is_an_error() {
-        assert!(decode("").is_err());
-        assert!(decode("[{\"Text\":").is_err());
-        assert!(decode(r#"[{"Unknown":"x"}]"#).is_err());
-        assert!(decode(r#"{"Text":"x"}"#).is_err());
-    }
 }

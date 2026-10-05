@@ -1,0 +1,32 @@
+[{
+  "id": 1,
+  "kind": "channel",
+  "name": "General",
+  "sort_order": 0,
+  "last_message_at": "2026-10-03T15:26:00Z",
+  "lead_agent_id": 1,
+  "agents": [{"agent_id": 1, "role": "lead", "listens": true}, {"agent_id": 3, "role": "mention", "listens": false}],
+  "bindings": [{"channel": "telegram", "external_id": "-1001234567890:0", "mirror": "agent_only"}],
+  "live_run": {"run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11", "agent_id": 1},
+  "last_read_message_id": 9191,
+  "unread": 1,
+  "topic_name": "General",
+  "display_name": null,
+  "group_id": null,
+  "archived_at": null
+}, {
+  "id": 4,
+  "kind": "channel",
+  "name": "Torrents",
+  "sort_order": 1,
+  "last_message_at": null,
+  "lead_agent_id": 3,
+  "agents": [{"agent_id": 3, "role": "lead", "listens": true}],
+  "bindings": [{"channel": "telegram", "external_id": "-1001234567890:918", "mirror": "agent_only"}],
+  "last_read_message_id": null,
+  "unread": 0,
+  "topic_name": "Magnet Feed",
+  "display_name": "Torrents",
+  "group_id": 2,
+  "archived_at": "2026-10-05T08:00:00Z"
+}]
