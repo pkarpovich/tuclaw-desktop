@@ -51,8 +51,8 @@ mise run test        # cargo test --workspace
 mise run lint        # cargo clippy --workspace --all-targets -- -D warnings
 mise run fmt         # cargo fmt --all
 mise run fmt-check   # cargo fmt --all -- --check
-mise run bundle      # target/release/bundle/Tuclaw.app, ad-hoc signed
-mise run preview     # the bundle, opened (quits a running Tuclaw.app first)
+mise run bundle      # target/release/bundle/Tuclaw Preview.app, ad-hoc signed
+mise run preview     # the bundle, opened (quits a running preview first)
 mise run install     # the same, copied to /Applications
 ```
 
@@ -62,7 +62,9 @@ seconds.
 
 ## The app bundle
 
-`mise run bundle` (`script/bundle-mac.fish`) builds the release binary and assembles `target/release/bundle/Tuclaw.app` by hand, without `cargo-bundle`: `app/resources/Info.plist` with the version from `Cargo.toml`, the commit count as the build number and the short commit as `TuclawCommit`; the icon compiled by `xcrun actool` from the Icon Composer source `app/resources/AppIcon.icon` (taken from the tuclaw-app iOS project) into `AppIcon.icns` plus `Assets.car`; an ad-hoc `codesign`. The bundle identifier is `dev.pkarpovich.tuclaw` and the minimum macOS is 14.0. `mise run preview` opens the fresh bundle after quitting a running one; `mise run install` copies it to `/Applications`. The same commands are Zed tasks in `.zed/tasks.json` (`task: spawn`, prefix `tuclaw:`).
+`mise run bundle` (`script/bundle-mac.fish`) builds the release binary and assembles `target/release/bundle/Tuclaw Preview.app` by hand, without `cargo-bundle`: `app/resources/Info.plist` with the version from `Cargo.toml`, the commit count as the build number and the short commit as `TuclawCommit`; the icon compiled by `xcrun actool` from the Icon Composer source `app/resources/AppIcon.icon` (taken from the tuclaw-app iOS project) into `AppIcon.icns` plus `Assets.car`; an ad-hoc `codesign` with the microphone entitlement. The local bundle is the preview: `Tuclaw Preview` with the bundle identifier `dev.pkarpovich.tuclaw.preview`, so it runs beside the released `Tuclaw` (`dev.pkarpovich.tuclaw`, installed with `brew install --cask pkarpovich/apps/tuclaw`) and neither quits, overwrites nor shares a microphone grant with the other. `script/bundle-mac.fish --sign <identity>` builds the release bundle instead: `Tuclaw.app`, Developer ID with the hardened runtime, which is what the release workflow runs. The minimum macOS is 14.0. `mise run preview` opens the fresh bundle after quitting a running preview; `mise run install` copies it to `/Applications`.
+
+A `v*` tag matching the workspace version runs `.github/workflows/release.yml`: the checks, the signed bundle, notarization and stapling, the zip on the GitHub release, and the `tuclaw` cask written to `pkarpovich/homebrew-apps`. Pull requests run `.github/workflows/ci.yml`. The same commands are Zed tasks in `.zed/tasks.json` (`task: spawn`, prefix `tuclaw:`).
 
 `app/build.rs` bakes the short commit into the binary as `TUCLAW_COMMIT` (overridable from the environment), and the app menu's About Tuclaw shows `version (commit)`; Cmd+Q quits. A bare `mise run dev` binary has the menu too, but no icon and the executable's name in the menu bar.
 

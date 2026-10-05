@@ -9,7 +9,7 @@
     "save": "all"
   },
   {
-    "label": "tuclaw: preview Tuclaw.app (release bundle)",
+    "label": "tuclaw: preview Tuclaw Preview.app (release build)",
     "command": "mise",
     "args": ["run", "preview"],
     "use_new_terminal": false,
@@ -18,7 +18,7 @@
     "save": "all"
   },
   {
-    "label": "tuclaw: install Tuclaw.app to /Applications",
+    "label": "tuclaw: install Tuclaw Preview.app to /Applications",
     "command": "mise",
     "args": ["run", "install"],
     "use_new_terminal": false,
