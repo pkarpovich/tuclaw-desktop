@@ -7877,6 +7877,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-mobile",
+ "libc",
  "log",
  "tuclaw-core",
  "tuclaw-desktop",

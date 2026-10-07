@@ -130,6 +130,20 @@ Focus moves are explicit: the feed focuses its composer (`Composer::focus_handle
 
 **The test rule.** Tests drive `MockTransport` with `Pace::Stepped` and call `step()`/`play_all()` from the test thread. Never `Pace::Realtime` or `HttpTransport` under `#[gpui::test]`: GPUI's test scheduler forbids parking on a wake from a foreign thread, and both wake from the tokio runtime.
 
+## The iPhone app
+
+`ios/` is `tuclaw-ios`, a static library that `ios/xcode/main.m` (an Objective-C app delegate, no Swift) links and drives with a `CADisplayLink`; `ios/xcode/project.yml` is the XcodeGen spec and the generated `Tuclaw.xcodeproj` beside it is not committed. `mise run ios-run` builds the library, the project and the app for the simulator and launches it on a dedicated simulator, "Tuclaw iPhone 17 Pro" (iOS 26.5), creating it when missing; its stdout and stderr go to `target/ios/console.log`. `mise run ios-lint` is clippy for the simulator target. The phone reuses the app library (`AppState`, the link task, the row renderers); `gpui_platform` and `run()` (`app/src/desktop.rs`) are macOS-only so that library builds for iOS.
+
+The platform is `gpui-mobile` (longbridge/gpui-mobile), and three things about it are deliberate:
+
+- **It is a git dependency at rev 9075e3a**, the unpublished bump to gpui-pre 0.3.7; the crates.io 0.1.0 pins gpui-pre 0.3.5. Move to crates.io once a release pins our gpui-pre.
+- **`camera` and `video_player` are on** only because upstream's `src/ios/platform_view.rs` uses those packages without feature gates. Drop them when upstream gates them; if the crate ever needs patching for something else, carry the two cfg gates in the same patch.
+- **The app raises the software keyboard itself** (`ios/src/keyboard.rs`): gpui-mobile never implements GPUI's `show_soft_keyboard`. A field calls `keyboard::follow_focus` with its focus handle and wraps itself in `keyboard::field`, so a tap on an already focused field raises the keyboard again; a programmatic focus goes through the same handle.
+
+**libc is pinned to `=0.2.189` in `ios/Cargo.toml`.** 0.2.190 made the `_dyld_*` functions macOS-only, which breaks `backtrace` (pulled in by gpui-scheduler) on iOS (rust-lang/libc#5601, fix in #5606). Lift the pin when a libc release restores them.
+
+**Simulator traps.** Never type into the simulator with `axe type` or `axe key`: HID keystrokes make iOS treat a hardware keyboard as attached, the software keyboard stops appearing, and the state survives a reboot (`xcrun simctl erase` clears it). Tap the soft keys instead. A zero-length tap (`axe tap`) is dropped by GPUI's gesture recognizer; use `axe touch --down --up --delay 0.1`. Xcode 27 replaced Simulator.app with `DeviceHub.app`, which must be open for `axe` touches to land.
+
 ## The design is the spec
 
 `docs/design/mockup.html` is the designer's original and `docs/design/screenshots/` holds five

@@ -45,14 +45,15 @@ impl Render for Smoke {
                     .child("Привет, это кириллица: ёжик в тумане"),
             )
             .child(div().text_size(px(15.)).child("Emoji: 🎬 🍿 🤖 ✅ 👩‍💻"))
-            .child(
+            .child(keyboard::field(
                 div()
+                    .id("smoke-field")
                     .rounded(px(18.))
                     .border_1()
                     .border_color(theme::border())
                     .px(px(14.))
                     .py(px(8.))
                     .child(Textarea::new(&self.input)),
-            )
+            ))
     }
 }

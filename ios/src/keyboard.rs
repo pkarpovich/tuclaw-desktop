@@ -1,4 +1,4 @@
-use gpui::{Context, FocusHandle, Subscription, Window};
+use gpui::{Context, Div, FocusHandle, MouseButton, Stateful, Subscription, Window, prelude::*};
 
 pub fn follow_focus<V: 'static>(
     focus: &FocusHandle,
@@ -11,12 +11,16 @@ pub fn follow_focus<V: 'static>(
     ]
 }
 
-fn show() {
+pub fn field(element: Stateful<Div>) -> Stateful<Div> {
+    element.on_mouse_up(MouseButton::Left, |_, _, _| show())
+}
+
+pub fn show() {
     #[cfg(target_os = "ios")]
     gpui_mobile::show_keyboard();
 }
 
-fn hide() {
+pub fn hide() {
     #[cfg(target_os = "ios")]
     gpui_mobile::hide_keyboard();
 }
