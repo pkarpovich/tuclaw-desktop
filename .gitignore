@@ -2,3 +2,4 @@ target/
 !.revmux/
 .revmux/*
 !.revmux/profile.md
+/ios/xcode/Tuclaw.xcodeproj

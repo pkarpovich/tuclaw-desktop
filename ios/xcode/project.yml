@@ -1,0 +1,48 @@
+name: Tuclaw
+options:
+  bundleIdPrefix: dev.pkarpovich
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+targets:
+  Tuclaw:
+    type: application
+    platform: iOS
+    sources:
+      - path: main.m
+      - path: tuclaw_ios.h
+        buildPhase: headers
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pkarpovich.tuclaw.ios
+        PRODUCT_NAME: Tuclaw
+        INFOPLIST_FILE: Info.plist
+        MARKETING_VERSION: $(TUCLAW_VERSION)
+        CURRENT_PROJECT_VERSION: $(TUCLAW_BUILD)
+        TARGETED_DEVICE_FAMILY: "1"
+        CLANG_ENABLE_OBJC_ARC: YES
+        ENABLE_DEBUG_DYLIB: NO
+        DEAD_CODE_STRIPPING: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)
+        OTHER_LDFLAGS:
+          - -force_load
+          - $(TUCLAW_RUST_LIB)
+          - -lc++
+          - -framework UIKit
+          - -framework Metal
+          - -framework QuartzCore
+          - -framework CoreGraphics
+          - -framework CoreText
+          - -framework CoreFoundation
+          - -framework Foundation
+          - -framework Security
+          - -framework SystemConfiguration
+          - -framework AudioToolbox
+          - -framework AVFoundation
+          - -framework CoreMedia
+          - -framework UniformTypeIdentifiers

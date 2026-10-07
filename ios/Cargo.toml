@@ -1,0 +1,17 @@
+[package]
+name = "tuclaw-ios"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+gpui.workspace = true
+gpui-kit.workspace = true
+tuclaw-core = { path = "../core" }
+tuclaw-desktop = { path = "../app" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/longbridge/gpui-mobile", rev = "9075e3aa", default-features = false, features = ["camera", "video_player"] }
+log = "0.4"
