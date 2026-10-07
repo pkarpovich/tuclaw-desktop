@@ -256,6 +256,21 @@ impl Composer {
         });
     }
 
+    fn start_mention(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (value, cursor) = {
+            let input = self.input.read(cx);
+            let value = input.value().to_string();
+            let cursor = input.cursor().min(value.len());
+            (value, cursor)
+        };
+        let opens = value
+            .get(..cursor)
+            .and_then(|before| before.chars().next_back())
+            .is_none_or(char::is_whitespace);
+        let text = if opens { "@" } else { " @" };
+        self.insert(text, window, cx);
+    }
+
     pub fn mention(&mut self, mention: Mention, window: &mut Window, cx: &mut Context<Self>) {
         self.insert(&format!("@{} ", mention.ident), window, cx);
         self.picked.push(mention);
@@ -598,7 +613,19 @@ impl Composer {
                             .px(px(9.))
                             .pt(px(6.))
                             .pb(px(9.))
-                            .child(tool(Glyph::Mention))
+                            .child(
+                                button("composer-mention")
+                                    .accessibility_label("Mention an agent")
+                                    .flex_none()
+                                    .w(px(30.))
+                                    .h(px(30.))
+                                    .rounded(px(8.))
+                                    .hover(|style| style.bg(theme::sunken()))
+                                    .on_click(cx.listener(|composer, _event, window, cx| {
+                                        composer.start_mention(window, cx)
+                                    }))
+                                    .child(icon(Glyph::Mention, px(16.), theme::text_secondary())),
+                            )
                             .child(tool(Glyph::Attach))
                             .child(tool(Glyph::Emoji))
                             .child(tool(Glyph::Format))
@@ -783,6 +810,22 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].body, "ask @magnet_feed any news?");
         assert_eq!(sent[0].addressed, Some(AgentId(3)));
+    }
+
+    #[gpui::test]
+    fn the_mention_button_types_an_at_sign_and_opens_the_list(cx: &mut TestAppContext) {
+        let (drafts, composer, cx) = drafting(cx);
+        focus(&composer, cx);
+        cx.simulate_input("ask");
+        let button = cx
+            .debug_bounds("composer-mention")
+            .expect("the mention button is drawn");
+        cx.simulate_click(button.center(), Modifiers::default());
+        assert_eq!(typed(&composer, cx), "ask @");
+        assert!(cx.debug_bounds("composer-mentions").is_some());
+        cx.simulate_keystrokes("enter");
+        assert_eq!(typed(&composer, cx), "ask @tuclaw ");
+        assert!(drafts.borrow().is_empty());
     }
 
     #[gpui::test]
