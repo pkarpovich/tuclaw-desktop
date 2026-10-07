@@ -1012,6 +1012,23 @@ mod tests {
     }
 
     #[test]
+    fn every_frame_of_the_sse_transcript_decodes() {
+        let transcript = include_str!("../../testdata/v3/sse_surface.txt");
+        let mut decoded = 0;
+        for line in transcript.lines() {
+            let Some(data) = line.strip_prefix("data: ") else {
+                continue;
+            };
+            let frame = decode(data).unwrap_or_else(|error| panic!("{data}: {error:?}"));
+            if let Frame::Unknown(kind) = &frame {
+                panic!("unknown frame {kind:?}");
+            }
+            decoded += 1;
+        }
+        assert!(decoded > 5);
+    }
+
+    #[test]
     fn message_created_carries_the_message() {
         let Frame::MessageCreated(answer) = frame("message_created") else {
             panic!("expected message.created");

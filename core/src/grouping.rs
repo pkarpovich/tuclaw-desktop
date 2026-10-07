@@ -38,6 +38,7 @@ pub struct DaySection {
 ///     run: None,
 ///     weight: Weight::Mine,
 ///     reply_to: None,
+///     suggestions: None,
 /// };
 /// let sections = group_by_day(&[message], offset!(UTC), datetime!(2026-08-26 21:00 UTC));
 /// assert_eq!(sections.len(), 1);
@@ -108,6 +109,7 @@ mod tests {
             run: None,
             weight: Weight::Mine,
             reply_to: None,
+            suggestions: None,
         }
     }
 

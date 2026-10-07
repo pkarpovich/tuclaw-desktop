@@ -170,6 +170,48 @@ pub struct Message {
     pub weight: Weight,
     /// The user's message this one answers.
     pub reply_to: Option<MessageId>,
+    /// The one-tap replies the agent offered with this answer.
+    pub suggestions: Option<Suggestions>,
+}
+
+/// The one-tap replies an agent offered with its answer.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::{Choice, Suggestions};
+///
+/// let suggestions = Suggestions {
+///     options: vec!["Do it".into(), "Skip".into()],
+///     choice: Choice::Open,
+/// };
+/// assert_eq!(suggestions.choice, Choice::Open);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestions {
+    /// One to three options, in the agent's order.
+    pub options: Vec<String>,
+    /// Where the user's answer stands.
+    pub choice: Choice,
+}
+
+/// Where the user's answer to suggested replies stands.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::Choice;
+///
+/// assert_ne!(Choice::Chosen("Skip".into()), Choice::Closed);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Choice {
+    /// Nothing was written after the answer yet; the options can be tapped.
+    Open,
+    /// The user picked this option.
+    Chosen(String),
+    /// The user wrote something else.
+    Closed,
 }
 
 /// How much a new message asks of the user.

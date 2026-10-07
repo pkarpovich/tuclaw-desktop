@@ -2400,6 +2400,7 @@ impl AppState {
             run: None,
             weight: Weight::Mine,
             reply_to: None,
+            suggestions: None,
         });
         self.pending.push(Pending {
             client_message_id: client_message_id.clone(),

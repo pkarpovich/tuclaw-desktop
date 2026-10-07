@@ -10,8 +10,8 @@ use serde_json::Value;
 use super::dto::{
     Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, Group, GroupId, GroupPatch,
     ImageKind, Me, MePatch, MessageId, MessagesPage, NewGroup, Placement, Post, Posted, ReadAnswer,
-    RunDetail, RunId, Seq, Surface, SurfaceId, SurfacePatch, Task, TaskId, TaskRun, VoicePost,
-    WiringChange,
+    ReplyPost, RunDetail, RunId, Seq, Surface, SurfaceId, SurfacePatch, Task, TaskId, TaskRun,
+    VoicePost, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -109,6 +109,27 @@ impl Client {
             Ok(encoded) => self
                 .transport
                 .post(&format!("/surfaces/{surface}/messages"), Some(encoded)),
+            Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
+        };
+        async move { body(request.await?) }
+    }
+
+    /// Taps one of an answer's suggested replies; the posted message arrives on the event socket.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Conflict`] once the replies are closed, and [`ApiError::Invalid`] for
+    /// an option the answer does not offer.
+    pub fn reply(
+        &self,
+        message: MessageId,
+        tap: &ReplyPost,
+    ) -> impl Future<Output = Result<Posted, ApiError>> + Send + 'static {
+        let MessageId(message) = message;
+        let request = match serde_json::to_value(tap) {
+            Ok(encoded) => self
+                .transport
+                .post(&format!("/messages/{message}/reply"), Some(encoded)),
             Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
         };
         async move { body(request.await?) }

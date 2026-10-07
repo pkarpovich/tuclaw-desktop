@@ -28,9 +28,10 @@ use super::dto::{
     Agent, AgentId, AgentRun, AgentState, Attachment, AttachmentId, AttachmentKind, Author,
     AuthorKind, AvatarSet, AvatarUrl, Binding, Channel, ClientMessageId, ContextUsage, FireMark,
     Group, GroupId, ImageKind, InputId, Me, MePatch, Message, MessageId, MessageKind, MessagesPage,
-    Mirror, Outcome, Placement, Post, Posted, ReadAnswer, Role, RowKind, RunDetail, RunId, RunRow,
-    RunStatus, RunSummary, Schedule, ScheduleKind, Seq, StepRow, Surface, SurfaceId, SurfaceKind,
-    SurfaceRun, Task, TaskId, TaskRun, TaskStatus, ToolUseId, Usage, Wiring, WiringChange,
+    Mirror, Outcome, Placement, Post, Posted, ReadAnswer, ReplyPost, Role, RowKind, RunDetail,
+    RunId, RunRow, RunStatus, RunSummary, Schedule, ScheduleKind, Seq, StepRow, SuggestedReplies,
+    Surface, SurfaceId, SurfaceKind, SurfaceRun, Task, TaskId, TaskRun, TaskStatus, ToolUseId,
+    Usage, Wiring, WiringChange,
 };
 use super::frames::{
     AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
@@ -346,6 +347,40 @@ impl MockTransport {
         self.agent_posts_from(surface, agent, text, "user");
     }
 
+    /// Queues an agent's answer that offers one-tap replies (v3.12).
+    pub fn agent_suggests(&self, surface: SurfaceId, agent: AgentId, text: &str, options: &[&str]) {
+        let mut world = self.lock();
+        let mut owned = Vec::new();
+        for option in options {
+            owned.push((*option).to_string());
+        }
+        let message = Message {
+            id: world.next_message(),
+            surface_id: surface,
+            kind: MessageKind::Answer,
+            author: Author {
+                kind: AuthorKind::Agent,
+                agent_id: Some(agent),
+            },
+            addressed_agent_id: None,
+            reply_to_message_id: None,
+            text: text.to_string(),
+            run_id: None,
+            origin: "user".into(),
+            channel: None,
+            client_message_id: None,
+            created_at: world.now,
+            run_summary: None,
+            attachments: Vec::new(),
+            suggested_replies: Some(SuggestedReplies {
+                options: owned,
+                open: true,
+                chosen: None,
+            }),
+        };
+        world.queue.push_back(Script::Created(message));
+    }
+
     /// Queues an agent's post that an automation, not the user, started.
     pub fn automation_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
         self.agent_posts_from(surface, agent, text, "scheduled");
@@ -371,6 +406,7 @@ impl MockTransport {
             created_at: world.now,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         };
         world.queue.push_back(Script::Created(message));
     }
@@ -842,6 +878,7 @@ impl World {
             created_at: at,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         }
     }
 
@@ -907,6 +944,7 @@ impl World {
                 duration_ms: 9000,
             }),
             attachments: Vec::new(),
+            suggested_replies: None,
         }
     }
 
@@ -929,6 +967,7 @@ impl World {
             created_at: at,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         }
     }
 
@@ -952,6 +991,7 @@ impl World {
                 created_at: at,
                 run_summary: None,
                 attachments: Vec::new(),
+                suggested_replies: None,
             };
         }
         Message {
@@ -972,6 +1012,7 @@ impl World {
             created_at: at,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         }
     }
 
@@ -1002,6 +1043,7 @@ impl World {
                 size_bytes: u64::try_from(TONE.len()).unwrap_or(u64::MAX),
                 duration_ms: Some(3006),
             }],
+            suggested_replies: None,
         };
         self.messages.push(message);
     }
@@ -1094,6 +1136,7 @@ impl World {
             created_at: self.now,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         };
         self.messages.push(message.clone());
         message
@@ -1215,7 +1258,16 @@ impl World {
                 };
                 let post: Post = serde_json::from_value(body)
                     .map_err(|error| ApiError::Invalid(error.to_string()))?;
-                to_json(&self.accept(surface, post, Vec::new())?)
+                to_json(&self.accept(surface, post, Vec::new(), None)?)
+            }
+            ["messages", id, "reply"] => {
+                let message = parse_message(id)?;
+                let Some(body) = body else {
+                    return Err(ApiError::Invalid("a reply needs a body".into()));
+                };
+                let tap: ReplyPost = serde_json::from_value(body)
+                    .map_err(|error| ApiError::Invalid(error.to_string()))?;
+                to_json(&self.reply(message, tap)?)
             }
             ["groups"] => self.create_group(body),
             ["surfaces", id, "read"] => {
@@ -1276,7 +1328,7 @@ impl World {
             client_message_id,
         };
         if self.posted.contains_key(&post.client_message_id) {
-            return to_json(&self.accept(surface, post, Vec::new())?);
+            return to_json(&self.accept(surface, post, Vec::new(), None)?);
         }
         let id = AttachmentId(VOICE_ATTACHMENTS + i64::try_from(self.media.len()).unwrap_or(0));
         let attachment = Attachment {
@@ -1287,7 +1339,7 @@ impl World {
             duration_ms: None,
         };
         self.media.insert(id, Media::Owned(bytes));
-        to_json(&self.accept(surface, post, vec![attachment])?)
+        to_json(&self.accept(surface, post, vec![attachment], None)?)
     }
 
     fn accept(
@@ -1295,6 +1347,7 @@ impl World {
         surface: SurfaceId,
         post: Post,
         attachments: Vec<Attachment>,
+        reply_to: Option<MessageId>,
     ) -> Result<Posted, ApiError> {
         if let Some((first, posted)) = self.posted.get(&post.client_message_id) {
             if *first != surface {
@@ -1330,9 +1383,11 @@ impl World {
         );
         message.addressed_agent_id = post.addressed_agent_id;
         message.attachments = attachments.clone();
+        message.reply_to_message_id = reply_to;
         if let Some(stored) = self.messages.last_mut() {
             stored.addressed_agent_id = post.addressed_agent_id;
             stored.attachments = attachments;
+            stored.reply_to_message_id = reply_to;
         }
         let input = self.next_input();
         let posted = Posted {
@@ -1357,6 +1412,85 @@ impl World {
         });
         self.queue.extend(run);
         Ok(posted)
+    }
+
+    fn reply(&mut self, message: MessageId, tap: ReplyPost) -> Result<Posted, ApiError> {
+        let ReplyPost {
+            option,
+            client_message_id,
+        } = tap;
+        let mut found = None;
+        for candidate in &self.messages {
+            if candidate.id == message {
+                found = Some(candidate.clone());
+            }
+        }
+        let Some(answer) = found else {
+            return Err(ApiError::NotFound);
+        };
+        if let Some((first, posted)) = self.posted.get(&client_message_id) {
+            if *first != answer.surface_id {
+                return Err(ApiError::Conflict);
+            }
+            return Ok(*posted);
+        }
+        let Some(replies) = self.replies_now(&answer) else {
+            return Err(ApiError::Invalid(
+                "the message has no suggested replies".into(),
+            ));
+        };
+        if !replies.options.contains(&option) {
+            return Err(ApiError::Invalid(format!(
+                "{option} is not one of the options"
+            )));
+        }
+        if !replies.open {
+            return Err(ApiError::Conflict);
+        }
+        let post = Post {
+            text: option,
+            addressed_agent_id: answer.author.agent_id,
+            client_message_id,
+        };
+        self.accept(answer.surface_id, post, Vec::new(), Some(message))
+    }
+
+    fn replies_now(&self, message: &Message) -> Option<SuggestedReplies> {
+        let stored = message.suggested_replies.as_ref()?;
+        let mut first: Option<&Message> = None;
+        for later in &self.messages {
+            if later.surface_id != message.surface_id || later.id <= message.id {
+                continue;
+            }
+            let user = match later.kind {
+                MessageKind::User => true,
+                MessageKind::Answer => false,
+                MessageKind::Post => false,
+                MessageKind::Notice => false,
+                MessageKind::A2a => false,
+                MessageKind::Unknown => false,
+            };
+            if !user {
+                continue;
+            }
+            if first.is_none_or(|known| later.id < known.id) {
+                first = Some(later);
+            }
+        }
+        let Some(first) = first else {
+            return Some(SuggestedReplies {
+                options: stored.options.clone(),
+                open: true,
+                chosen: None,
+            });
+        };
+        let picked =
+            first.reply_to_message_id == Some(message.id) && stored.options.contains(&first.text);
+        Some(SuggestedReplies {
+            options: stored.options.clone(),
+            open: false,
+            chosen: picked.then(|| first.text.clone()),
+        })
     }
 
     fn interrupt(&mut self, run: &RunId) -> Result<(), ApiError> {
@@ -2315,7 +2449,9 @@ impl World {
             {
                 continue;
             }
-            matching.push(message.clone());
+            let mut message = message.clone();
+            message.suggested_replies = self.replies_now(&message);
+            matching.push(message);
         }
         let has_more = matching.len() > limit;
         let start = matching.len().saturating_sub(limit);
@@ -2748,6 +2884,7 @@ impl World {
                 created_at: self.now,
                 run_summary: Some(summary),
                 attachments: Vec::new(),
+                suggested_replies: None,
             };
             self.messages.push(message.clone());
             self.persist(
@@ -2808,6 +2945,12 @@ fn parse_agent(id: &str) -> Result<AgentId, ApiError> {
         return Err(ApiError::NotFound);
     };
     Ok(AgentId(id))
+}
+
+fn parse_message(id: &str) -> Result<MessageId, ApiError> {
+    id.parse::<i64>()
+        .map(MessageId)
+        .map_err(|error| ApiError::Invalid(error.to_string()))
 }
 
 fn parse_surface(id: &str) -> Result<SurfaceId, ApiError> {
@@ -3316,6 +3459,121 @@ mod tests {
             Err(ApiError::Conflict)
         );
         assert_eq!(mock.pending(), pending);
+    }
+
+    fn tap(option: &str, id: &str) -> ReplyPost {
+        ReplyPost {
+            option: option.into(),
+            client_message_id: ClientMessageId(id.into()),
+        }
+    }
+
+    fn suggested(mock: &MockTransport, client: &Client) -> Message {
+        mock.agent_suggests(SurfaceId(1), AgentId(1), "Book it?", &["Do it", "Skip"]);
+        mock.play_all();
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        page.messages.last().expect("the answer").clone()
+    }
+
+    #[test]
+    fn a_tap_posts_the_option_as_a_reply_and_closes_the_replies() {
+        let (mock, client) = stepped();
+        let answer = suggested(&mock, &client);
+        assert_eq!(
+            answer.suggested_replies,
+            Some(SuggestedReplies {
+                options: vec!["Do it".into(), "Skip".into()],
+                open: true,
+                chosen: None,
+            })
+        );
+        let first = tap("Do it", "c0ffee00-0000-4000-8000-000000000001");
+        let posted = block_on(client.reply(answer.id, &first)).expect("tapped");
+        assert_eq!(posted.agent_id, Some(AgentId(1)));
+        assert_eq!(block_on(client.reply(answer.id, &first)), Ok(posted));
+        assert_eq!(
+            block_on(client.reply(
+                answer.id,
+                &tap("Skip", "c0ffee00-0000-4000-8000-000000000002")
+            )),
+            Err(ApiError::Conflict)
+        );
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let mut reread = None;
+        let mut reply = None;
+        for message in page.messages {
+            if message.id == answer.id {
+                reread = Some(message.suggested_replies.clone());
+            }
+            if message.id == posted.message_id {
+                reply = Some(message);
+            }
+        }
+        assert_eq!(
+            reread,
+            Some(Some(SuggestedReplies {
+                options: vec!["Do it".into(), "Skip".into()],
+                open: false,
+                chosen: Some("Do it".into()),
+            }))
+        );
+        let reply = reply.expect("the tap is a message");
+        assert_eq!(reply.text, "Do it");
+        assert_eq!(reply.reply_to_message_id, Some(answer.id));
+        assert_eq!(reply.channel, Some(Channel::Desktop));
+    }
+
+    #[test]
+    fn typed_text_closes_the_replies_without_a_choice() {
+        let (mock, client) = stepped();
+        let answer = suggested(&mock, &client);
+        block_on(client.post(SurfaceId(1), &post("Do it", None))).expect("posted");
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let mut reread = None;
+        for message in page.messages {
+            if message.id == answer.id {
+                reread = message.suggested_replies;
+            }
+        }
+        assert_eq!(
+            reread,
+            Some(SuggestedReplies {
+                options: vec!["Do it".into(), "Skip".into()],
+                open: false,
+                chosen: None,
+            })
+        );
+    }
+
+    #[test]
+    fn a_tap_on_something_not_offered_is_refused() {
+        let (mock, client) = stepped();
+        let answer = suggested(&mock, &client);
+        assert!(matches_invalid(block_on(client.reply(
+            answer.id,
+            &tap("Maybe", "c0ffee00-0000-4000-8000-000000000003")
+        ))));
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let plain = page.messages.first().expect("a message").id;
+        assert!(matches_invalid(block_on(client.reply(
+            plain,
+            &tap("Do it", "c0ffee00-0000-4000-8000-000000000004")
+        ))));
+        assert_eq!(
+            block_on(client.reply(
+                MessageId(999_999),
+                &tap("Do it", "c0ffee00-0000-4000-8000-000000000005")
+            )),
+            Err(ApiError::NotFound)
+        );
+    }
+
+    fn matches_invalid(result: Result<Posted, ApiError>) -> bool {
+        match result {
+            Err(ApiError::Invalid(_)) => true,
+            Err(_) => false,
+            Ok(_) => false,
+        }
     }
 
     #[test]

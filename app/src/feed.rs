@@ -51,7 +51,7 @@ enum Focus {
 
 enum Item {
     Separator(SharedString),
-    Message(Message, Option<FireRow>),
+    Message(Box<Message>, Option<FireRow>),
     Unread(Fresh),
     Failed(FireRow),
     Quiet(Quiet),
@@ -582,7 +582,7 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
         let trigger = triggers.remove(&message.id);
         entries.push(Entry::Item(
             message.sent_at,
-            Box::new(Item::Message(message.clone(), trigger)),
+            Box::new(Item::Message(Box::new(message.clone()), trigger)),
         ));
     }
     entries.sort_by_key(Entry::at);

@@ -109,6 +109,7 @@ pub fn message_row(
         run,
         weight: _,
         reply_to: _,
+        suggestions: _,
     } = message;
     let Look {
         fold,

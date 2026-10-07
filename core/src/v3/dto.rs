@@ -823,6 +823,55 @@ pub struct Message {
     /// Its attachments (v3.1 draft); empty when it has none.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// The one-tap replies an agent attached to its answer (v3.12); [`None`] without any.
+    #[serde(default)]
+    pub suggested_replies: Option<SuggestedReplies>,
+}
+
+/// The one-tap replies of an answer (v3.12).
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::SuggestedReplies;
+///
+/// let replies: SuggestedReplies =
+///     serde_json::from_str(r#"{"options": ["Do it", "Skip"], "open": true, "chosen": null}"#)
+///         .unwrap();
+/// assert!(replies.open);
+/// assert_eq!(replies.options, vec!["Do it".to_string(), "Skip".to_string()]);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestedReplies {
+    /// One to three options, in the agent's order.
+    pub options: Vec<String>,
+    /// Whether nothing was written on the surface after the answer yet.
+    pub open: bool,
+    /// The option the user picked, when the first message after the answer was one.
+    #[serde(default)]
+    pub chosen: Option<String>,
+}
+
+/// The body of `POST /messages/{id}/reply` (v3.12).
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::v3::{ClientMessageId, ReplyPost};
+///
+/// let tap = ReplyPost {
+///     option: "Do it".into(),
+///     client_message_id: ClientMessageId("8b0c4f2e-1d7a-4c39-9e65-3a2b1c0d9f87".into()),
+/// };
+/// let json = serde_json::to_value(&tap).unwrap();
+/// assert_eq!(json["option"], "Do it");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplyPost {
+    /// The option tapped, verbatim.
+    pub option: String,
+    /// The idempotency key.
+    pub client_message_id: ClientMessageId,
 }
 
 /// One page of `GET /surfaces/{id}/messages`, oldest first.
@@ -1479,6 +1528,15 @@ mod tests {
         assert_eq!(answer.channel, None);
         assert_eq!(answer.created_at, datetime!(2026-10-03 15:26:13 UTC));
         assert!(answer.text.starts_with("## Лисички"));
+        assert_eq!(user.suggested_replies, None);
+        assert_eq!(
+            answer.suggested_replies,
+            Some(SuggestedReplies {
+                options: vec!["Ещё вариант".into(), "Спасибо".into()],
+                open: true,
+                chosen: None,
+            })
+        );
         assert_eq!(
             answer.run_summary,
             Some(RunSummary {
