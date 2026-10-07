@@ -2520,6 +2520,17 @@ impl AppState {
             self.pending.remove(position);
             self.messages.retain(|message| message.id != id);
         }
+        let mut answered = false;
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 && message.reply_to == Some(answer) {
+                answered = true;
+            }
+        }
+        if answered {
+            cx.notify();
+            return;
+        }
         for message in &mut self.messages {
             if message.id != answer {
                 continue;
@@ -2557,15 +2568,14 @@ impl AppState {
             let Some(suggestions) = &mut message.suggestions else {
                 continue;
             };
-            if suggestions.choice != Choice::Open {
+            let picked = replied == Some(message.id) && suggestions.options.contains(&written.text);
+            if picked {
+                suggestions.choice = Choice::Chosen(written.text.clone());
                 continue;
             }
-            let picked = replied == Some(message.id) && suggestions.options.contains(&written.text);
-            suggestions.choice = if picked {
-                Choice::Chosen(written.text.clone())
-            } else {
-                Choice::Closed
-            };
+            if suggestions.choice == Choice::Open {
+                suggestions.choice = Choice::Closed;
+            }
         }
     }
 

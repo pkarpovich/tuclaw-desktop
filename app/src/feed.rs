@@ -1534,6 +1534,37 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_tap_that_loses_the_race_shows_the_winning_option(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let raw = suggested(&mock, &state, cx);
+        let other = tuclaw_core::v3::Client::mock(&mock);
+        futures::executor::block_on(other.reply(
+            tuclaw_core::v3::MessageId(raw),
+            &tuclaw_core::v3::ReplyPost {
+                option: "Skip".into(),
+                client_message_id: tuclaw_core::v3::ClientMessageId(
+                    "c0ffee00-0000-4000-8000-0000000000aa".into(),
+                ),
+            },
+        ))
+        .expect("the other client taps first");
+        click(cx, format!("message-{raw}-reply-0"));
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        assert_eq!(
+            choice_of(&state, cx, raw),
+            Some(tuclaw_core::model::Choice::Chosen("Skip".into()))
+        );
+        state.read_with(cx, |state, _cx| {
+            for message in state.messages() {
+                let tuclaw_core::model::MessageId(id) = message.id;
+                assert!(id > 0, "the refused local copy is gone");
+            }
+        });
+    }
+
+    #[gpui::test]
     fn typed_text_closes_open_replies(cx: &mut TestAppContext) {
         let (mock, state, _feed, cx) = feed(cx);
         let raw = suggested(&mock, &state, cx);
