@@ -1740,6 +1740,25 @@ mod tests {
         assert_eq!(super::fresh_text(fresh(0, 1)), "New · 1 post");
     }
 
+    #[gpui::test]
+    fn the_copy_button_on_a_quote_copies_only_the_quote(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "Steven answered:\n\n> Everything urgent is done.\n> Flag the rest.\n\nThat is all.",
+        );
+        let copy: &'static str =
+            Box::leak(format!("message-{raw}-md-1-quote-copy").into_boxed_str());
+        click(cx, copy.to_string());
+        let copied = cx.read_from_clipboard().and_then(|item| item.text());
+        assert_eq!(
+            copied.as_deref(),
+            Some("Everything urgent is done.\nFlag the rest.")
+        );
+    }
+
     #[test]
     fn the_agent_count_agrees_in_number() {
         assert_eq!(super::agent_count(0), "0 agents");

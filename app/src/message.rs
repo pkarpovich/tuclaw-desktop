@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, ImageSource,
-    IntoElement, ObjectFit, Pixels, SharedString, Stateful, StyledText, Window, canvas, div, fill,
-    img, point, prelude::*, px, relative, size,
+    AnyElement, App, Bounds, BoxShadow, ClipboardItem, Div, FontWeight, HighlightStyle, Image,
+    ImageSource, IntoElement, ObjectFit, Pixels, SharedString, Stateful, StyledText, Window,
+    canvas, div, fill, img, point, prelude::*, px, relative, size,
 };
 use time::OffsetDateTime;
 use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
@@ -202,12 +202,55 @@ pub fn message_row(
                 shelf,
                 actions.on_picture.clone(),
             )),
+            Segment::Quote(text) => column.child(quote_block(&key, text)),
         };
     }
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
     row(selector, face, column, stripe)
+}
+
+fn quote_block(key: &str, text: String) -> impl IntoElement {
+    let group = SharedString::from(format!("{key}-quote"));
+    let selector = format!("{key}-quote");
+    let copy = format!("{key}-quote-copy");
+    let copied = text.clone();
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .group(group.clone())
+        .relative()
+        .my(px(4.))
+        .pl(px(14.))
+        .pr(px(32.))
+        .border_l(px(3.))
+        .border_color(theme::border())
+        .text_size(px(14.5))
+        .child(rich::markdown(
+            SharedString::from(format!("{key}-quote-md")),
+            text,
+            Ink::Muted,
+        ))
+        .child(
+            div()
+                .absolute()
+                .top(px(0.))
+                .right(px(4.))
+                .opacity(0.)
+                .group_hover(group, |style| style.opacity(1.))
+                .child(
+                    button(copy)
+                        .accessibility_label("Copy the quote")
+                        .p(px(4.))
+                        .rounded(px(6.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .on_click(move |_event, _window, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(copied.clone()));
+                        })
+                        .child(icon(Glyph::Copy, px(13.), theme::text_muted())),
+                ),
+        )
 }
 
 fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPicture) -> AnyElement {

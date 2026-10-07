@@ -193,6 +193,19 @@ fn automations() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     Ok(vec![("magnet-automations", stage.shot(window))])
 }
 
+fn quoted_reply() -> Result<Vec<(&'static str, RgbaImage)>, String> {
+    let mut stage = Stage::new();
+    stage.select("General");
+    let window = stage.open();
+    stage.mock.agent_posts(
+        SurfaceId(1),
+        AgentId(1),
+        "Steven answered on Friday:\n\n> Also, everything urgent for this week is done. If you want something else in work, mark those tickets with the urgent flag.\n\nNothing to repeat; one note about the flags is enough.",
+    );
+    stage.deliver();
+    Ok(vec![("general-quote", stage.shot(window))])
+}
+
 fn marked_unread() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     let mut stage = Stage::new();
     stage.select("General");
@@ -207,11 +220,12 @@ fn marked_unread() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     Ok(vec![("sidebar-marked", shot)])
 }
 
-const SCENES: [(&str, Scene); 4] = [
+const SCENES: [(&str, Scene); 5] = [
     ("away from General", away_from_general),
     ("scrolled up", scrolled_up),
     ("automations", automations),
     ("marked unread", marked_unread),
+    ("quoted reply", quoted_reply),
 ];
 
 fn baselines() -> PathBuf {
