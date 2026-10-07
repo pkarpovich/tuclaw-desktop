@@ -592,6 +592,16 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
             Box::new(Item::Message(Box::new(message.clone()), trigger)),
         ));
     }
+    let mut live = Vec::new();
+    for run in state.live_runs() {
+        match (run.state.is_finished(), run.started_at) {
+            (true, Some(started)) => {
+                entries.push(Entry::Item(started, Box::new(Item::Run(run_view(run)))));
+            }
+            (true, None) => live.push(run),
+            (false, _) => live.push(run),
+        }
+    }
     entries.sort_by_key(Entry::at);
     let timeline = fold_quiet(entries, now);
     let mut items: Vec<Item> = Vec::new();
@@ -613,7 +623,7 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
         }
         items.push(item);
     }
-    for run in state.live_runs() {
+    for run in live {
         items.push(Item::Run(run_view(run)));
     }
     items
@@ -1997,6 +2007,84 @@ mod tests {
             }
             runs
         })
+    }
+
+    fn position(feed: &Entity<Feed>, cx: &mut VisualTestContext, wanted: &Wanted) -> usize {
+        feed.read_with(cx, |feed, _cx| {
+            for (index, item) in feed.items.iter().enumerate() {
+                let found = match (item, wanted) {
+                    (Item::Run(run), Wanted::Run(id)) => run.id.as_ref() == Some(id),
+                    (Item::Message(message, _), Wanted::Text(text)) => {
+                        crate::message::source(&message.body) == *text
+                    }
+                    (Item::Run(_), Wanted::Text(_)) => false,
+                    (Item::Message(_, _), Wanted::Run(_)) => false,
+                    (Item::Separator(_), _) => false,
+                    (Item::Unread(_), _) => false,
+                    (Item::Failed(_), _) => false,
+                    (Item::Quiet(_), _) => false,
+                };
+                if found {
+                    return index;
+                }
+            }
+            panic!("the feed has no {wanted:?}")
+        })
+    }
+
+    #[derive(Debug)]
+    enum Wanted {
+        Run(tuclaw_core::v3::RunId),
+        Text(String),
+    }
+
+    #[gpui::test]
+    fn a_stopped_run_stays_where_it_started(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state
+                .send("Find the release notes".to_string(), cx)
+                .expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..4 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        let started = runs(&feed, cx);
+        let Some(run) = started[0].id.clone() else {
+            panic!("the run started");
+        };
+        state.update(cx, |state, cx| state.interrupt(&run, cx));
+        cx.run_until_parked();
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state
+                .send("Never mind, what is the weather?".to_string(), cx)
+                .expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        let stopped = runs(&feed, cx);
+        assert_eq!(stopped.len(), 1);
+        assert_eq!(stopped[0].state, RunState::Interrupted);
+        let first = position(&feed, cx, &Wanted::Text("Find the release notes".into()));
+        let block = position(&feed, cx, &Wanted::Run(run));
+        let second = position(
+            &feed,
+            cx,
+            &Wanted::Text("Never mind, what is the weather?".into()),
+        );
+        assert!(
+            first < block,
+            "the stopped run follows the message before it"
+        );
+        assert!(block < second, "and stays above what came after it");
     }
 
     #[gpui::test]

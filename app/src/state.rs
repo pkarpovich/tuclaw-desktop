@@ -3123,8 +3123,9 @@ impl AppState {
             self.messages.retain(|candidate| candidate.id != local);
         }
         let mut seen = false;
-        for candidate in &self.messages {
+        for candidate in &mut self.messages {
             if candidate.id == mapped.id {
+                *candidate = mapped.clone();
                 seen = true;
             }
         }
