@@ -344,6 +344,12 @@ pub struct Surface {
     /// The messages after the read cursor not written by the user.
     #[serde(default)]
     pub unread: u32,
+    /// Those of them that answer the user: agent answers and posts of runs the user started.
+    #[serde(default)]
+    pub unread_replies: u32,
+    /// Whether the user marked it unread; cleared by the next read.
+    #[serde(default)]
+    pub marked_unread: bool,
 }
 
 /// Identifies a sidebar group.
@@ -471,13 +477,19 @@ pub struct Placement {
     pub sort_order: i64,
 }
 
-/// The answer to marking a surface read: where its cursor now is.
+/// The answer to marking a surface read or unread: its read state now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadAnswer {
-    /// The newest message read on the surface.
-    pub last_read_message_id: MessageId,
+    /// The newest message read on the surface; [`None`] before anything was read.
+    pub last_read_message_id: Option<MessageId>,
     /// The messages still unread on it.
     pub unread: u32,
+    /// Those of them that answer the user.
+    #[serde(default)]
+    pub unread_replies: u32,
+    /// Whether it is marked unread.
+    #[serde(default)]
+    pub marked_unread: bool,
 }
 
 /// Whether an agent is running a turn.
@@ -1343,7 +1355,12 @@ mod tests {
             archived_at,
             last_read_message_id,
             unread,
+            unread_replies,
+            marked_unread,
         } = &surfaces[0];
+        assert_eq!(*unread_replies, 1);
+        assert!(!*marked_unread);
+        assert!(surfaces[1].marked_unread);
         assert_eq!(*last_read_message_id, Some(MessageId(9191)));
         assert_eq!(topic_name, "General");
         assert_eq!(*display_name, None);
@@ -1361,8 +1378,21 @@ mod tests {
         assert_eq!(
             answer,
             ReadAnswer {
-                last_read_message_id: MessageId(9192),
+                last_read_message_id: Some(MessageId(9192)),
                 unread: 0,
+                unread_replies: 0,
+                marked_unread: false,
+            }
+        );
+        let answer: ReadAnswer =
+            serde_json::from_str(include_str!("../../testdata/v3/unread_answer.json")).unwrap();
+        assert_eq!(
+            answer,
+            ReadAnswer {
+                last_read_message_id: Some(MessageId(9192)),
+                unread: 0,
+                unread_replies: 0,
+                marked_unread: true,
             }
         );
         assert_eq!(*id, SurfaceId(1));

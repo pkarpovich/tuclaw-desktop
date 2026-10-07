@@ -1,8 +1,8 @@
 use gpui::{
-    Context, Div, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window, div,
-    prelude::*, px,
+    Anchor, Context, Div, Entity, FontWeight, Hsla, IntoElement, MouseButton, Render, SharedString,
+    Subscription, Window, div, prelude::*, px,
 };
-use gpui_kit::base::Button;
+use gpui_kit::base::{Button, Popover};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
 use crate::control::{AvatarSize, Face, avatar, button, row_button};
@@ -29,6 +29,8 @@ struct Row {
     name: SharedString,
     lead: Lead,
     unread: usize,
+    replies: usize,
+    marked: bool,
     working: Vec<String>,
     highlight: Highlight,
 }
@@ -134,9 +136,12 @@ impl Sidebar {
             name,
             lead,
             unread,
+            replies,
+            marked,
             working,
             highlight,
         } = row;
+        let attention = unread > 0 || marked;
         let selector = format!("sidebar-row-{name}");
         let selector_name = name.clone();
         let element = row_frame(selector)
@@ -149,12 +154,12 @@ impl Sidebar {
             .child(lead_element(lead))
             .child(
                 div()
-                    .font_weight(if unread > 0 {
+                    .font_weight(if attention {
                         FontWeight::SEMIBOLD
                     } else {
                         FontWeight::NORMAL
                     })
-                    .text_color(if unread > 0 {
+                    .text_color(if attention {
                         theme::text_primary()
                     } else {
                         theme::text_secondary()
@@ -167,15 +172,65 @@ impl Sidebar {
         } else {
             element.child(working_dot(&selector_name))
         };
-        let element = if unread > 0 {
-            element.child(unread_badge(unread))
+        let element = if replies > 0 {
+            element.child(count_badge(replies, theme::accent()))
+        } else if marked && unread > 0 {
+            element.child(count_badge(unread, theme::accent()))
+        } else if marked {
+            element.child(marked_dot(&selector_name))
+        } else if unread > 0 {
+            element.child(activity_badge(&selector_name, unread))
         } else {
             element
         };
-        match highlight {
+        let element = match highlight {
             Highlight::On => element.bg(theme::selection()),
             Highlight::Off => element,
-        }
+        };
+        let state = self.state.clone();
+        let ChannelId(raw) = channel;
+        Popover::new(SharedString::from(format!("sidebar-menu-{raw}")))
+            .mouse_button(MouseButton::Right)
+            .anchor(Anchor::TopLeft)
+            .offset(px(2.))
+            .trigger(element)
+            .content(move |_popover, _window, cx| {
+                let popover = cx.entity();
+                let state = state.clone();
+                let label = if marked {
+                    "Mark as read"
+                } else {
+                    "Mark as unread"
+                };
+                div()
+                    .flex()
+                    .flex_col()
+                    .p(px(6.))
+                    .w(px(180.))
+                    .rounded(px(10.))
+                    .bg(theme::raised())
+                    .border_1()
+                    .border_color(theme::border())
+                    .child(
+                        row_button(format!("sidebar-menu-{raw}-unread"))
+                            .px(px(10.))
+                            .py(px(6.))
+                            .rounded(px(6.))
+                            .text_size(px(12.5))
+                            .hover(|style| style.bg(theme::sunken()))
+                            .on_click(move |_event, window, cx| {
+                                state.update(cx, |state, cx| {
+                                    if marked {
+                                        state.clear_unread_mark(channel, cx);
+                                    } else {
+                                        state.mark_unread(channel, cx);
+                                    }
+                                });
+                                popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                            })
+                            .child(label),
+                    )
+            })
     }
 }
 
@@ -244,6 +299,8 @@ fn sections(state: &AppState) -> Vec<Section> {
         group,
         kind,
         unread,
+        replies,
+        marked,
         sort_index: _,
     } in state.channels()
     {
@@ -281,6 +338,8 @@ fn sections(state: &AppState) -> Vec<Section> {
             name: SharedString::from(name.clone()),
             lead,
             unread: *unread,
+            replies: *replies,
+            marked: *marked,
             working: state.working(*id),
             highlight,
         });
@@ -376,7 +435,27 @@ fn working_dot(channel: &SharedString) -> impl IntoElement {
         .bg(theme::status_busy())
 }
 
-fn unread_badge(unread: usize) -> impl IntoElement {
+fn marked_dot(channel: &SharedString) -> impl IntoElement {
+    let selector = format!("sidebar-marked-{channel}");
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .flex_none()
+        .size(px(9.))
+        .mr(px(5.))
+        .rounded_full()
+        .bg(theme::accent())
+}
+
+fn activity_badge(channel: &SharedString, unread: usize) -> impl IntoElement {
+    let selector = format!("sidebar-activity-{channel}");
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .child(count_badge(unread, theme::activity()))
+}
+
+fn count_badge(unread: usize, color: Hsla) -> Div {
     div()
         .flex()
         .flex_none()
@@ -386,7 +465,7 @@ fn unread_badge(unread: usize) -> impl IntoElement {
         .h(px(19.))
         .px(px(6.))
         .rounded_full()
-        .bg(theme::badge())
+        .bg(color)
         .text_size(px(11.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::chip_text())
@@ -504,7 +583,7 @@ fn footer(people: &People, state: Entity<AppState>) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+    use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext};
 
     use super::{Highlight, Lead, Section, Sidebar, sections};
     use crate::state::{AppState, Segment};
@@ -591,6 +670,36 @@ mod tests {
             assert_eq!(name, Some("Smart Home".to_string()));
             assert_eq!(state.messages().len(), 12);
         });
+    }
+
+    #[gpui::test]
+    fn the_row_menu_marks_a_channel_unread_and_draws_a_dot(cx: &mut TestAppContext) {
+        let (state, cx) = sidebar(cx);
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("sidebar-marked-Smart Home").is_none());
+        let home = cx
+            .debug_bounds("sidebar-row-Smart Home")
+            .expect("the Smart Home row is drawn");
+        cx.simulate_mouse_down(home.center(), MouseButton::Right, Modifiers::default());
+        cx.simulate_mouse_up(home.center(), MouseButton::Right, Modifiers::default());
+        cx.run_until_parked();
+        let raw = state.read_with(cx, |state, _cx| {
+            let mut raw = None;
+            for channel in state.channels() {
+                if channel.name == "Smart Home" {
+                    let tuclaw_core::model::ChannelId(id) = channel.id;
+                    raw = Some(id);
+                }
+            }
+            raw.expect("the channel exists")
+        });
+        let item: &'static str = Box::leak(format!("sidebar-menu-{raw}-unread").into_boxed_str());
+        let item = cx
+            .debug_bounds(item)
+            .expect("the menu offers mark as unread");
+        cx.simulate_click(item.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("sidebar-marked-Smart Home").is_some());
     }
 
     #[gpui::test]

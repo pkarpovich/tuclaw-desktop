@@ -282,23 +282,32 @@ struct FiredPayload {
     error: Option<String>,
 }
 
-/// `surface.read`: the read cursor of a surface moved, or was confirmed where it is.
+/// `surface.read`: the read state of a surface changed, or was confirmed: its
+/// cursor moved, or it was marked unread or read again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceRead {
     /// The event's position in the log.
     pub seq: Seq,
     /// The surface that was read.
     pub surface_id: SurfaceId,
-    /// The newest message read on it.
-    pub last_read_message_id: MessageId,
-    /// The messages still unread on it after the move.
+    /// The newest message read on it; [`None`] before anything was read.
+    pub last_read_message_id: Option<MessageId>,
+    /// The messages still unread on it.
     pub unread: u32,
+    /// Those of them that answer the user.
+    pub unread_replies: u32,
+    /// Whether it is marked unread.
+    pub marked_unread: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct ReadPayload {
-    last_read_message_id: MessageId,
+    last_read_message_id: Option<MessageId>,
     unread: u32,
+    #[serde(default)]
+    unread_replies: u32,
+    #[serde(default)]
+    marked_unread: bool,
 }
 
 /// `surface.updated`: a surface was renamed, archived, regrouped or moved.
@@ -643,6 +652,8 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
             let ReadPayload {
                 last_read_message_id,
                 unread,
+                unread_replies,
+                marked_unread,
             } = envelope.payload()?;
             let Some(surface_id) = envelope.surface_id else {
                 return Err(DecodeError::Missing {
@@ -655,6 +666,8 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
                 surface_id,
                 last_read_message_id,
                 unread,
+                unread_replies,
+                marked_unread,
             })
         }
         "task.fired" => {
@@ -766,8 +779,10 @@ mod tests {
             SurfaceRead {
                 seq: Seq(1300),
                 surface_id: SurfaceId(1),
-                last_read_message_id: MessageId(9192),
+                last_read_message_id: Some(MessageId(9192)),
                 unread: 0,
+                unread_replies: 0,
+                marked_unread: false,
             }
         );
         assert_eq!(Frame::SurfaceRead(read).run_id(), None);

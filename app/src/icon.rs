@@ -16,6 +16,7 @@ icon_assets!(
         ChevronDown,
         ChevronLeft,
         ChevronRight,
+        Copy,
         Ellipsis,
         Folder,
         Hash,
@@ -83,10 +84,11 @@ pub enum Glyph {
     Rename,
     Folder,
     Channels,
+    Copy,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 36] = [
+    pub const ALL: [Glyph; 37] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -123,6 +125,7 @@ impl Glyph {
         Glyph::Rename,
         Glyph::Folder,
         Glyph::Channels,
+        Glyph::Copy,
     ];
 
     fn name(self) -> IconName {
@@ -163,6 +166,7 @@ impl Glyph {
             Glyph::Rename => IconName::Pencil,
             Glyph::Folder => IconName::Folder,
             Glyph::Channels => IconName::List,
+            Glyph::Copy => IconName::Copy,
         }
     }
 }

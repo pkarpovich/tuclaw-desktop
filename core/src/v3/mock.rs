@@ -7,7 +7,7 @@
 //! [`Pace::Realtime`] a task on the `core` runtime plays the queue with real delays.
 
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
@@ -239,6 +239,7 @@ struct World {
     media: HashMap<AttachmentId, Media>,
     public: HashMap<String, Vec<u8>>,
     cursors: HashMap<SurfaceId, MessageId>,
+    marked: HashSet<SurfaceId>,
     groups: Vec<Group>,
     my_name: String,
     my_description: String,
@@ -342,6 +343,15 @@ impl MockTransport {
 
     /// Queues a message an agent posts on a surface outside any run, e.g. a picture it linked.
     pub fn agent_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
+        self.agent_posts_from(surface, agent, text, "user");
+    }
+
+    /// Queues an agent's post that an automation, not the user, started.
+    pub fn automation_posts(&self, surface: SurfaceId, agent: AgentId, text: &str) {
+        self.agent_posts_from(surface, agent, text, "scheduled");
+    }
+
+    fn agent_posts_from(&self, surface: SurfaceId, agent: AgentId, text: &str, origin: &str) {
         let mut world = self.lock();
         let message = Message {
             id: world.next_message(),
@@ -355,7 +365,7 @@ impl MockTransport {
             reply_to_message_id: None,
             text: text.to_string(),
             run_id: None,
-            origin: "user".into(),
+            origin: origin.into(),
             channel: None,
             client_message_id: None,
             created_at: world.now,
@@ -643,6 +653,7 @@ impl World {
             media: HashMap::new(),
             public: HashMap::new(),
             cursors: HashMap::new(),
+            marked: HashSet::new(),
             groups: Vec::new(),
             my_name: DEFAULT_NAME.into(),
             my_description: String::new(),
@@ -766,6 +777,7 @@ impl World {
             media,
             public: HashMap::new(),
             cursors: HashMap::new(),
+            marked: HashSet::new(),
             groups: Vec::new(),
             my_name,
             my_description,
@@ -1210,6 +1222,10 @@ impl World {
                 let surface = parse_surface(id)?;
                 self.mark_read(surface, body)
             }
+            ["surfaces", id, "unread"] => {
+                let surface = parse_surface(id)?;
+                self.mark_unread(surface)
+            }
             ["runs", id, "interrupt"] => {
                 self.interrupt(&RunId((*id).to_string()))?;
                 Ok(Value::Null)
@@ -1402,6 +1418,8 @@ impl World {
             let cursor = self.cursors.get(&surface.id).copied();
             surface.last_read_message_id = cursor;
             surface.unread = self.unread(surface.id, cursor);
+            surface.unread_replies = self.unread_replies(surface.id, cursor);
+            surface.marked_unread = self.marked.contains(&surface.id);
             surfaces.push(surface);
         }
         surfaces
@@ -1606,6 +1624,36 @@ impl World {
         to_json(&self.surfaces_view())
     }
 
+    fn unread_replies(&self, surface: SurfaceId, cursor: Option<MessageId>) -> u32 {
+        let mut replies = 0;
+        for message in &self.messages {
+            if message.surface_id != surface {
+                continue;
+            }
+            if cursor.is_some_and(|cursor| message.id <= cursor) {
+                continue;
+            }
+            let answers = match message.kind {
+                MessageKind::Answer => true,
+                MessageKind::Post => true,
+                MessageKind::User => false,
+                MessageKind::Notice => false,
+                MessageKind::A2a => false,
+                MessageKind::Unknown => false,
+            };
+            let agent = match message.author.kind {
+                AuthorKind::Agent => true,
+                AuthorKind::User => false,
+                AuthorKind::System => false,
+                AuthorKind::Unknown => false,
+            };
+            if answers && agent && message.origin == "user" {
+                replies += 1;
+            }
+        }
+        replies
+    }
+
     fn unread(&self, surface: SurfaceId, cursor: Option<MessageId>) -> u32 {
         let mut unread = 0;
         for message in &self.messages {
@@ -1632,36 +1680,54 @@ impl World {
         if self.surface(surface).is_none() {
             return Err(ApiError::NotFound);
         }
-        let Some(MessageId(wanted)) = body
-            .as_ref()
-            .and_then(|body| body.get("message_id"))
-            .and_then(Value::as_i64)
-            .filter(|id| *id > 0)
-            .map(MessageId)
-        else {
-            return Err(ApiError::Invalid(
-                "message_id must be a positive integer".into(),
-            ));
-        };
-        let mut found = false;
-        for message in &self.messages {
-            if message.id == MessageId(wanted) && message.surface_id == surface {
-                found = true;
+        let wanted = match body.as_ref().and_then(|body| body.get("message_id")) {
+            None | Some(Value::Null) => None,
+            Some(value) => {
+                let Some(id) = value.as_i64().filter(|id| *id > 0) else {
+                    return Err(ApiError::Invalid(
+                        "message_id must be a positive integer".into(),
+                    ));
+                };
+                Some(MessageId(id))
             }
-        }
-        if !found {
-            return Err(ApiError::Invalid(
-                "the message is not on this surface".into(),
-            ));
-        }
-        let cursor = match self.cursors.get(&surface) {
-            Some(MessageId(old)) => MessageId((*old).max(wanted)),
-            None => MessageId(wanted),
         };
-        self.cursors.insert(surface, cursor);
+        if let Some(wanted) = wanted {
+            let mut found = false;
+            for message in &self.messages {
+                if message.id == wanted && message.surface_id == surface {
+                    found = true;
+                }
+            }
+            if !found {
+                return Err(ApiError::Invalid(
+                    "the message is not on this surface".into(),
+                ));
+            }
+            let cursor = match self.cursors.get(&surface) {
+                Some(old) => (*old).max(wanted),
+                None => wanted,
+            };
+            self.cursors.insert(surface, cursor);
+        }
+        self.marked.remove(&surface);
+        self.announce_read(surface)
+    }
+
+    fn mark_unread(&mut self, surface: SurfaceId) -> Result<Value, ApiError> {
+        if self.surface(surface).is_none() {
+            return Err(ApiError::NotFound);
+        }
+        self.marked.insert(surface);
+        self.announce_read(surface)
+    }
+
+    fn announce_read(&mut self, surface: SurfaceId) -> Result<Value, ApiError> {
+        let cursor = self.cursors.get(&surface).copied();
         let answer = ReadAnswer {
             last_read_message_id: cursor,
-            unread: self.unread(surface, Some(cursor)),
+            unread: self.unread(surface, cursor),
+            unread_replies: self.unread_replies(surface, cursor),
+            marked_unread: self.marked.contains(&surface),
         };
         self.persist("surface.read", Some(surface), None, &json!(answer));
         to_json(&answer)
@@ -2784,6 +2850,8 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
+            marked_unread: false,
         },
         Surface {
             id: SurfaceId(2),
@@ -2809,6 +2877,8 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
+            marked_unread: false,
         },
         Surface {
             id: SurfaceId(3),
@@ -2834,6 +2904,8 @@ fn seed_surfaces() -> Vec<Surface> {
             archived_at: None,
             last_read_message_id: None,
             unread: 0,
+            unread_replies: 0,
+            marked_unread: false,
         },
     ]
 }
@@ -3017,18 +3089,20 @@ mod tests {
         let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
         let newest = page.messages[page.messages.len() - 1].id;
         let older = page.messages[page.messages.len() - 2].id;
-        let answer = block_on(client.mark_read(SurfaceId(1), older)).expect("reads");
+        let answer = block_on(client.mark_read(SurfaceId(1), Some(older))).expect("reads");
         assert_eq!(answer.unread, 1);
-        let answer = block_on(client.mark_read(SurfaceId(1), newest)).expect("reads");
+        let answer = block_on(client.mark_read(SurfaceId(1), Some(newest))).expect("reads");
         assert_eq!(
             answer,
             ReadAnswer {
-                last_read_message_id: newest,
-                unread: 0
+                last_read_message_id: Some(newest),
+                unread: 0,
+                unread_replies: 0,
+                marked_unread: false,
             }
         );
-        let back = block_on(client.mark_read(SurfaceId(1), older)).expect("never moves back");
-        assert_eq!(back.last_read_message_id, newest);
+        let back = block_on(client.mark_read(SurfaceId(1), Some(older))).expect("never moves back");
+        assert_eq!(back.last_read_message_id, Some(newest));
         assert_eq!(general(&client).unread, 0);
         let mut announced = 0;
         for frame in drain(&mut connection) {
@@ -3037,9 +3111,35 @@ mod tests {
             }
         }
         assert_eq!(announced, 3);
-        let other = block_on(client.mark_read(SurfaceId(2), newest));
+        let other = block_on(client.mark_read(SurfaceId(2), Some(newest)));
         let Err(ApiError::Invalid(_)) = other else {
             panic!("a message of another surface is refused");
+        };
+    }
+
+    #[test]
+    fn marking_unread_sets_a_flag_the_next_read_clears() {
+        let (mock, client) = stepped();
+        let mut connection = connected(&mock, &client, Vec::new());
+        let before = block_on(client.surfaces()).expect("surfaces")[0].clone();
+        let marked = block_on(client.mark_unread(SurfaceId(1))).expect("marks");
+        assert!(marked.marked_unread);
+        assert_eq!(marked.last_read_message_id, before.last_read_message_id);
+        assert!(block_on(client.surfaces()).expect("surfaces")[0].marked_unread);
+        let mut flags = Vec::new();
+        for frame in drain(&mut connection) {
+            if let Frame::SurfaceRead(read) = frame {
+                flags.push(read.marked_unread);
+            }
+        }
+        assert_eq!(flags, vec![true]);
+        let cleared = block_on(client.mark_read(SurfaceId(1), None)).expect("clears");
+        assert!(!cleared.marked_unread);
+        assert_eq!(cleared.last_read_message_id, before.last_read_message_id);
+        assert!(!block_on(client.surfaces()).expect("surfaces")[0].marked_unread);
+        let unknown = block_on(client.mark_unread(SurfaceId(99)));
+        let Err(ApiError::NotFound) = unknown else {
+            panic!("an unknown surface is not found");
         };
     }
 

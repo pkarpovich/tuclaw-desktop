@@ -1,6 +1,6 @@
 use tuclaw_core::model::{
     Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId,
-    Picture, RecordingId, RunOutcome, RunRef, Span, Voice,
+    Picture, RecordingId, RunOutcome, RunRef, Span, Voice, Weight,
 };
 use tuclaw_core::v3;
 
@@ -68,6 +68,8 @@ pub fn channel(surface: &v3::Surface, groups: &[v3::Group]) -> Channel {
         group,
         kind: ChannelKind::Channel,
         unread: surface.unread as usize,
+        replies: surface.unread_replies as usize,
+        marked: surface.marked_unread,
         sort_index: surface.sort_order,
     }
 }
@@ -178,7 +180,30 @@ pub fn message(message: &v3::Message) -> Message {
         sent_at: message.created_at,
         voice,
         run: run_ref(message),
+        weight: weight(message),
+        reply_to: message.reply_to_message_id.map(message_id),
     }
+}
+
+pub fn weight(message: &v3::Message) -> Weight {
+    match message.author.kind {
+        v3::AuthorKind::User => return Weight::Mine,
+        v3::AuthorKind::Agent => {}
+        v3::AuthorKind::System => return Weight::Activity,
+        v3::AuthorKind::Unknown => return Weight::Activity,
+    }
+    let answers = match message.kind {
+        v3::MessageKind::Answer => true,
+        v3::MessageKind::Post => true,
+        v3::MessageKind::User => false,
+        v3::MessageKind::Notice => false,
+        v3::MessageKind::A2a => false,
+        v3::MessageKind::Unknown => false,
+    };
+    if answers && message.origin == "user" {
+        return Weight::Reply;
+    }
+    Weight::Activity
 }
 
 fn run_ref(message: &v3::Message) -> Option<RunRef> {
@@ -404,6 +429,8 @@ mod tests {
                 group: None,
                 kind: ChannelKind::Channel,
                 unread: 0,
+                replies: 0,
+                marked: false,
                 sort_index: 2,
             }
         );

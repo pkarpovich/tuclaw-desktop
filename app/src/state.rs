@@ -8,7 +8,7 @@ use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
 use tuclaw_core::model::{
     Agent, AgentId, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span,
-    Voice,
+    Voice, Weight,
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
@@ -20,6 +20,7 @@ use crate::agent_settings::{
 };
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
+use crate::notify::Alert;
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
 use crate::pictures::{self, Remote, Shelf, Viewed};
@@ -29,6 +30,7 @@ use crate::runlog::{self, Disclosure, RunLog};
 const PAGE: u32 = 50;
 const TICK: Duration = Duration::from_millis(200);
 const TOAST_LIFETIME: Duration = Duration::from_secs(6);
+const ALERT_LIMIT: usize = 180;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -89,6 +91,7 @@ pub enum StateEvent {
     Mention(String),
     TasksLoaded,
     ChannelsChanged,
+    Alert(Alert),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +140,13 @@ struct Pending {
     local: MessageId,
 }
 
+#[derive(Default)]
+struct AutomationsPanel {
+    open: bool,
+    show_skipped: bool,
+    seen: HashMap<ChannelId, OffsetDateTime>,
+}
+
 pub struct AppState {
     client: v3::Client,
     source: Source,
@@ -156,12 +166,14 @@ pub struct AppState {
     pending: Vec<Pending>,
     next_local: i64,
     last_seq: Option<Seq>,
+    news_after: Option<Seq>,
     control: Option<UnboundedSender<ClientFrame>>,
     view: View,
     sidebar: SidebarVisibility,
     expanded: HashSet<MessageId>,
     toggled: HashSet<Disclosure>,
     inspector: Option<Inspector>,
+    automations: AutomationsPanel,
     settings: Option<Settings>,
     saving: Saving,
     field_error: Option<FieldError>,
@@ -178,6 +190,9 @@ pub struct AppState {
     viewer: Option<Viewed>,
     cursors: HashMap<ChannelId, MessageId>,
     divider: Option<MessageId>,
+    seen: HashSet<MessageId>,
+    following: bool,
+    held: Option<ChannelId>,
     window_active: bool,
     recording: Recording,
     playback: Option<Playback>,
@@ -216,6 +231,7 @@ impl AppState {
             pending: Vec::new(),
             next_local: 0,
             last_seq: None,
+            news_after: None,
             control: None,
             view: View::Conversation,
             sidebar: SidebarVisibility::Shown,
@@ -238,6 +254,10 @@ impl AppState {
             viewer: None,
             cursors: HashMap::new(),
             divider: None,
+            seen: HashSet::new(),
+            following: true,
+            held: None,
+            automations: AutomationsPanel::default(),
             window_active: true,
             recording: Recording::Idle,
             playback: None,
@@ -537,13 +557,14 @@ impl AppState {
     fn rebuild_channels(&mut self) {
         let mut counts = HashMap::new();
         for channel in &self.channels {
-            counts.insert(channel.id, channel.unread);
+            counts.insert(channel.id, (channel.unread, channel.replies));
         }
         let mut channels = Vec::new();
         for surface in link::sidebar_order(&self.surfaces, &self.groups) {
             let mut channel = link::channel(surface, &self.groups);
-            if let Some(unread) = counts.get(&channel.id) {
+            if let Some((unread, replies)) = counts.get(&channel.id) {
                 channel.unread = (*unread).max(channel.unread);
+                channel.replies = (*replies).max(channel.replies);
             }
             channels.push(channel);
         }
@@ -576,6 +597,7 @@ impl AppState {
         for channel in &mut self.channels {
             if channel.id == link::channel_id(surface.id) {
                 channel.unread = surface.unread as usize;
+                channel.replies = surface.unread_replies as usize;
             }
         }
         self.rebuild_channels();
@@ -592,6 +614,58 @@ impl AppState {
 
     pub fn divider(&self) -> Option<MessageId> {
         self.divider
+    }
+
+    pub fn is_fresh(&self, message: &Message) -> bool {
+        let MessageId(raw) = message.id;
+        let unseen = raw > 0 && !self.seen.contains(&message.id);
+        let past = self.divider.is_some_and(|cursor| message.id > cursor);
+        let theirs = match message.weight {
+            Weight::Mine => false,
+            Weight::Reply => true,
+            Weight::Activity => true,
+        };
+        unseen && past && theirs
+    }
+
+    pub fn mark_seen(&mut self, messages: Vec<MessageId>, cx: &mut Context<Self>) {
+        if !self.window_active || messages.is_empty() {
+            return;
+        }
+        let mut newest = MessageId(0);
+        for message in &messages {
+            newest = newest.max(*message);
+        }
+        let mut changed = false;
+        for message in messages {
+            changed |= self.seen.insert(message);
+        }
+        let mut older = Vec::new();
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 && message.id < newest {
+                older.push(message.id);
+            }
+        }
+        for message in older {
+            changed |= self.seen.insert(message);
+        }
+        if changed {
+            self.read_to_newest(cx);
+            cx.notify();
+        }
+    }
+
+    pub fn is_window_active(&self) -> bool {
+        self.window_active
+    }
+
+    pub fn following(&self) -> bool {
+        self.following
+    }
+
+    pub fn set_following(&mut self, following: bool) {
+        self.following = following;
     }
 
     fn divider_for(&self, channel: ChannelId) -> Option<MessageId> {
@@ -626,10 +700,17 @@ impl AppState {
         {
             return;
         }
+        let reply = link::weight(message) == Weight::Reply;
         for candidate in &mut self.channels {
             if candidate.id == channel {
                 candidate.unread += 1;
+                if reply {
+                    candidate.replies += 1;
+                }
             }
+        }
+        if self.selected == Some(channel) && self.divider.is_none() {
+            self.divider = Some(self.cursors.get(&channel).copied().unwrap_or(MessageId(0)));
         }
         cx.notify();
     }
@@ -640,12 +721,16 @@ impl AppState {
             surface_id,
             last_read_message_id,
             unread,
+            unread_replies,
+            marked_unread,
         } = read;
         self.apply_read(
             link::channel_id(*surface_id),
             v3::ReadAnswer {
                 last_read_message_id: *last_read_message_id,
                 unread: *unread,
+                unread_replies: *unread_replies,
+                marked_unread: *marked_unread,
             },
         );
         cx.notify();
@@ -655,7 +740,13 @@ impl AppState {
         let v3::ReadAnswer {
             last_read_message_id,
             unread,
+            unread_replies,
+            marked_unread,
         } = answer;
+        self.set_marked(channel, marked_unread);
+        let Some(last_read_message_id) = last_read_message_id else {
+            return;
+        };
         let cursor = link::message_id(last_read_message_id);
         let moved = match self.cursors.get(&channel) {
             Some(known) => cursor >= *known,
@@ -668,6 +759,7 @@ impl AppState {
         for candidate in &mut self.channels {
             if candidate.id == channel {
                 candidate.unread = unread as usize;
+                candidate.replies = unread_replies as usize;
             }
         }
     }
@@ -686,32 +778,79 @@ impl AppState {
         let Some(channel) = self.selected else {
             return;
         };
-        let mut newest = None;
+        if self.held == Some(channel) {
+            return;
+        }
+        let mut ordered = Vec::new();
         for message in &self.messages {
             let MessageId(raw) = message.id;
-            if raw > 0 && newest.is_none_or(|known: MessageId| message.id > known) {
-                newest = Some(message.id);
+            if raw > 0 {
+                ordered.push(message);
             }
         }
-        let Some(newest) = newest else {
-            return;
-        };
-        if self
-            .cursors
-            .get(&channel)
-            .is_some_and(|cursor| *cursor >= newest)
-        {
+        ordered.sort_by_key(|message| message.id);
+        let mut newest = None;
+        let mut everything = true;
+        for message in ordered {
+            if self.is_fresh(message) {
+                everything = false;
+                break;
+            }
+            newest = Some(message.id);
+        }
+        let behind = newest.filter(|newest| {
+            self.cursors
+                .get(&channel)
+                .is_none_or(|cursor| *cursor < *newest)
+        });
+        if behind.is_none() && !self.is_marked(channel) {
             return;
         }
-        self.cursors.insert(channel, newest);
-        for candidate in &mut self.channels {
-            if candidate.id == channel {
-                candidate.unread = 0;
+        if let Some(newest) = behind {
+            self.cursors.insert(channel, newest);
+            if everything {
+                for candidate in &mut self.channels {
+                    if candidate.id == channel {
+                        candidate.unread = 0;
+                        candidate.replies = 0;
+                    }
+                }
             }
         }
+        self.set_marked(channel, false);
         let request = self
             .client
-            .mark_read(link::surface_id(channel), link::v3_message_id(newest));
+            .mark_read(link::surface_id(channel), behind.map(link::v3_message_id));
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    pub fn mark_unread(&mut self, channel: ChannelId, cx: &mut Context<Self>) {
+        self.set_marked(channel, true);
+        if self.selected == Some(channel) {
+            self.held = Some(channel);
+        }
+        let request = self.client.mark_unread(link::surface_id(channel));
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    pub fn clear_unread_mark(&mut self, channel: ChannelId, cx: &mut Context<Self>) {
+        if self.held == Some(channel) {
+            self.held = None;
+        }
+        self.set_marked(channel, false);
+        let request = self.client.mark_read(link::surface_id(channel), None);
+        self.send_read(channel, request, cx);
+        cx.notify();
+    }
+
+    fn send_read(
+        &mut self,
+        channel: ChannelId,
+        request: impl Future<Output = Result<v3::ReadAnswer, v3::ApiError>> + 'static,
+        cx: &mut Context<Self>,
+    ) {
         cx.spawn(async move |this, cx| {
             let Ok(answer) = request.await else {
                 return;
@@ -723,7 +862,29 @@ impl AppState {
             .ok();
         })
         .detach();
-        cx.notify();
+    }
+
+    fn is_marked(&self, channel: ChannelId) -> bool {
+        let mut marked = false;
+        for candidate in &self.channels {
+            if candidate.id == channel {
+                marked = candidate.marked;
+            }
+        }
+        marked
+    }
+
+    fn set_marked(&mut self, channel: ChannelId, marked: bool) {
+        for candidate in &mut self.channels {
+            if candidate.id == channel {
+                candidate.marked = marked;
+            }
+        }
+        for surface in &mut self.surfaces {
+            if link::channel_id(surface.id) == channel {
+                surface.marked_unread = marked;
+            }
+        }
     }
 
     pub fn viewer(&self) -> Option<&Viewed> {
@@ -1237,6 +1398,80 @@ impl AppState {
 
     pub fn inspector(&self) -> Option<Inspector> {
         self.inspector
+    }
+
+    pub fn automations_open(&self) -> bool {
+        self.automations.open
+    }
+
+    pub fn show_skipped(&self) -> bool {
+        self.automations.show_skipped
+    }
+
+    pub fn open_automations(&mut self, cx: &mut Context<Self>) {
+        self.inspector = None;
+        self.settings = None;
+        self.automations.open = true;
+        if let Some(channel) = self.selected {
+            self.automations.seen.insert(channel, crate::local::now());
+        }
+        cx.notify();
+    }
+
+    pub fn close_automations(&mut self, cx: &mut Context<Self>) {
+        self.automations.open = false;
+        cx.notify();
+    }
+
+    pub fn toggle_skipped(&mut self, cx: &mut Context<Self>) {
+        self.automations.show_skipped = !self.automations.show_skipped;
+        cx.notify();
+    }
+
+    pub fn unseen_failures(&self) -> usize {
+        let Some(channel) = self.selected else {
+            return 0;
+        };
+        let seen = self.automations.seen.get(&channel).copied();
+        let mut failures = 0;
+        for mark in &self.fires {
+            let failed = match mark.outcome {
+                v3::Outcome::Failed => true,
+                v3::Outcome::Ran => false,
+                v3::Outcome::Silent => false,
+                v3::Outcome::Skipped => false,
+                v3::Outcome::Unknown => false,
+            };
+            let unseen = match (mark.at, seen) {
+                (Some(at), Some(seen)) => at > seen,
+                (Some(_), None) => true,
+                (None, _) => false,
+            };
+            if failed && unseen {
+                failures += 1;
+            }
+        }
+        failures
+    }
+
+    pub fn channel_tasks(&self) -> Vec<&v3::Task> {
+        let Some(channel) = self.selected else {
+            return Vec::new();
+        };
+        let mut tasks = Vec::new();
+        for task in &self.tasks {
+            let live = match task.status {
+                v3::TaskStatus::Active => true,
+                v3::TaskStatus::Paused => true,
+                v3::TaskStatus::Completed => false,
+                v3::TaskStatus::Cancelled => false,
+                v3::TaskStatus::Unknown => false,
+            };
+            if live && task.surface_id.map(link::channel_id) == Some(channel) {
+                tasks.push(task);
+            }
+        }
+        tasks
     }
 
     pub fn close_inspector(&mut self, cx: &mut Context<Self>) {
@@ -2011,6 +2246,7 @@ impl AppState {
     pub fn toggle(&mut self, disclosure: Disclosure, cx: &mut Context<Self>) {
         if let Disclosure::Inspect(message) = disclosure {
             self.settings = None;
+            self.automations.open = false;
             self.inspector = Some(Inspector {
                 message,
                 filter: Filter::All,
@@ -2095,7 +2331,14 @@ impl AppState {
             return;
         }
         self.view = View::Conversation;
+        if self.held == Some(channel) && self.selected == Some(channel) {
+            self.held = None;
+            self.read_to_newest(cx);
+        }
         if self.selected != Some(channel) {
+            self.held = None;
+            self.seen.clear();
+            self.following = true;
             self.divider = self.divider_for(channel);
             self.selected = Some(channel);
             self.halt();
@@ -2154,6 +2397,8 @@ impl AppState {
             sent_at: OffsetDateTime::now_utc(),
             voice: None,
             run: None,
+            weight: Weight::Mine,
+            reply_to: None,
         });
         self.pending.push(Pending {
             client_message_id: client_message_id.clone(),
@@ -2448,6 +2693,7 @@ impl AppState {
         if fresh {
             self.last_seq = Some(head);
         }
+        self.news_after = Some(head);
         self.control = Some(control);
         self.link = Link::Live;
         self.send_focus();
@@ -2569,6 +2815,10 @@ impl AppState {
                 }
             },
             Frame::MessageCreated(created) => {
+                let news = self.news_after.is_some_and(|head| created.seq > head);
+                if news {
+                    self.alert_for(&created.message, cx);
+                }
                 self.message_created(&created.message, cx);
                 false
             }
@@ -2641,6 +2891,47 @@ impl AppState {
         true
     }
 
+    pub fn badge_count(&self) -> usize {
+        let mut count = 0;
+        for channel in &self.channels {
+            count += match (channel.unread, channel.marked) {
+                (0, true) => 1,
+                (unread, _) => unread,
+            };
+        }
+        count
+    }
+
+    fn alert_for(&self, message: &v3::Message, cx: &mut Context<Self>) {
+        let Some(agent) = alerting_agent(message) else {
+            return;
+        };
+        let channel = link::channel_id(message.surface_id);
+        let mut name = None;
+        for candidate in &self.channels {
+            if candidate.id == channel {
+                name = Some(candidate.name.clone());
+            }
+        }
+        let Some(name) = name else {
+            return;
+        };
+        let shown = self.selected == Some(channel);
+        if shown && self.window_active && self.following {
+            return;
+        }
+        let title = match agent.and_then(|agent| self.directory_agent(link::agent_id(agent))) {
+            Some(author) => format!("#{name} · {}", author.name),
+            None => format!("#{name}"),
+        };
+        cx.emit(StateEvent::Alert(Alert {
+            channel,
+            message: link::message_id(message.id),
+            title,
+            body: alert_body(&message.text),
+        }));
+    }
+
     fn message_created(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
         if let Some(run_id) = &message.run_id
             && ends_its_run(message.kind)
@@ -2652,7 +2943,10 @@ impl AppState {
             cx.emit(StateEvent::RunsChanged);
         }
         let shown = self.selected == Some(link::channel_id(message.surface_id));
-        if !(shown && self.window_active) {
+        if shown && self.held == self.selected {
+            self.held = None;
+        }
+        if !(shown && self.window_active && self.following) {
             self.count_unread(message, cx);
         }
         if !shown {
@@ -2686,6 +2980,45 @@ impl AppState {
         cx.emit(StateEvent::MessageAppended);
         cx.notify();
     }
+}
+
+fn alerting_agent(message: &v3::Message) -> Option<Option<v3::AgentId>> {
+    let v3::Author { kind, agent_id } = &message.author;
+    let by_agent = match kind {
+        v3::AuthorKind::Agent => true,
+        v3::AuthorKind::System => true,
+        v3::AuthorKind::User => false,
+        v3::AuthorKind::Unknown => false,
+    };
+    if !by_agent {
+        return None;
+    }
+    let alerts = match message.kind {
+        v3::MessageKind::Answer => true,
+        v3::MessageKind::Post => true,
+        v3::MessageKind::Notice => agent_id.is_some_and(|agent| agent.0 != 0),
+        v3::MessageKind::A2a => false,
+        v3::MessageKind::User => false,
+        v3::MessageKind::Unknown => false,
+    };
+    if !alerts {
+        return None;
+    }
+    Some(*agent_id)
+}
+
+fn alert_body(text: &str) -> String {
+    let mut words = Vec::new();
+    for word in text.split_whitespace() {
+        words.push(word);
+    }
+    let line = words.join(" ");
+    if line.chars().count() <= ALERT_LIMIT {
+        return line;
+    }
+    let mut clipped: String = line.chars().take(ALERT_LIMIT).collect();
+    clipped.push('…');
+    clipped
 }
 
 async fn waveform_for(

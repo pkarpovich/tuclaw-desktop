@@ -1,29 +1,32 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Div, Entity, FollowMode, FontWeight, IntoElement, ListAlignment,
-    ListOffset, ListScrollEvent, ListState, Render, SharedString, Subscription, Window, div, list,
-    prelude::*, px,
+    AnyElement, Bounds, Context, Div, Entity, FollowMode, FontWeight, IntoElement, ListAlignment,
+    ListOffset, ListScrollEvent, ListState, Pixels, Render, SharedString, Subscription, Task,
+    Window, canvas, div, list, prelude::*, px,
 };
 use time::OffsetDateTime;
 use tuclaw_core::grouping::day_title;
-use tuclaw_core::model::{Agent, AgentId, Channel, ChannelKind, Message, MessageId};
+use tuclaw_core::model::{Agent, AgentId, Channel, ChannelKind, Message, MessageId, Weight};
 use tuclaw_core::v3;
 
-use crate::automation::{FireRow, OnTask, fire_row, trigger_tag};
+use crate::automation::{FireRow, OnTask, Quiet, failed_card, quiet_divider, trigger_tag};
 use crate::card;
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::local;
-use crate::message::{Actions, Fold, Look, OnPicture, OnPlay, OnToggle, message_row};
+use crate::message::{Actions, Fold, Look, OnPicture, OnPlay, OnToggle, Stripe, message_row};
 use crate::people::People;
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
 
 const PREFETCH: usize = 3;
+const QUIET_GAP: time::Duration = time::Duration::hours(1);
+const SEEN_AFTER: std::time::Duration = std::time::Duration::from_secs(2);
 use crate::theme;
 
 pub struct Feed {
@@ -35,7 +38,11 @@ pub struct Feed {
     _observation: Subscription,
     _events: Subscription,
     _activation: Subscription,
+    _seen: Option<Task<()>>,
+    painted: Painted,
 }
+
+type Painted = Rc<RefCell<HashMap<MessageId, Bounds<Pixels>>>>;
 
 enum Focus {
     Requested,
@@ -45,8 +52,9 @@ enum Focus {
 enum Item {
     Separator(SharedString),
     Message(Message, Option<FireRow>),
-    Unread,
-    Fire(FireRow),
+    Unread(Fresh),
+    Failed(FireRow),
+    Quiet(Quiet),
     Run(RunView),
 }
 
@@ -83,11 +91,23 @@ impl Feed {
                     feed.resync(Resync::Reset, cx);
                     feed.list.scroll_to_end();
                     feed.read_to_newest(cx);
+                    feed.schedule_seen(cx);
                 }
                 StateEvent::MessageAppended => {
+                    let follow = {
+                        let state = feed.state.read(cx);
+                        state.following()
+                            || state
+                                .messages()
+                                .last()
+                                .is_some_and(|message| message.weight == Weight::Mine)
+                    };
                     feed.resync(Resync::Reset, cx);
-                    feed.list.scroll_to_end();
-                    feed.read_to_newest(cx);
+                    if follow {
+                        feed.list.scroll_to_end();
+                        feed.read_to_newest(cx);
+                    }
+                    feed.schedule_seen(cx);
                 }
                 StateEvent::RunsChanged => feed.resync(Resync::Runs, cx),
                 StateEvent::FoldToggled => {
@@ -107,6 +127,7 @@ impl Feed {
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
                 StateEvent::ChannelsChanged => {}
+                StateEvent::Alert(_) => {}
                 StateEvent::PictureOpened => {}
                 StateEvent::PicturesLoaded => {
                     feed.list.remeasure();
@@ -115,15 +136,23 @@ impl Feed {
             },
         );
         let watcher = state.clone();
-        let activation = cx.observe_window_activation(window, move |_feed, window, cx| {
+        let activation = cx.observe_window_activation(window, move |feed, window, cx| {
             let active = window.is_window_active();
             watcher.update(cx, |state, cx| state.set_window_active(active, cx));
+            if active {
+                feed.schedule_seen(cx);
+            }
         });
-        let items = items(state.read(cx), OffsetDateTime::now_utc());
+        let items = items(state.read(cx), local::now());
         let list = ListState::new(items.len(), ListAlignment::Bottom, px(320.));
         list.set_follow_mode(FollowMode::Tail);
         let pager = state.downgrade();
+        let scrolled = cx.weak_entity();
         list.set_scroll_handler(move |event: &ListScrollEvent, _window, cx| {
+            let following = event.is_following_tail;
+            scrolled
+                .update(cx, |feed, cx| feed.scrolled(following, cx))
+                .ok();
             if !near_top(event) {
                 return;
             }
@@ -157,7 +186,123 @@ impl Feed {
             _observation: observation,
             _events: events,
             _activation: activation,
+            _seen: None,
+            painted: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    fn scrolled(&mut self, following: bool, cx: &mut Context<Self>) {
+        let was = self.state.read(cx).following();
+        self.state
+            .update(cx, |state, _cx| state.set_following(following));
+        if following && !was {
+            self.read_to_newest(cx);
+        }
+        self.schedule_seen(cx);
+        cx.notify();
+    }
+
+    fn schedule_seen(&mut self, cx: &mut Context<Self>) {
+        self._seen = Some(cx.spawn(async move |feed, cx| {
+            cx.background_executor().timer(SEEN_AFTER).await;
+            feed.update(cx, |feed, cx| feed.mark_visible_seen(cx)).ok();
+        }));
+    }
+
+    fn mark_visible_seen(&mut self, cx: &mut Context<Self>) {
+        let viewport = self.list.viewport_bounds();
+        let mut seen = Vec::new();
+        {
+            let state = self.state.read(cx);
+            for item in self.items.iter() {
+                let Item::Message(message, _trigger) = item else {
+                    continue;
+                };
+                if !state.is_fresh(message) {
+                    continue;
+                }
+                let Some(bounds) = self.painted.borrow().get(&message.id).copied() else {
+                    continue;
+                };
+                if on_screen(bounds, viewport) {
+                    seen.push(message.id);
+                }
+            }
+        }
+        self.state.update(cx, |state, cx| state.mark_seen(seen, cx));
+    }
+
+    fn pill(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let state = self.state.read(cx);
+        if state.following() {
+            return None;
+        }
+        let mut reply: Option<&Message> = None;
+        let mut posts = 0;
+        for item in self.items.iter() {
+            let Item::Message(message, _trigger) = item else {
+                continue;
+            };
+            if !state.is_fresh(message) {
+                continue;
+            }
+            match message.weight {
+                Weight::Reply => reply = Some(message),
+                Weight::Activity => posts += 1,
+                Weight::Mine => {}
+            }
+        }
+        let (text, tone) = match reply {
+            Some(message) => {
+                let name = match message.author {
+                    tuclaw_core::model::Author::Agent(agent) => state
+                        .people()
+                        .agent(agent)
+                        .map(|agent| agent.name.clone())
+                        .unwrap_or_else(|| "An agent".to_string()),
+                    tuclaw_core::model::Author::User => "You".to_string(),
+                    tuclaw_core::model::Author::System => "tuclaw".to_string(),
+                };
+                (
+                    format!("{name} replied · {}", local::clock(message.sent_at)),
+                    theme::text_primary(),
+                )
+            }
+            None if posts == 1 => ("1 new post".to_string(), theme::text_muted()),
+            None if posts > 1 => (format!("{posts} new posts"), theme::text_muted()),
+            None => return None,
+        };
+        let list = self.list.clone();
+        let reader = self.state.clone();
+        Some(
+            div()
+                .absolute()
+                .bottom(px(12.))
+                .left(px(0.))
+                .right(px(0.))
+                .flex()
+                .justify_center()
+                .child(
+                    crate::control::button("feed-new-pill")
+                        .gap(px(6.))
+                        .px(px(12.))
+                        .h(px(28.))
+                        .rounded_full()
+                        .bg(tone)
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme::window())
+                        .on_click(move |_event, _window, cx| {
+                            list.scroll_to_end();
+                            reader.update(cx, |state, cx| {
+                                state.set_following(true);
+                                state.read_to_newest(cx);
+                            });
+                        })
+                        .child(SharedString::from(text))
+                        .child(icon(Glyph::Down, px(12.), theme::window())),
+                ),
+        )
     }
 
     fn refresh_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -177,7 +322,7 @@ impl Feed {
             Some((anchor, _)) => (Some(anchor), offset_in_item),
             None => (None, offset_in_item),
         };
-        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let items = items(self.state.read(cx), local::now());
         let mut found = None;
         if let Some(anchor) = anchor {
             for (index, item) in items.iter().enumerate() {
@@ -204,7 +349,7 @@ impl Feed {
     }
 
     fn resync(&mut self, resync: Resync, cx: &mut Context<Self>) {
-        let items = items(self.state.read(cx), OffsetDateTime::now_utc());
+        let items = items(self.state.read(cx), local::now());
         let before = self.items.len();
         let first_run = first_run(&items);
         self.items = Rc::new(items);
@@ -234,6 +379,8 @@ impl Feed {
         }
         let items = self.items.clone();
         let state = self.state.clone();
+        self.painted.borrow_mut().clear();
+        let painted = self.painted.clone();
         let folder = self.state.clone();
         let on_toggle: OnToggle = Rc::new(move |message, _window, cx| {
             folder.update(cx, |state, cx| state.toggle_thinking(message, cx));
@@ -272,8 +419,9 @@ impl Feed {
             };
             match item {
                 Item::Separator(title) => day_separator(title.clone()).into_any_element(),
-                Item::Unread => unread_divider().into_any_element(),
-                Item::Fire(row) => fire_row(row, on_task.clone()).into_any_element(),
+                Item::Unread(fresh) => unread_divider(*fresh).into_any_element(),
+                Item::Failed(row) => failed_card(row, on_task.clone()).into_any_element(),
+                Item::Quiet(quiet) => quiet_divider(quiet).into_any_element(),
                 Item::Message(message, trigger) => {
                     let state = state.read(cx);
                     let fold = if state.is_expanded(message.id) {
@@ -303,6 +451,8 @@ impl Feed {
                         None => None,
                     };
                     let look = Look {
+                        stripe: stripe_of(state, message),
+                        question: question_of(state, message),
                         fold,
                         player: state.player(message.id),
                         waveform,
@@ -311,7 +461,29 @@ impl Feed {
                             .as_ref()
                             .map(|row| trigger_tag(row, on_task.clone()).into_any_element()),
                     };
-                    message_row(message, &state.people(), look, &actions, state.pictures())
+                    let id = message.id;
+                    let painted = painted.clone();
+                    div()
+                        .relative()
+                        .child(message_row(
+                            message,
+                            &state.people(),
+                            look,
+                            &actions,
+                            state.pictures(),
+                        ))
+                        .child(
+                            canvas(
+                                |_bounds, _window, _cx| {},
+                                move |bounds, _state, _window, _cx| {
+                                    painted.borrow_mut().insert(id, bounds);
+                                },
+                            )
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size_full(),
+                        )
                         .into_any_element()
                 }
                 Item::Run(run) => {
@@ -346,13 +518,33 @@ impl Render for Feed {
             Focus::Taken => {}
         }
         let header = header(self.state.read(cx));
+        let pulse = pulse(self.state.read(cx));
+        let opener = self.state.clone();
+        let on_pulse: OnPulse = Rc::new(move |_window, cx| {
+            opener.update(cx, |state, cx| {
+                if state.automations_open() {
+                    state.close_automations(cx);
+                } else {
+                    state.open_automations(cx);
+                }
+            });
+        });
         div()
             .flex()
             .flex_col()
             .size_full()
             .min_h(px(0.))
-            .child(header_element(header))
-            .child(self.body())
+            .child(header_element(header, pulse, on_pulse))
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(self.body())
+                    .children(self.pill(cx)),
+            )
             .child(self.composer.clone())
     }
 }
@@ -360,7 +552,7 @@ impl Render for Feed {
 fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
     let today = local::local(now).date();
     let mut triggers: HashMap<MessageId, FireRow> = HashMap::new();
-    let mut loose = Vec::new();
+    let mut entries = Vec::new();
     for mark in state.fires() {
         let Some(at) = mark.at else {
             continue;
@@ -373,43 +565,44 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
             v3::Outcome::Failed => None,
             v3::Outcome::Unknown => None,
         };
-        let Some(answer) = answer.filter(|answer| has_message(state, *answer)) else {
-            loose.push((at, row));
+        if let Some(answer) = answer.filter(|answer| has_message(state, *answer)) {
+            triggers.insert(answer, row);
             continue;
+        }
+        let entry = match mark.outcome {
+            v3::Outcome::Failed => Entry::Item(at, Box::new(Item::Failed(row))),
+            v3::Outcome::Ran => Entry::Check(at, mark.outcome),
+            v3::Outcome::Silent => Entry::Check(at, mark.outcome),
+            v3::Outcome::Skipped => Entry::Check(at, mark.outcome),
+            v3::Outcome::Unknown => Entry::Check(at, mark.outcome),
         };
-        triggers.insert(answer, row);
+        entries.push(entry);
     }
-    let mut timeline = Vec::new();
     for message in state.messages() {
         let trigger = triggers.remove(&message.id);
-        timeline.push((message.sent_at, Item::Message(message.clone(), trigger)));
+        entries.push(Entry::Item(
+            message.sent_at,
+            Box::new(Item::Message(message.clone(), trigger)),
+        ));
     }
-    for (at, row) in loose {
-        timeline.push((at, Item::Fire(row)));
-    }
-    timeline.sort_by_key(|(at, _item)| *at);
+    entries.sort_by_key(Entry::at);
+    let timeline = fold_quiet(entries, now);
     let mut items: Vec<Item> = Vec::new();
     let mut day = None;
     let mut divider = state.divider();
+    let fresh = fresh_since(state);
     for (at, item) in timeline {
         if let (Some(cursor), Item::Message(message, _trigger)) = (divider, &item)
             && message.id > cursor
             && message.id > MessageId(0)
         {
             divider = None;
-            items.push(Item::Unread);
+            items.push(Item::Unread(fresh));
         }
         let date = local::local(at).date();
         if day != Some(date) {
             day = Some(date);
             items.push(Item::Separator(SharedString::from(day_title(date, today))));
-        }
-        if let Item::Fire(next) = &item
-            && let Some(Item::Fire(previous)) = items.last_mut()
-            && previous.absorbs(next)
-        {
-            previous.absorb(next.clone());
-            continue;
         }
         items.push(item);
     }
@@ -417,6 +610,134 @@ fn items(state: &AppState, now: OffsetDateTime) -> Vec<Item> {
         items.push(Item::Run(run_view(run)));
     }
     items
+}
+
+enum Entry {
+    Item(OffsetDateTime, Box<Item>),
+    Check(OffsetDateTime, v3::Outcome),
+}
+
+impl Entry {
+    fn at(&self) -> OffsetDateTime {
+        match self {
+            Entry::Item(at, _item) => *at,
+            Entry::Check(at, _outcome) => *at,
+        }
+    }
+}
+
+fn fold_quiet(entries: Vec<Entry>, now: OffsetDateTime) -> Vec<(OffsetDateTime, Item)> {
+    let mut timeline = Vec::new();
+    let mut since: Option<OffsetDateTime> = None;
+    let mut pending: Option<Quiet> = None;
+    for entry in entries {
+        match entry {
+            Entry::Check(at, outcome) => match &mut pending {
+                Some(quiet) => quiet.add(at, outcome),
+                None => pending = Some(Quiet::new(at, outcome)),
+            },
+            Entry::Item(at, item) => {
+                if let Some(quiet) = pending.take()
+                    && at - since.unwrap_or(quiet.first) >= QUIET_GAP
+                {
+                    timeline.push((quiet.first, Item::Quiet(quiet)));
+                }
+                since = Some(at);
+                timeline.push((at, *item));
+            }
+        }
+    }
+    if let Some(quiet) = pending
+        && now - since.unwrap_or(quiet.first) >= QUIET_GAP
+    {
+        timeline.push((quiet.first, Item::Quiet(quiet)));
+    }
+    timeline
+}
+
+fn on_screen(bounds: Bounds<Pixels>, viewport: Bounds<Pixels>) -> bool {
+    let inside = bounds.top() >= viewport.top() && bounds.bottom() <= viewport.bottom();
+    let covers = bounds.size.height >= viewport.size.height
+        && bounds.top() < viewport.bottom()
+        && bounds.bottom() > viewport.top();
+    inside || covers
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct Fresh {
+    replies: usize,
+    posts: usize,
+}
+
+fn fresh_since(state: &AppState) -> Fresh {
+    let mut fresh = Fresh::default();
+    let Some(cursor) = state.divider() else {
+        return fresh;
+    };
+    for message in state.messages() {
+        if message.id <= cursor {
+            continue;
+        }
+        match message.weight {
+            Weight::Reply => fresh.replies += 1,
+            Weight::Activity => fresh.posts += 1,
+            Weight::Mine => {}
+        }
+    }
+    fresh
+}
+
+fn fresh_text(fresh: Fresh) -> String {
+    let mut parts = Vec::new();
+    match fresh.replies {
+        0 => {}
+        1 => parts.push("1 reply".to_string()),
+        replies => parts.push(format!("{replies} replies")),
+    }
+    match fresh.posts {
+        0 => {}
+        1 => parts.push("1 post".to_string()),
+        posts => parts.push(format!("{posts} posts")),
+    }
+    if parts.is_empty() {
+        return "New".to_string();
+    }
+    format!("New · {}", parts.join(", "))
+}
+
+fn question_of(state: &AppState, message: &Message) -> Option<OffsetDateTime> {
+    let asked = message.reply_to?;
+    let mut previous = None;
+    for candidate in state.messages() {
+        if candidate.id == message.id {
+            break;
+        }
+        if candidate.weight != Weight::Mine {
+            previous = Some(candidate.id);
+        }
+    }
+    let mut at = None;
+    for candidate in state.messages() {
+        if candidate.id == asked {
+            at = Some(candidate.sent_at);
+        }
+    }
+    let at = at?;
+    if previous.is_none_or(|previous| previous < asked) {
+        return None;
+    }
+    Some(at)
+}
+
+fn stripe_of(state: &AppState, message: &Message) -> Stripe {
+    if !state.is_fresh(message) {
+        return Stripe::None;
+    }
+    match message.weight {
+        Weight::Reply => Stripe::Reply,
+        Weight::Activity => Stripe::Activity,
+        Weight::Mine => Stripe::None,
+    }
 }
 
 fn has_message(state: &AppState, id: MessageId) -> bool {
@@ -435,16 +756,18 @@ enum Key {
     Separator(SharedString),
     Unread,
     Message(tuclaw_core::model::MessageId),
-    Fire(tuclaw_core::v3::TaskId, i64),
+    Failed(tuclaw_core::v3::TaskId, i64),
+    Quiet(i64),
     Run(Option<tuclaw_core::v3::RunId>),
 }
 
 fn key(item: &Item) -> Key {
     match item {
         Item::Separator(title) => Key::Separator(title.clone()),
-        Item::Unread => Key::Unread,
+        Item::Unread(_) => Key::Unread,
         Item::Message(message, _trigger) => Key::Message(message.id),
-        Item::Fire(row) => Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+        Item::Failed(row) => Key::Failed(row.task.clone(), row.at.unix_timestamp()),
+        Item::Quiet(quiet) => Key::Quiet(quiet.first.unix_timestamp()),
         Item::Run(run) => Key::Run(run.id.clone()),
     }
 }
@@ -456,14 +779,17 @@ fn anchor_from(items: &[Item], from: usize) -> Option<(Key, bool)> {
                 return Some((Key::Message(message.id), index != from));
             }
             Item::Run(run) => return Some((Key::Run(run.id.clone()), index != from)),
-            Item::Fire(row) => {
+            Item::Failed(row) => {
                 return Some((
-                    Key::Fire(row.task.clone(), row.first.unix_timestamp()),
+                    Key::Failed(row.task.clone(), row.at.unix_timestamp()),
                     index != from,
                 ));
             }
+            Item::Quiet(quiet) => {
+                return Some((Key::Quiet(quiet.first.unix_timestamp()), index != from));
+            }
             Item::Separator(_) => {}
-            Item::Unread => {}
+            Item::Unread(_) => {}
         }
     }
     None
@@ -482,9 +808,10 @@ fn first_run(items: &[Item]) -> usize {
                 break;
             }
             Item::Separator(_) => {}
-            Item::Unread => {}
+            Item::Unread(_) => {}
             Item::Message(_, _) => {}
-            Item::Fire(_) => {}
+            Item::Failed(_) => {}
+            Item::Quiet(_) => {}
         }
     }
     first
@@ -510,6 +837,8 @@ fn header(state: &AppState) -> Header {
         group: _,
         kind,
         unread: _,
+        replies: _,
+        marked: _,
         sort_index: _,
     }) = found
     else {
@@ -579,7 +908,91 @@ fn agent_count(agents: usize) -> String {
     }
 }
 
-fn header_element(header: Header) -> impl IntoElement {
+type OnPulse = Rc<dyn Fn(&mut Window, &mut gpui::App)>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Pulse {
+    automations: usize,
+    last: Option<OffsetDateTime>,
+    failed: usize,
+    open: bool,
+}
+
+fn pulse(state: &AppState) -> Option<Pulse> {
+    let tasks = state.channel_tasks();
+    if tasks.is_empty() {
+        return None;
+    }
+    let mut last = None;
+    for mark in state.fires() {
+        if let Some(at) = mark.at
+            && last.is_none_or(|known| at > known)
+        {
+            last = Some(at);
+        }
+    }
+    Some(Pulse {
+        automations: tasks.len(),
+        last,
+        failed: state.unseen_failures(),
+        open: state.automations_open(),
+    })
+}
+
+fn pulse_text(pulse: &Pulse) -> String {
+    let count = if pulse.automations == 1 {
+        "1 automation".to_string()
+    } else {
+        format!("{} automations", pulse.automations)
+    };
+    match pulse.last {
+        Some(at) => format!("{count} · checked {}", local::clock(at)),
+        None => count,
+    }
+}
+
+fn pulse_element(pulse: Pulse, on_pulse: OnPulse) -> impl IntoElement {
+    let dot = if pulse.failed > 0 {
+        theme::accent()
+    } else {
+        theme::status_idle()
+    };
+    let element = crate::control::button("feed-automations")
+        .accessibility_label("Automations of this channel")
+        .gap(px(6.))
+        .px(px(10.))
+        .h(px(26.))
+        .rounded(px(8.))
+        .border_1()
+        .border_color(theme::border())
+        .text_size(px(12.))
+        .text_color(theme::text_secondary())
+        .hover(|style| style.bg(theme::sunken()))
+        .on_click(move |_event, window, cx| on_pulse(window, cx))
+        .child(div().flex_none().size(px(7.)).rounded_full().bg(dot))
+        .child(SharedString::from(pulse_text(&pulse)));
+    let element = if pulse.failed > 0 {
+        element.child(
+            div()
+                .px(px(6.))
+                .rounded(px(5.))
+                .bg(theme::accent())
+                .text_size(px(11.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::chip_text())
+                .child(SharedString::from(format!("{} failed", pulse.failed))),
+        )
+    } else {
+        element
+    };
+    if pulse.open {
+        element.bg(theme::selection())
+    } else {
+        element
+    }
+}
+
+fn header_element(header: Header, pulse: Option<Pulse>, on_pulse: OnPulse) -> impl IntoElement {
     let lead = match header {
         Header::Channel { name, agents } => div()
             .flex()
@@ -629,6 +1042,7 @@ fn header_element(header: Header) -> impl IntoElement {
         .border_color(theme::hairline())
         .child(lead)
         .child(div().flex_1())
+        .children(pulse.map(|pulse| pulse_element(pulse, on_pulse)))
         .child(chip().child(icon(Glyph::More, px(15.), theme::text_secondary())))
 }
 
@@ -665,7 +1079,7 @@ fn day_separator(title: SharedString) -> impl IntoElement {
         .child(rule())
 }
 
-fn unread_divider() -> impl IntoElement {
+fn unread_divider(fresh: Fresh) -> impl IntoElement {
     div()
         .id("feed-unread")
         .debug_selector(|| "feed-unread".to_string())
@@ -683,8 +1097,9 @@ fn unread_divider() -> impl IntoElement {
                 .text_size(px(11.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme::accent())
-                .child("New"),
+                .child(SharedString::from(fresh_text(fresh))),
         )
+        .child(div().flex_1().h(px(1.)).bg(theme::accent().opacity(0.6)))
 }
 
 fn rule() -> Div {
@@ -818,6 +1233,12 @@ mod tests {
         state.update(cx, |state, cx| state.select(home, cx));
         cx.run_until_parked();
         assert!(cx.debug_bounds("feed-unread").is_some());
+        assert_eq!(
+            unread_of(&state, cx, "Smart Home"),
+            1,
+            "opening is not reading: the message has not been seen yet"
+        );
+        see_everything_fresh(&state, cx);
         assert_eq!(unread_of(&state, cx, "Smart Home"), 0);
         let client = tuclaw_core::v3::Client::mock(&mock);
         let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
@@ -830,15 +1251,128 @@ mod tests {
         assert_eq!(served, Some(0));
     }
 
+    fn marked_of(state: &Entity<AppState>, cx: &mut VisualTestContext, name: &str) -> bool {
+        state.read_with(cx, |state, _cx| {
+            let mut marked = None;
+            for channel in state.channels() {
+                if channel.name == name {
+                    marked = Some(channel.marked);
+                }
+            }
+            marked.expect("the channel exists")
+        })
+    }
+
+    fn served_marked(mock: &MockTransport, name: &str) -> bool {
+        let client = tuclaw_core::v3::Client::mock(mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let mut marked = None;
+        for surface in surfaces {
+            if surface.name == name {
+                marked = Some(surface.marked_unread);
+            }
+        }
+        marked.expect("the surface exists")
+    }
+
+    #[gpui::test]
+    fn a_channel_marked_unread_stays_marked_until_it_is_opened(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let home = channel_named(&state, cx, "Smart Home");
+        state.update(cx, |state, cx| state.mark_unread(home, cx));
+        cx.run_until_parked();
+        assert!(marked_of(&state, cx, "Smart Home"));
+        assert!(served_marked(&mock, "Smart Home"));
+        state.update(cx, |state, cx| state.select(home, cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "Smart Home"));
+        assert!(!served_marked(&mock, "Smart Home"));
+    }
+
+    #[gpui::test]
+    fn the_open_channel_marked_unread_stays_marked_until_it_is_opened_again(
+        cx: &mut TestAppContext,
+    ) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.mark_unread(general, cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.set_window_active(false, cx);
+            state.set_window_active(true, cx);
+            state.read_to_newest(cx);
+        });
+        cx.run_until_parked();
+        assert!(marked_of(&state, cx, "General"));
+        assert!(served_marked(&mock, "General"));
+        state.update(cx, |state, cx| state.select(general, cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "General"));
+        assert!(!served_marked(&mock, "General"));
+    }
+
+    #[gpui::test]
+    fn a_new_answer_releases_the_open_channel_marked_unread(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.mark_unread(general, cx));
+        cx.run_until_parked();
+        posted_by_jarvis(&mock, &state, cx, "Something new.");
+        state.update(cx, |state, cx| state.read_to_newest(cx));
+        cx.run_until_parked();
+        assert!(!marked_of(&state, cx, "General"));
+        assert!(!served_marked(&mock, "General"));
+    }
+
     #[gpui::test]
     fn an_inactive_window_keeps_new_messages_unread_until_it_is_back(cx: &mut TestAppContext) {
         let (mock, state, _feed, cx) = feed(cx);
+        assert!(cx.debug_bounds("feed-unread").is_none());
         state.update(cx, |state, cx| state.set_window_active(false, cx));
         posted_by_jarvis(&mock, &state, cx, "While you were away.");
         assert_eq!(unread_of(&state, cx, "General"), 1);
         state.update(cx, |state, cx| state.set_window_active(true, cx));
         cx.run_until_parked();
+        assert_eq!(unread_of(&state, cx, "General"), 1, "unread until seen");
+        assert!(
+            cx.debug_bounds("feed-unread").is_some(),
+            "the open channel marks where the new messages start"
+        );
+        see_everything_fresh(&state, cx);
         assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
+    fn an_unseen_reply_is_still_unread_after_a_restart(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        posted_by_jarvis(&mock, &state, cx, "Waiting for you.");
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        let client = tuclaw_core::v3::Client::mock(&mock);
+        let surfaces = futures::executor::block_on(client.surfaces()).expect("surfaces");
+        let general = surfaces
+            .iter()
+            .find(|surface| surface.name == "General")
+            .expect("General exists");
+        assert_eq!(
+            (general.unread, general.unread_replies),
+            (1, 1),
+            "the daemon still counts it, so a restart shows it again"
+        );
+    }
+
+    fn see_everything_fresh(state: &Entity<AppState>, cx: &mut VisualTestContext) {
+        state.update(cx, |state, cx| {
+            let mut fresh = Vec::new();
+            for message in state.messages() {
+                if state.is_fresh(message) {
+                    fresh.push(message.id);
+                }
+            }
+            state.mark_seen(fresh, cx);
+        });
+        cx.run_until_parked();
     }
 
     #[gpui::test]
@@ -965,6 +1499,267 @@ mod tests {
         feed.read_with(cx, |feed, cx| feed.composer.read(cx).text(cx).to_string())
     }
 
+    fn check(minute: i64) -> super::Entry {
+        super::Entry::Check(
+            time::macros::datetime!(2026-10-05 00:00 UTC) + time::Duration::minutes(minute),
+            tuclaw_core::v3::Outcome::Skipped,
+        )
+    }
+
+    fn boundary(minute: i64) -> super::Entry {
+        super::Entry::Item(
+            time::macros::datetime!(2026-10-05 00:00 UTC) + time::Duration::minutes(minute),
+            Box::new(Item::Unread(super::Fresh::default())),
+        )
+    }
+
+    fn quiet_checks(timeline: &[(time::OffsetDateTime, Item)]) -> Vec<usize> {
+        let mut checks = Vec::new();
+        for (_at, item) in timeline {
+            if let Item::Quiet(quiet) = item {
+                checks.push(quiet.checks);
+            }
+        }
+        checks
+    }
+
+    #[test]
+    fn checks_in_an_hour_long_pause_fold_into_one_quiet_line() {
+        let now = time::macros::datetime!(2026-10-05 12:00 UTC);
+        let long = super::fold_quiet(
+            vec![boundary(0), check(10), check(25), check(70), boundary(180)],
+            now,
+        );
+        assert_eq!(quiet_checks(&long), vec![3]);
+        assert_eq!(long.len(), 3);
+        let short = super::fold_quiet(vec![boundary(0), check(10), check(20), boundary(40)], now);
+        assert!(quiet_checks(&short).is_empty());
+        assert_eq!(short.len(), 2);
+    }
+
+    #[test]
+    fn a_boundary_splits_the_quiet_stretch_and_the_tail_runs_to_now() {
+        let now = time::macros::datetime!(2026-10-05 08:00 UTC);
+        let timeline = super::fold_quiet(
+            vec![
+                boundary(0),
+                check(30),
+                check(90),
+                boundary(120),
+                check(150),
+                check(300),
+            ],
+            now,
+        );
+        assert_eq!(quiet_checks(&timeline), vec![2, 2]);
+        let recent = time::macros::datetime!(2026-10-05 05:20 UTC);
+        let fresh = super::fold_quiet(vec![boundary(300), check(310)], recent);
+        assert!(quiet_checks(&fresh).is_empty());
+    }
+
+    #[gpui::test]
+    fn the_header_counts_the_automations_and_opens_their_panel(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let magnet = channel_named(&state, cx, "Magnet Feed");
+        state.update(cx, |state, cx| state.select(magnet, cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("feed-automations").is_some());
+        mock.fire_task(
+            &tuclaw_core::v3::TaskId("task-download-done".into()),
+            tuclaw_core::v3::Outcome::Failed,
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert_eq!(state.unseen_failures(), 1));
+        click(cx, "feed-automations".to_string());
+        state.read_with(cx, |state, _cx| {
+            assert!(state.automations_open());
+            assert_eq!(state.unseen_failures(), 0);
+        });
+        click(cx, "feed-automations".to_string());
+        state.read_with(cx, |state, _cx| assert!(!state.automations_open()));
+    }
+
+    #[test]
+    fn the_pulse_names_its_count_and_last_check() {
+        let at = time::macros::datetime!(2026-10-05 13:15 UTC);
+        let pulse = super::Pulse {
+            automations: 1,
+            last: Some(at),
+            failed: 0,
+            open: false,
+        };
+        assert_eq!(
+            super::pulse_text(&pulse),
+            format!("1 automation · checked {}", crate::local::clock(at))
+        );
+        let idle = super::Pulse {
+            automations: 5,
+            last: None,
+            ..pulse
+        };
+        assert_eq!(super::pulse_text(&idle), "5 automations");
+    }
+
+    #[gpui::test]
+    fn dragging_across_a_message_selects_and_copies_its_text(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let built = state.clone();
+        let (_root, cx) = cx.add_window_view(move |window, cx| {
+            let feed = gpui::AppContext::new(cx, |cx| Feed::new(built, window, cx));
+            gpui_kit::base::Root::new(feed, window, cx)
+        });
+        let raw = posted_by_jarvis(&mock, &state, cx, "Copy this sentence please.");
+        let selector: &'static str = Box::leak(format!("message-{raw}-md").into_boxed_str());
+        let bounds = cx
+            .debug_bounds(selector)
+            .expect("the message text is drawn");
+        let start = gpui::point(bounds.left() + gpui::px(1.), bounds.center().y);
+        let end = gpui::point(bounds.right() - gpui::px(1.), bounds.center().y);
+        cx.simulate_mouse_down(start, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.simulate_mouse_move(
+            end,
+            Some(gpui::MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(end, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.run_until_parked();
+        cx.simulate_keystrokes("cmd-c");
+        let copied = cx.read_from_clipboard().and_then(|item| item.text());
+        assert_eq!(copied.as_deref(), Some("Copy this sentence please."));
+    }
+
+    #[gpui::test]
+    fn a_reply_that_came_while_away_is_striped_until_it_has_been_seen(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        cx.update(|window, _cx| window.activate_window());
+        cx.run_until_parked();
+        cx.deactivate_window();
+        state.read_with(cx, |state, _cx| assert!(!state.is_window_active()));
+        let raw = posted_by_jarvis(&mock, &state, cx, "Back with the forecast.");
+        let stripe: &'static str = Box::leak(format!("message-{raw}-stripe").into_boxed_str());
+        assert!(cx.debug_bounds(stripe).is_some());
+        state.read_with(cx, |state, _cx| {
+            let channel = state
+                .channels()
+                .iter()
+                .find(|channel| channel.name == "General")
+                .expect("General exists");
+            assert_eq!((channel.unread, channel.replies), (1, 1));
+        });
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(5));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds(stripe).is_some(),
+            "an inactive window sees nothing"
+        );
+        cx.update(|window, _cx| window.activate_window());
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds(stripe).is_some(),
+            "seen only after a moment on screen"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(3));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds(stripe).is_none());
+        assert!(
+            cx.debug_bounds("feed-unread").is_some(),
+            "New stays until another channel"
+        );
+    }
+
+    #[gpui::test]
+    fn seeing_the_newest_reply_reads_the_older_ones_too(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_window_active(false, cx));
+        let first = posted_by_jarvis(&mock, &state, cx, "First, above the view.");
+        let last = posted_by_jarvis(&mock, &state, cx, "Second, the newest.");
+        state.update(cx, |state, cx| state.set_window_active(true, cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.mark_seen(vec![tuclaw_core::model::MessageId(last)], cx)
+        });
+        cx.run_until_parked();
+        let stripe: &'static str = Box::leak(format!("message-{first}-stripe").into_boxed_str());
+        assert!(cx.debug_bounds(stripe).is_none());
+        assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
+    fn a_reply_below_the_view_raises_a_pill_that_scrolls_to_it(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, _cx| state.set_following(false));
+        posted_by_jarvis(&mock, &state, cx, "Done, the file is in place.");
+        state.read_with(cx, |state, _cx| {
+            let general = state
+                .channels()
+                .iter()
+                .find(|channel| channel.name == "General")
+                .expect("General exists");
+            assert_eq!(general.replies, 1, "not read while scrolled up");
+        });
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("feed-new-pill").is_some());
+        click(cx, "feed-new-pill".to_string());
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert!(state.following()));
+        assert!(cx.debug_bounds("feed-new-pill").is_none());
+    }
+
+    #[test]
+    fn a_message_counts_as_seen_when_it_fits_or_fills_the_view() {
+        let view = gpui::Bounds::new(
+            gpui::point(gpui::px(0.), gpui::px(100.)),
+            gpui::size(gpui::px(800.), gpui::px(500.)),
+        );
+        let at = |top: f32, height: f32| {
+            gpui::Bounds::new(
+                gpui::point(gpui::px(0.), gpui::px(top)),
+                gpui::size(gpui::px(800.), gpui::px(height)),
+            )
+        };
+        assert!(super::on_screen(at(150., 80.), view));
+        assert!(
+            !super::on_screen(at(560., 80.), view),
+            "cut by the bottom edge"
+        );
+        assert!(!super::on_screen(at(600., 80.), view), "below the view");
+        assert!(
+            super::on_screen(at(50., 900.), view),
+            "taller than the view and filling it"
+        );
+    }
+
+    #[test]
+    fn the_new_divider_counts_replies_and_posts() {
+        let fresh = |replies, posts| super::Fresh { replies, posts };
+        assert_eq!(super::fresh_text(fresh(0, 0)), "New");
+        assert_eq!(super::fresh_text(fresh(1, 0)), "New · 1 reply");
+        assert_eq!(super::fresh_text(fresh(3, 2)), "New · 3 replies, 2 posts");
+        assert_eq!(super::fresh_text(fresh(0, 1)), "New · 1 post");
+    }
+
+    #[gpui::test]
+    fn the_copy_button_on_a_quote_copies_only_the_quote(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let raw = posted_by_jarvis(
+            &mock,
+            &state,
+            cx,
+            "Steven answered:\n\n> Everything urgent is done.\n> Flag the rest.\n\nThat is all.",
+        );
+        let copy: &'static str =
+            Box::leak(format!("message-{raw}-md-1-quote-copy").into_boxed_str());
+        click(cx, copy.to_string());
+        let copied = cx.read_from_clipboard().and_then(|item| item.text());
+        assert_eq!(
+            copied.as_deref(),
+            Some("Everything urgent is done.\nFlag the rest.")
+        );
+    }
+
     #[test]
     fn the_agent_count_agrees_in_number() {
         assert_eq!(super::agent_count(0), "0 agents");
@@ -978,24 +1773,24 @@ mod tests {
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         feed.read_with(cx, |feed, _cx| {
             assert_eq!(feed.list.item_count(), feed.items.len());
-            let mut fires = Vec::new();
+            let mut marks = 0;
             let mut triggered = 0;
             for item in feed.items.iter() {
                 match item {
-                    Item::Fire(row) => {
+                    Item::Failed(row) => {
                         assert_ne!(row.label, "An automation");
-                        fires.push(row.outcome);
+                        marks += 1;
                     }
+                    Item::Quiet(_) => marks += 1,
                     Item::Message(_, Some(_)) => triggered += 1,
                     Item::Message(_, None) => {}
                     Item::Separator(_) => {}
-                    Item::Unread => {}
+                    Item::Unread(_) => {}
                     Item::Run(_) => {}
                 }
             }
-            assert_eq!(fires, vec![tuclaw_core::v3::Outcome::Silent]);
             assert_eq!(triggered, 1);
-            assert_eq!(feed.items.len(), 31 + fires.len());
+            assert_eq!(feed.items.len(), 31 + marks);
         });
     }
 
@@ -1073,9 +1868,10 @@ mod tests {
                 match item {
                     Item::Run(run) => runs.push(run.clone()),
                     Item::Separator(_) => {}
-                    Item::Unread => {}
+                    Item::Unread(_) => {}
                     Item::Message(_, _) => {}
-                    Item::Fire(_) => {}
+                    Item::Failed(_) => {}
+                    Item::Quiet(_) => {}
                 }
             }
             runs

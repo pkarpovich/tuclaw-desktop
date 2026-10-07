@@ -45,14 +45,24 @@ pub struct Picture {
 pub enum Segment {
     Text(String),
     Picture(Picture),
+    Quote(String),
 }
 
 pub fn split_pictures(text: &str) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut prose = String::new();
+    let mut quote = String::new();
     let mut fenced = false;
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim();
+        if !fenced && let Some(inner) = quoted(line) {
+            if quote.is_empty() {
+                flush(&mut prose, &mut segments);
+            }
+            quote.push_str(inner);
+            continue;
+        }
+        flush_quote(&mut quote, &mut segments);
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
             fenced = !fenced;
             prose.push_str(line);
@@ -69,8 +79,21 @@ pub fn split_pictures(text: &str) -> Vec<Segment> {
         flush(&mut prose, &mut segments);
         segments.push(Segment::Picture(picture));
     }
+    flush_quote(&mut quote, &mut segments);
     flush(&mut prose, &mut segments);
     segments
+}
+
+fn quoted(line: &str) -> Option<&str> {
+    let rest = line.trim_start().strip_prefix('>')?;
+    Some(rest.strip_prefix(' ').unwrap_or(rest))
+}
+
+fn flush_quote(quote: &mut String, segments: &mut Vec<Segment>) {
+    if !quote.trim().is_empty() {
+        segments.push(Segment::Quote(quote.trim_matches('\n').to_string()));
+    }
+    quote.clear();
 }
 
 fn flush(prose: &mut String, segments: &mut Vec<Segment>) {
@@ -215,6 +238,27 @@ mod tests {
             without_pictures("![a](file:///etc/x.png)\n```\n![b](c)\n```\n"),
             "[a](file:///etc/x.png)\n```\n![b](c)\n```\n"
         );
+    }
+
+    #[test]
+    fn a_quote_becomes_its_own_segment_without_its_markers() {
+        let text = "Steven answered:\n\n> Also, everything urgent is done.\n> Mark tickets with the flag.\n\nNothing else to add.";
+        assert_eq!(
+            split_pictures(text),
+            vec![
+                Segment::Text("Steven answered:".into()),
+                Segment::Quote(
+                    "Also, everything urgent is done.\nMark tickets with the flag.".into()
+                ),
+                Segment::Text("Nothing else to add.".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_quote_marker_inside_code_stays_code() {
+        let text = "```\n> not a quote\n```";
+        assert_eq!(split_pictures(text), vec![Segment::Text(text.into())]);
     }
 
     #[test]

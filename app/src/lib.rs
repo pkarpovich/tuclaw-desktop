@@ -2,6 +2,7 @@ pub mod agent_settings;
 pub mod agents;
 pub mod audio;
 pub mod automation;
+pub mod automations_panel;
 pub mod automations_view;
 pub mod card;
 pub mod channels_view;
@@ -17,6 +18,7 @@ pub mod live;
 pub mod local;
 pub mod menu;
 pub mod message;
+pub mod notify;
 pub mod people;
 pub mod picture;
 pub mod pictures;
@@ -34,6 +36,7 @@ pub mod theme;
 pub mod viewer;
 
 use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use gpui_kit::base::Root;
 
 use failure::Startup;
 use link::Config;
@@ -61,8 +64,10 @@ pub fn run() {
                 Startup::Ready(state) => {
                     let state = cx.new(|_| *state);
                     state.update(cx, |state, cx| state.start(cx));
+                    notify::attach(&state, notify::system(), cx);
                     cx.open_window(options, |window, cx| {
-                        cx.new(|cx| Shell::new(state, window, cx))
+                        let shell = cx.new(|cx| Shell::new(state, window, cx));
+                        cx.new(|cx| Root::new(shell, window, cx))
                     })
                     .map(|_| ())
                 }

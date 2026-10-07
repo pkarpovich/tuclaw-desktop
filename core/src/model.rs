@@ -143,6 +143,10 @@ pub struct Channel {
     pub kind: ChannelKind,
     /// How many messages the user has not read.
     pub unread: usize,
+    /// How many of them answer the user.
+    pub replies: usize,
+    /// Whether the user marked it unread to come back to it.
+    pub marked: bool,
     /// The position of the channel in the rendered order, ascending.
     pub sort_index: i64,
 }
@@ -162,6 +166,29 @@ pub struct Message {
     pub voice: Option<Voice>,
     /// The run that produced the message, when it came from one.
     pub run: Option<RunRef>,
+    /// How much the message asks of the user when it is new.
+    pub weight: Weight,
+    /// The user's message this one answers.
+    pub reply_to: Option<MessageId>,
+}
+
+/// How much a new message asks of the user.
+///
+/// # Examples
+///
+/// ```
+/// use tuclaw_core::model::Weight;
+///
+/// assert_ne!(Weight::Reply, Weight::Activity);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Weight {
+    /// The user wrote it.
+    Mine,
+    /// An agent answered something the user asked.
+    Reply,
+    /// Anything else: automation posts, notices, agents talking to each other.
+    Activity,
 }
 
 /// How a run ended.

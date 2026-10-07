@@ -20,7 +20,7 @@
     "kind": "answer",
     "author": {"kind": "agent", "agent_id": 1},
     "addressed_agent_id": null,
-    "reply_to_message_id": null,
+    "reply_to_message_id": 9191,
     "text": "## Лисички со сливками\n\n- 400 г лисичек\n- 200 мл сливок\n\n```\nобжарить 10 минут\n```",
     "run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11",
     "origin": "user",

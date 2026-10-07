@@ -19,7 +19,10 @@ rodio = { version = "0.22.2", default-features = false, features = ["playback", 
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-foundation = { version = "0.3.2", features = ["NSDictionary", "NSString", "NSURL", "NSValue", "NSError"] }
+objc2-foundation = { version = "0.3.2", features = ["NSBundle", "NSDictionary", "NSString", "NSURL", "NSValue", "NSError"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSResponder", "NSSound"] }
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
+block2 = "0.6.2"
 objc2-avf-audio = { version = "0.3.2", features = ["AVAudioRecorder", "AVAudioSettings"] }
 objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageDestination", "CGImageProperties"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFData", "CFDictionary", "CFNumber", "CFString"] }
@@ -28,3 +31,7 @@ objc2-core-graphics = { version = "0.3.2", features = ["CGImage"] }
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 gpui_platform = { workspace = true, features = ["test-support"] }
+
+[[test]]
+name = "visual"
+harness = false

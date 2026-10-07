@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Bounds, BoxShadow, Div, FontWeight, HighlightStyle, Image, ImageSource,
-    IntoElement, ObjectFit, Pixels, SharedString, Stateful, StyledText, Window, canvas, div, fill,
-    img, point, prelude::*, px, relative, size,
+    AnyElement, App, Bounds, BoxShadow, ClipboardItem, Div, FontWeight, HighlightStyle, Image,
+    ImageSource, IntoElement, ObjectFit, Pixels, SharedString, Stateful, StyledText, Window,
+    canvas, div, fill, img, point, prelude::*, px, relative, size,
 };
 use time::OffsetDateTime;
 use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
@@ -42,6 +42,15 @@ pub struct Look {
     pub waveform: Option<Waveform>,
     pub run: Option<Pane>,
     pub trigger: Option<AnyElement>,
+    pub stripe: Stripe,
+    pub question: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stripe {
+    None,
+    Reply,
+    Activity,
 }
 
 struct Controls {
@@ -98,6 +107,8 @@ pub fn message_row(
         sent_at,
         voice,
         run,
+        weight: _,
+        reply_to: _,
     } = message;
     let Look {
         fold,
@@ -105,6 +116,8 @@ pub fn message_row(
         waveform,
         run: pane,
         trigger,
+        stripe,
+        question,
     } = look;
     let writer = writer(*author, people);
     let MessageId(raw) = *id;
@@ -136,6 +149,21 @@ pub fn message_row(
         .min_w(px(0.))
         .gap(px(2.))
         .child(line);
+    if let Some(asked) = question {
+        column = column.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(5.))
+                .text_size(px(11.5))
+                .text_color(theme::text_muted())
+                .child(icon(Glyph::Back, px(11.), theme::text_muted()))
+                .child(SharedString::from(format!(
+                    "to your question · {}",
+                    crate::local::clock(asked)
+                ))),
+        );
+    }
     if let Some(voice) = voice {
         let controls = Controls {
             player,
@@ -143,7 +171,7 @@ pub fn message_row(
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
-        return row(selector, face, column);
+        return row(selector, face, column, stripe);
     }
     if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
@@ -159,23 +187,70 @@ pub fn message_row(
             index => format!("{selector}-md-{index}"),
         };
         column = match segment {
-            Segment::Text(text) => column.child(div().text_size(px(14.5)).child(rich::markdown(
-                SharedString::from(key),
-                text,
-                Ink::Body,
-            ))),
+            Segment::Text(text) => column.child(
+                div()
+                    .debug_selector({
+                        let key = key.clone();
+                        move || key
+                    })
+                    .text_size(px(14.5))
+                    .child(rich::markdown(SharedString::from(key), text, Ink::Body)),
+            ),
             Segment::Picture(picture) => column.child(picture_block(
                 &key,
                 &picture,
                 shelf,
                 actions.on_picture.clone(),
             )),
+            Segment::Quote(text) => column.child(quote_block(&key, text)),
         };
     }
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
-    row(selector, face, column)
+    row(selector, face, column, stripe)
+}
+
+fn quote_block(key: &str, text: String) -> impl IntoElement {
+    let group = SharedString::from(format!("{key}-quote"));
+    let selector = format!("{key}-quote");
+    let copy = format!("{key}-quote-copy");
+    let copied = text.clone();
+    div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector)
+        .group(group.clone())
+        .relative()
+        .my(px(4.))
+        .pl(px(14.))
+        .pr(px(32.))
+        .border_l(px(3.))
+        .border_color(theme::border())
+        .text_size(px(14.5))
+        .child(rich::markdown(
+            SharedString::from(format!("{key}-quote-md")),
+            text,
+            Ink::Muted,
+        ))
+        .child(
+            div()
+                .absolute()
+                .top(px(0.))
+                .right(px(4.))
+                .opacity(0.)
+                .group_hover(group, |style| style.opacity(1.))
+                .child(
+                    button(copy)
+                        .accessibility_label("Copy the quote")
+                        .p(px(4.))
+                        .rounded(px(6.))
+                        .hover(|style| style.bg(theme::sunken()))
+                        .on_click(move |_event, _window, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(copied.clone()));
+                        })
+                        .child(icon(Glyph::Copy, px(13.), theme::text_muted())),
+                ),
+        )
 }
 
 fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPicture) -> AnyElement {
@@ -261,8 +336,9 @@ fn picture_fallback(key: &str, caption: &str, link: Option<&String>) -> AnyEleme
         .into_any_element()
 }
 
-fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {
-    div()
+fn row(selector: String, face: AnyElement, column: Div, stripe: Stripe) -> Stateful<Div> {
+    let marked = format!("{selector}-stripe");
+    let row = div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
         .w_full()
@@ -272,7 +348,22 @@ fn row(selector: String, face: AnyElement, column: Div) -> Stateful<Div> {
         .px(px(20.))
         .py(px(8.))
         .child(face)
-        .child(column)
+        .child(column);
+    let tone = match stripe {
+        Stripe::None => return row,
+        Stripe::Reply => theme::accent(),
+        Stripe::Activity => theme::border(),
+    };
+    row.relative().child(
+        div()
+            .debug_selector(move || marked)
+            .absolute()
+            .left(px(0.))
+            .top(px(0.))
+            .bottom(px(0.))
+            .w(px(3.))
+            .bg(tone),
+    )
 }
 
 pub fn source(body: &[Span]) -> String {

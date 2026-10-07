@@ -221,7 +221,9 @@ impl Client {
         async move { body(request.await?) }
     }
 
-    /// Marks a surface read up to `message`; the cursor only ever moves forward.
+    /// Marks a surface read up to `message` and clears its unread mark; the
+    /// cursor only ever moves forward, and without a message only the mark is
+    /// cleared.
     ///
     /// # Errors
     ///
@@ -229,14 +231,33 @@ impl Client {
     pub fn mark_read(
         &self,
         surface: SurfaceId,
-        message: MessageId,
+        message: Option<MessageId>,
     ) -> impl Future<Output = Result<ReadAnswer, ApiError>> + Send + 'static {
         let SurfaceId(surface) = surface;
-        let MessageId(message) = message;
-        let request = self.transport.post(
-            &format!("/surfaces/{surface}/read"),
-            Some(serde_json::json!({ "message_id": message })),
-        );
+        let payload = match message {
+            Some(MessageId(message)) => serde_json::json!({ "message_id": message }),
+            None => serde_json::json!({}),
+        };
+        let request = self
+            .transport
+            .post(&format!("/surfaces/{surface}/read"), Some(payload));
+        async move { body(request.await?) }
+    }
+
+    /// Marks a surface unread, leaving its cursor where it is; the next read
+    /// clears the mark.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::NotFound`] for an unknown surface.
+    pub fn mark_unread(
+        &self,
+        surface: SurfaceId,
+    ) -> impl Future<Output = Result<ReadAnswer, ApiError>> + Send + 'static {
+        let SurfaceId(surface) = surface;
+        let request = self
+            .transport
+            .post(&format!("/surfaces/{surface}/unread"), None);
         async move { body(request.await?) }
     }
 
