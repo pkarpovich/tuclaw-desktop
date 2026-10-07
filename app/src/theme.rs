@@ -80,6 +80,10 @@ pub fn accent() -> Hsla {
     rgb(0xb45c3c).into()
 }
 
+pub fn activity() -> Hsla {
+    rgb(0x5c6975).into()
+}
+
 pub fn status_idle() -> Hsla {
     rgb(0x4ba36a).into()
 }

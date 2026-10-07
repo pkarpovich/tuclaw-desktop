@@ -20,6 +20,7 @@ use crate::agent_settings::{
 };
 use crate::audio::{self, Pcm, PeakCache, Speaker, Waveform};
 use crate::link::{self, Source};
+use crate::notify::Alert;
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
 use crate::pictures::{self, Remote, Shelf, Viewed};
@@ -29,6 +30,7 @@ use crate::runlog::{self, Disclosure, RunLog};
 const PAGE: u32 = 50;
 const TICK: Duration = Duration::from_millis(200);
 const TOAST_LIFETIME: Duration = Duration::from_secs(6);
+const ALERT_LIMIT: usize = 180;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -89,6 +91,7 @@ pub enum StateEvent {
     Mention(String),
     TasksLoaded,
     ChannelsChanged,
+    Alert(Alert),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +166,7 @@ pub struct AppState {
     pending: Vec<Pending>,
     next_local: i64,
     last_seq: Option<Seq>,
+    news_after: Option<Seq>,
     control: Option<UnboundedSender<ClientFrame>>,
     view: View,
     sidebar: SidebarVisibility,
@@ -227,6 +231,7 @@ impl AppState {
             pending: Vec::new(),
             next_local: 0,
             last_seq: None,
+            news_after: None,
             control: None,
             view: View::Conversation,
             sidebar: SidebarVisibility::Shown,
@@ -2688,6 +2693,7 @@ impl AppState {
         if fresh {
             self.last_seq = Some(head);
         }
+        self.news_after = Some(head);
         self.control = Some(control);
         self.link = Link::Live;
         self.send_focus();
@@ -2809,6 +2815,10 @@ impl AppState {
                 }
             },
             Frame::MessageCreated(created) => {
+                let news = self.news_after.is_some_and(|head| created.seq > head);
+                if news {
+                    self.alert_for(&created.message, cx);
+                }
                 self.message_created(&created.message, cx);
                 false
             }
@@ -2881,6 +2891,47 @@ impl AppState {
         true
     }
 
+    pub fn badge_count(&self) -> usize {
+        let mut count = 0;
+        for channel in &self.channels {
+            count += match (channel.unread, channel.marked) {
+                (0, true) => 1,
+                (unread, _) => unread,
+            };
+        }
+        count
+    }
+
+    fn alert_for(&self, message: &v3::Message, cx: &mut Context<Self>) {
+        let Some(agent) = alerting_agent(message) else {
+            return;
+        };
+        let channel = link::channel_id(message.surface_id);
+        let mut name = None;
+        for candidate in &self.channels {
+            if candidate.id == channel {
+                name = Some(candidate.name.clone());
+            }
+        }
+        let Some(name) = name else {
+            return;
+        };
+        let shown = self.selected == Some(channel);
+        if shown && self.window_active && self.following {
+            return;
+        }
+        let title = match agent.and_then(|agent| self.directory_agent(link::agent_id(agent))) {
+            Some(author) => format!("#{name} · {}", author.name),
+            None => format!("#{name}"),
+        };
+        cx.emit(StateEvent::Alert(Alert {
+            channel,
+            message: link::message_id(message.id),
+            title,
+            body: alert_body(&message.text),
+        }));
+    }
+
     fn message_created(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
         if let Some(run_id) = &message.run_id
             && ends_its_run(message.kind)
@@ -2929,6 +2980,45 @@ impl AppState {
         cx.emit(StateEvent::MessageAppended);
         cx.notify();
     }
+}
+
+fn alerting_agent(message: &v3::Message) -> Option<Option<v3::AgentId>> {
+    let v3::Author { kind, agent_id } = &message.author;
+    let by_agent = match kind {
+        v3::AuthorKind::Agent => true,
+        v3::AuthorKind::System => true,
+        v3::AuthorKind::User => false,
+        v3::AuthorKind::Unknown => false,
+    };
+    if !by_agent {
+        return None;
+    }
+    let alerts = match message.kind {
+        v3::MessageKind::Answer => true,
+        v3::MessageKind::Post => true,
+        v3::MessageKind::Notice => agent_id.is_some_and(|agent| agent.0 != 0),
+        v3::MessageKind::A2a => false,
+        v3::MessageKind::User => false,
+        v3::MessageKind::Unknown => false,
+    };
+    if !alerts {
+        return None;
+    }
+    Some(*agent_id)
+}
+
+fn alert_body(text: &str) -> String {
+    let mut words = Vec::new();
+    for word in text.split_whitespace() {
+        words.push(word);
+    }
+    let line = words.join(" ");
+    if line.chars().count() <= ALERT_LIMIT {
+        return line;
+    }
+    let mut clipped: String = line.chars().take(ALERT_LIMIT).collect();
+    clipped.push('…');
+    clipped
 }
 
 async fn waveform_for(

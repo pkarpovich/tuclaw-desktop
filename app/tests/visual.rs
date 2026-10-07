@@ -220,12 +220,36 @@ fn marked_unread() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     Ok(vec![("sidebar-marked", shot)])
 }
 
-const SCENES: [(&str, Scene); 5] = [
+fn sidebar_activity() -> Result<Vec<(&'static str, RgbaImage)>, String> {
+    let mut stage = Stage::new();
+    stage.select("General");
+    let window = stage.open();
+    stage.mock.automation_posts(
+        SurfaceId(3),
+        AgentId(2),
+        "Nightly check: all lights are off.",
+    );
+    stage
+        .mock
+        .automation_posts(SurfaceId(3), AgentId(2), "Nightly check: doors are locked.");
+    stage.deliver();
+    let shot = stage.shot(window);
+    let (unread, replies, _marked) = stage.counts("Smart Home");
+    if (unread, replies) != (2, 0) {
+        return Err(format!(
+            "Smart Home after two automation posts: {unread} unread, {replies} replies, expected 2 and 0"
+        ));
+    }
+    Ok(vec![("sidebar-activity", shot)])
+}
+
+const SCENES: [(&str, Scene); 6] = [
     ("away from General", away_from_general),
     ("scrolled up", scrolled_up),
     ("automations", automations),
     ("marked unread", marked_unread),
     ("quoted reply", quoted_reply),
+    ("sidebar activity", sidebar_activity),
 ];
 
 fn baselines() -> PathBuf {

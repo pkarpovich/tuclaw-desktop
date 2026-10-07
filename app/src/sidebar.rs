@@ -1,5 +1,5 @@
 use gpui::{
-    Anchor, Context, Div, Entity, FontWeight, IntoElement, MouseButton, Render, SharedString,
+    Anchor, Context, Div, Entity, FontWeight, Hsla, IntoElement, MouseButton, Render, SharedString,
     Subscription, Window, div, prelude::*, px,
 };
 use gpui_kit::base::{Button, Popover};
@@ -141,7 +141,7 @@ impl Sidebar {
             working,
             highlight,
         } = row;
-        let attention = replies > 0 || marked;
+        let attention = unread > 0 || marked;
         let selector = format!("sidebar-row-{name}");
         let selector_name = name.clone();
         let element = row_frame(selector)
@@ -173,11 +173,13 @@ impl Sidebar {
             element.child(working_dot(&selector_name))
         };
         let element = if replies > 0 {
-            element.child(unread_badge(replies))
+            element.child(count_badge(replies, theme::accent()))
+        } else if marked && unread > 0 {
+            element.child(count_badge(unread, theme::accent()))
         } else if marked {
             element.child(marked_dot(&selector_name))
         } else if unread > 0 {
-            element.child(activity_dot(&selector_name))
+            element.child(activity_badge(&selector_name, unread))
         } else {
             element
         };
@@ -445,19 +447,15 @@ fn marked_dot(channel: &SharedString) -> impl IntoElement {
         .bg(theme::accent())
 }
 
-fn activity_dot(channel: &SharedString) -> impl IntoElement {
+fn activity_badge(channel: &SharedString, unread: usize) -> impl IntoElement {
     let selector = format!("sidebar-activity-{channel}");
     div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
-        .flex_none()
-        .size(px(8.))
-        .mr(px(5.))
-        .rounded_full()
-        .bg(theme::text_label())
+        .child(count_badge(unread, theme::activity()))
 }
 
-fn unread_badge(unread: usize) -> impl IntoElement {
+fn count_badge(unread: usize, color: Hsla) -> Div {
     div()
         .flex()
         .flex_none()
@@ -467,7 +465,7 @@ fn unread_badge(unread: usize) -> impl IntoElement {
         .h(px(19.))
         .px(px(6.))
         .rounded_full()
-        .bg(theme::accent())
+        .bg(color)
         .text_size(px(11.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme::chip_text())

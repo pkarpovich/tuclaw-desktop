@@ -88,6 +88,7 @@ impl Shell {
                 StateEvent::Mention(_) => {}
                 StateEvent::TasksLoaded => {}
                 StateEvent::ChannelsChanged => {}
+                StateEvent::Alert(_) => {}
             },
         );
         let built = state.clone();

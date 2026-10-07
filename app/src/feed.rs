@@ -127,6 +127,7 @@ impl Feed {
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
                 StateEvent::ChannelsChanged => {}
+                StateEvent::Alert(_) => {}
                 StateEvent::PictureOpened => {}
                 StateEvent::PicturesLoaded => {
                     feed.list.remeasure();

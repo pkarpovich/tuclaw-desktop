@@ -18,6 +18,7 @@ pub mod live;
 pub mod local;
 pub mod menu;
 pub mod message;
+pub mod notify;
 pub mod people;
 pub mod picture;
 pub mod pictures;
@@ -63,6 +64,7 @@ pub fn run() {
                 Startup::Ready(state) => {
                     let state = cx.new(|_| *state);
                     state.update(cx, |state, cx| state.start(cx));
+                    notify::attach(&state, notify::system(), cx);
                     cx.open_window(options, |window, cx| {
                         let shell = cx.new(|cx| Shell::new(state, window, cx));
                         cx.new(|cx| Root::new(shell, window, cx))

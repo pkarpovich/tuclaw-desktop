@@ -7721,6 +7721,7 @@ name = "tuclaw-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "block2 0.6.2",
  "futures",
  "gpui-kit",
  "gpui-pre",
@@ -7728,11 +7729,13 @@ dependencies = [
  "image",
  "jiff",
  "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
  "objc2-avf-audio",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "objc2-image-io",
+ "objc2-user-notifications",
  "opus-pure",
  "rodio",
  "serde_json",
