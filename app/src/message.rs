@@ -8,7 +8,9 @@ use gpui::{
     canvas, div, fill, img, point, prelude::*, px, relative, size,
 };
 use time::OffsetDateTime;
-use tuclaw_core::model::{Agent, AgentId, Author, Message, MessageId, RecordingId, Span, Voice};
+use tuclaw_core::model::{
+    Agent, AgentId, Author, Choice, Message, MessageId, RecordingId, Span, Suggestions, Voice,
+};
 use tuclaw_core::v3::PublicUrl;
 
 use gpui_kit::base::Avatar;
@@ -35,6 +37,7 @@ const TRANSCRIPT: &str = "Transcript";
 
 pub type OnToggle = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
+pub type OnReply = Rc<dyn Fn(MessageId, String, &mut Window, &mut App)>;
 
 pub struct Look {
     pub fold: Fold,
@@ -64,6 +67,7 @@ pub struct Actions {
     pub on_play: OnPlay,
     pub on_disclose: OnDisclose,
     pub on_picture: OnPicture,
+    pub on_reply: OnReply,
     pub card: CardActions,
 }
 
@@ -109,7 +113,7 @@ pub fn message_row(
         run,
         weight: _,
         reply_to: _,
-        suggestions: _,
+        suggestions,
     } = message;
     let Look {
         fold,
@@ -206,10 +210,67 @@ pub fn message_row(
             Segment::Quote(text) => column.child(quote_block(&key, text)),
         };
     }
+    if let Some(suggestions) = suggestions {
+        column = column.child(replies_block(*id, suggestions, actions.on_reply.clone()));
+    }
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
     row(selector, face, column, stripe)
+}
+
+fn replies_block(id: MessageId, suggestions: &Suggestions, on_reply: OnReply) -> Div {
+    let Suggestions { options, choice } = suggestions;
+    let MessageId(raw) = id;
+    let mut block = div().flex().flex_wrap().gap(px(6.)).pt(px(6.));
+    for (index, option) in options.iter().enumerate() {
+        let selector = format!("message-{raw}-reply-{index}");
+        let (state, chosen) = match choice {
+            Choice::Open => (ReplyState::Open, false),
+            Choice::Chosen(picked) => (ReplyState::Closed, picked == option),
+            Choice::Closed => (ReplyState::Closed, false),
+        };
+        let chip = button(selector)
+            .px(px(10.))
+            .py(px(4.))
+            .gap(px(5.))
+            .rounded(px(14.))
+            .border_1()
+            .text_size(px(12.5));
+        let chip = match (state, chosen) {
+            (ReplyState::Open, _) => {
+                let label = SharedString::from(option.clone());
+                let option = option.clone();
+                let on_reply = on_reply.clone();
+                chip.border_color(theme::border())
+                    .bg(theme::card())
+                    .text_color(theme::text_primary())
+                    .hover(|style| style.border_color(theme::accent()))
+                    .on_click(move |_event, window, cx| on_reply(id, option.clone(), window, cx))
+                    .child(label)
+            }
+            (ReplyState::Closed, true) => chip
+                .disabled(true)
+                .border_color(theme::accent())
+                .bg(theme::selection())
+                .text_color(theme::accent())
+                .child(icon(Glyph::Done, px(11.), theme::accent()))
+                .child(SharedString::from(option.clone())),
+            (ReplyState::Closed, false) => chip
+                .disabled(true)
+                .border_color(theme::hairline())
+                .text_color(theme::text_muted())
+                .child(SharedString::from(option.clone())),
+        };
+        block = block.child(chip);
+    }
+    block
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReplyState {
+    Open,
+    Closed,
 }
 
 fn quote_block(key: &str, text: String) -> impl IntoElement {

@@ -243,13 +243,46 @@ fn sidebar_activity() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     Ok(vec![("sidebar-activity", shot)])
 }
 
-const SCENES: [(&str, Scene); 6] = [
+fn suggested_replies() -> Result<Vec<(&'static str, RgbaImage)>, String> {
+    let mut stage = Stage::new();
+    stage.select("General");
+    let window = stage.open();
+    stage.mock.agent_suggests(
+        SurfaceId(1),
+        AgentId(1),
+        "Verity is on at 21:50 in Sala 5. Shall I book two seats?",
+        &["Book two", "Just one", "Skip"],
+    );
+    stage.deliver();
+    let open = stage.shot(window);
+    let mut answer = None;
+    stage.cx.update(|cx| {
+        for message in stage.state.read(cx).messages() {
+            if message.suggestions.is_some() {
+                answer = Some(message.id);
+            }
+        }
+    });
+    let Some(answer) = answer else {
+        return Err("the answer has no suggested replies".to_string());
+    };
+    stage.update(|state, cx| state.choose_reply(answer, "Just one".to_string(), cx));
+    stage.mock.pump_control();
+    stage.deliver();
+    Ok(vec![
+        ("general-replies-open", open),
+        ("general-replies-chosen", stage.shot(window)),
+    ])
+}
+
+const SCENES: [(&str, Scene); 7] = [
     ("away from General", away_from_general),
     ("scrolled up", scrolled_up),
     ("automations", automations),
     ("marked unread", marked_unread),
     ("quoted reply", quoted_reply),
     ("sidebar activity", sidebar_activity),
+    ("suggested replies", suggested_replies),
 ];
 
 fn baselines() -> PathBuf {

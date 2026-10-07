@@ -19,7 +19,9 @@ use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::local;
-use crate::message::{Actions, Fold, Look, OnPicture, OnPlay, OnToggle, Stripe, message_row};
+use crate::message::{
+    Actions, Fold, Look, OnPicture, OnPlay, OnReply, OnToggle, Stripe, message_row,
+};
 use crate::people::People;
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
@@ -397,11 +399,16 @@ impl Feed {
         let on_picture: OnPicture = Rc::new(move |viewed, _window, cx| {
             viewer.update(cx, |state, cx| state.view_picture(viewed, cx));
         });
+        let chooser = self.state.clone();
+        let on_reply: OnReply = Rc::new(move |message, option, _window, cx| {
+            chooser.update(cx, |state, cx| state.choose_reply(message, option, cx));
+        });
         let actions = Actions {
             on_toggle,
             on_play,
             on_disclose,
             on_picture,
+            on_reply,
             card: card::actions(&self.state),
         };
         let stopper = self.state.clone();
@@ -706,6 +713,9 @@ fn fresh_text(fresh: Fresh) -> String {
 }
 
 fn question_of(state: &AppState, message: &Message) -> Option<OffsetDateTime> {
+    if message.weight == Weight::Mine {
+        return None;
+    }
     let asked = message.reply_to?;
     let mut previous = None;
     for candidate in state.messages() {
@@ -1458,6 +1468,86 @@ mod tests {
             }
             found.expect("the surface has an agent message")
         })
+    }
+
+    fn suggested(
+        mock: &MockTransport,
+        state: &Entity<AppState>,
+        cx: &mut VisualTestContext,
+    ) -> i64 {
+        mock.agent_suggests(
+            tuclaw_core::v3::SurfaceId(1),
+            tuclaw_core::v3::AgentId(1),
+            "Book the 21:50 show?",
+            &["Do it", "Skip"],
+        );
+        while mock.step() {}
+        cx.run_until_parked();
+        last_agent_message(state, cx)
+    }
+
+    fn choice_of(
+        state: &Entity<AppState>,
+        cx: &mut VisualTestContext,
+        raw: i64,
+    ) -> Option<tuclaw_core::model::Choice> {
+        state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.id == tuclaw_core::model::MessageId(raw) {
+                    found = message.suggestions.as_ref().map(|s| s.choice.clone());
+                }
+            }
+            found
+        })
+    }
+
+    #[gpui::test]
+    fn a_tapped_reply_is_posted_as_a_reply_and_marked_chosen(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let raw = suggested(&mock, &state, cx);
+        let second: &'static str = Box::leak(format!("message-{raw}-reply-1").into_boxed_str());
+        assert!(cx.debug_bounds(second).is_some());
+        click(cx, format!("message-{raw}-reply-0"));
+        assert_eq!(
+            choice_of(&state, cx, raw),
+            Some(tuclaw_core::model::Choice::Chosen("Do it".into()))
+        );
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let mut replies = Vec::new();
+            for message in state.messages() {
+                if message.reply_to == Some(tuclaw_core::model::MessageId(raw)) {
+                    replies.push(message.id);
+                }
+            }
+            assert_eq!(replies.len(), 1);
+            let tuclaw_core::model::MessageId(id) = replies[0];
+            assert!(id > 0, "the local copy was replaced by the posted message");
+        });
+        assert_eq!(
+            choice_of(&state, cx, raw),
+            Some(tuclaw_core::model::Choice::Chosen("Do it".into()))
+        );
+    }
+
+    #[gpui::test]
+    fn typed_text_closes_open_replies(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let raw = suggested(&mock, &state, cx);
+        state.update(cx, |state, cx| {
+            state.send("Let me think".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        assert_eq!(
+            choice_of(&state, cx, raw),
+            Some(tuclaw_core::model::Choice::Closed)
+        );
     }
 
     fn click(cx: &mut VisualTestContext, selector: String) {

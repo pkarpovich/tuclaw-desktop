@@ -7,8 +7,8 @@ use futures::channel::mpsc::UnboundedSender;
 use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
 use tuclaw_core::model::{
-    Agent, AgentId, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span,
-    Voice, Weight,
+    Agent, AgentId, Author, Channel, ChannelId, Choice, Message, MessageId, Picture, RecordingId,
+    Span, Voice, Weight,
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
@@ -139,6 +139,13 @@ struct Playback {
 struct Pending {
     client_message_id: ClientMessageId,
     local: MessageId,
+}
+
+struct Tapped {
+    answer: MessageId,
+    option: String,
+    client_message_id: ClientMessageId,
+    posted: Result<v3::Posted, v3::ApiError>,
 }
 
 #[derive(Default)]
@@ -2425,6 +2432,143 @@ impl AppState {
         Ok(())
     }
 
+    pub fn choose_reply(&mut self, answer: MessageId, option: String, cx: &mut Context<Self>) {
+        if self.selected.is_none() {
+            return;
+        }
+        let mut offered = false;
+        for message in &mut self.messages {
+            if message.id != answer {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            if suggestions.choice == Choice::Open && suggestions.options.contains(&option) {
+                suggestions.choice = Choice::Chosen(option.clone());
+                offered = true;
+            }
+        }
+        if !offered {
+            return;
+        }
+        let client_message_id = ClientMessageId::random();
+        self.next_local -= 1;
+        let local = MessageId(self.next_local);
+        self.messages.push(Message {
+            id: local,
+            author: Author::User,
+            body: vec![Span::Text(option.clone())],
+            sent_at: crate::local::now(),
+            voice: None,
+            run: None,
+            weight: Weight::Mine,
+            reply_to: Some(answer),
+            suggestions: None,
+        });
+        self.pending.push(Pending {
+            client_message_id: client_message_id.clone(),
+            local,
+        });
+        let tap = v3::ReplyPost {
+            option: option.clone(),
+            client_message_id: client_message_id.clone(),
+        };
+        let request = self.client.reply(link::v3_message_id(answer), &tap);
+        cx.spawn(async move |this, cx| {
+            let posted = request.await;
+            this.update(cx, |state, cx| {
+                state.tapped(
+                    Tapped {
+                        answer,
+                        option,
+                        client_message_id,
+                        posted,
+                    },
+                    cx,
+                )
+            })
+            .ok();
+        })
+        .detach();
+        cx.emit(StateEvent::MessageAppended);
+        cx.notify();
+    }
+
+    fn tapped(&mut self, tapped: Tapped, cx: &mut Context<Self>) {
+        let Tapped {
+            answer,
+            option,
+            client_message_id,
+            posted,
+        } = tapped;
+        let choice = match posted {
+            Ok(posted) => {
+                self.posted(client_message_id, Ok(posted), option, cx);
+                return;
+            }
+            Err(v3::ApiError::Conflict) => Choice::Closed,
+            Err(_error) => Choice::Open,
+        };
+        let mut local = None;
+        for (position, pending) in self.pending.iter().enumerate() {
+            if pending.client_message_id == client_message_id {
+                local = Some((position, pending.local));
+            }
+        }
+        if let Some((position, id)) = local {
+            self.pending.remove(position);
+            self.messages.retain(|message| message.id != id);
+        }
+        for message in &mut self.messages {
+            if message.id != answer {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            if suggestions.choice == Choice::Chosen(option.clone()) {
+                suggestions.choice = choice.clone();
+            }
+        }
+        if choice == Choice::Open {
+            cx.emit(StateEvent::SendFailed(option));
+        }
+        cx.notify();
+    }
+
+    fn close_replies(&mut self, written: &v3::Message) {
+        let closes = match written.author.kind {
+            v3::AuthorKind::User => true,
+            v3::AuthorKind::Agent => false,
+            v3::AuthorKind::System => false,
+            v3::AuthorKind::Unknown => false,
+        };
+        if !closes {
+            return;
+        }
+        let id = link::message_id(written.id);
+        let replied = written.reply_to_message_id.map(link::message_id);
+        for message in &mut self.messages {
+            let MessageId(raw) = message.id;
+            if raw <= 0 || message.id >= id {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            if suggestions.choice != Choice::Open {
+                continue;
+            }
+            let picked = replied == Some(message.id) && suggestions.options.contains(&written.text);
+            suggestions.choice = if picked {
+                Choice::Chosen(written.text.clone())
+            } else {
+                Choice::Closed
+            };
+        }
+    }
+
     pub fn interrupt(&mut self, run: &RunId, cx: &mut Context<Self>) {
         let Some(live) = self.runs.get_mut(run) else {
             return;
@@ -2954,6 +3098,7 @@ impl AppState {
         if !shown {
             return;
         }
+        self.close_replies(message);
         let mapped = link::message(message);
         let mut pending = None;
         if let Some(id) = &message.client_message_id {
