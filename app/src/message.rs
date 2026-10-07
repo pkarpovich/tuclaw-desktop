@@ -23,7 +23,7 @@ use crate::link;
 use crate::local::clock;
 use crate::people::People;
 use crate::pictures::{MAX_WIDTH, Remote, Shelf, Viewed, fit};
-use crate::rich::{self, Ink, Parts, Picture, Segment};
+use crate::rich::{self, Ink, Known, Parts, Picture, Segment};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
 use crate::theme;
@@ -37,7 +37,13 @@ const TRANSCRIPT: &str = "Transcript";
 
 pub type OnToggle = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
 pub type OnPlay = Rc<dyn Fn(MessageId, &mut Window, &mut App)>;
-pub type OnReply = Rc<dyn Fn(MessageId, String, &mut Window, &mut App)>;
+pub type OnChoose = Rc<dyn Fn(MessageId, String, &mut Window, &mut App)>;
+
+pub struct Quote {
+    pub target: MessageId,
+    pub author: SharedString,
+    pub text: String,
+}
 
 pub struct Look {
     pub fold: Fold,
@@ -46,7 +52,7 @@ pub struct Look {
     pub run: Option<Pane>,
     pub trigger: Option<AnyElement>,
     pub stripe: Stripe,
-    pub question: Option<OffsetDateTime>,
+    pub quote: Option<Quote>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +73,9 @@ pub struct Actions {
     pub on_play: OnPlay,
     pub on_disclose: OnDisclose,
     pub on_picture: OnPicture,
-    pub on_reply: OnReply,
+    pub on_choose: OnChoose,
+    pub on_reply: OnToggle,
+    pub on_jump: OnToggle,
     pub card: CardActions,
 }
 
@@ -122,7 +130,7 @@ pub fn message_row(
         run: pane,
         trigger,
         stripe,
-        question,
+        quote,
     } = look;
     let writer = writer(*author, people);
     let MessageId(raw) = *id;
@@ -154,20 +162,8 @@ pub fn message_row(
         .min_w(px(0.))
         .gap(px(2.))
         .child(line);
-    if let Some(asked) = question {
-        column = column.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(5.))
-                .text_size(px(11.5))
-                .text_color(theme::text_muted())
-                .child(icon(Glyph::Back, px(11.), theme::text_muted()))
-                .child(SharedString::from(format!(
-                    "to your question · {}",
-                    crate::local::clock(asked)
-                ))),
-        );
+    if let Some(quote) = quote {
+        column = column.child(quote_link(*id, quote, actions.on_jump.clone()));
     }
     if let Some(voice) = voice {
         let controls = Controls {
@@ -176,7 +172,11 @@ pub fn message_row(
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
-        return row(selector, face, column, stripe);
+        return with_reply(
+            row(selector, face, column, stripe),
+            *id,
+            actions.on_reply.clone(),
+        );
     }
     if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
@@ -199,7 +199,11 @@ pub fn message_row(
                         move || key
                     })
                     .text_size(px(14.5))
-                    .child(rich::markdown(SharedString::from(key), text, Ink::Body)),
+                    .child(rich::markdown(
+                        SharedString::from(key),
+                        rich::link_mentions(&text, &known_agents(people)),
+                        Ink::Body,
+                    )),
             ),
             Segment::Picture(picture) => column.child(picture_block(
                 &key,
@@ -211,15 +215,106 @@ pub fn message_row(
         };
     }
     if let Some(suggestions) = suggestions {
-        column = column.child(replies_block(*id, suggestions, actions.on_reply.clone()));
+        column = column.child(replies_block(*id, suggestions, actions.on_choose.clone()));
     }
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
-    row(selector, face, column, stripe)
+    with_reply(
+        row(selector, face, column, stripe),
+        *id,
+        actions.on_reply.clone(),
+    )
 }
 
-fn replies_block(id: MessageId, suggestions: &Suggestions, on_reply: OnReply) -> Div {
+fn known_agents(people: &People) -> Vec<Known> {
+    let mut known = Vec::new();
+    for agent in people.directory {
+        let tuclaw_core::v3::AgentId(raw) = agent.id;
+        known.push(Known {
+            handle: agent.ident.clone(),
+            agent: raw,
+        });
+        if let Some(bot) = &agent.bot_username {
+            known.push(Known {
+                handle: bot.clone(),
+                agent: raw,
+            });
+        }
+        if !agent.name.contains(char::is_whitespace) {
+            known.push(Known {
+                handle: agent.name.clone(),
+                agent: raw,
+            });
+        }
+    }
+    known
+}
+
+fn quote_link(id: MessageId, quote: Quote, on_jump: OnToggle) -> impl IntoElement {
+    let MessageId(raw) = id;
+    let Quote {
+        target,
+        author,
+        text,
+    } = quote;
+    row_button(format!("message-{raw}-quote-link"))
+        .accessibility_label("Show the quoted message")
+        .gap(px(5.))
+        .max_w_full()
+        .text_size(px(11.5))
+        .text_color(theme::text_muted())
+        .hover(|style| style.text_color(theme::text_secondary()))
+        .on_click(move |_event, window, cx| on_jump(target, window, cx))
+        .child(icon(Glyph::Back, px(11.), theme::text_muted()))
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(author),
+        )
+        .child(
+            div()
+                .min_w(px(0.))
+                .truncate()
+                .child(SharedString::from(text)),
+        )
+}
+
+fn with_reply(row: Stateful<Div>, id: MessageId, on_reply: OnToggle) -> Stateful<Div> {
+    let MessageId(raw) = id;
+    if raw <= 0 {
+        return row;
+    }
+    let group = SharedString::from(format!("message-{raw}-row"));
+    row.group(group.clone()).relative().child(
+        div()
+            .absolute()
+            .top(px(6.))
+            .right(px(20.))
+            .opacity(0.)
+            .group_hover(group, |style| style.opacity(1.))
+            .child(
+                button(format!("message-{raw}-reply"))
+                    .accessibility_label("Reply to this message")
+                    .gap(px(5.))
+                    .px(px(8.))
+                    .py(px(3.))
+                    .rounded(px(7.))
+                    .border_1()
+                    .border_color(theme::border())
+                    .bg(theme::card())
+                    .text_size(px(12.))
+                    .text_color(theme::text_secondary())
+                    .hover(|style| style.text_color(theme::text_primary()))
+                    .on_click(move |_event, window, cx| on_reply(id, window, cx))
+                    .child(icon(Glyph::Back, px(12.), theme::text_secondary()))
+                    .child("Reply"),
+            ),
+    )
+}
+
+fn replies_block(id: MessageId, suggestions: &Suggestions, on_reply: OnChoose) -> Div {
     let Suggestions { options, choice } = suggestions;
     let MessageId(raw) = id;
     let mut block = div().flex().flex_wrap().gap(px(6.)).pt(px(6.));

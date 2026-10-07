@@ -1258,7 +1258,7 @@ impl World {
                 };
                 let post: Post = serde_json::from_value(body)
                     .map_err(|error| ApiError::Invalid(error.to_string()))?;
-                to_json(&self.accept(surface, post, Vec::new(), None)?)
+                to_json(&self.accept(surface, post, Vec::new())?)
             }
             ["messages", id, "reply"] => {
                 let message = parse_message(id)?;
@@ -1316,19 +1316,27 @@ impl World {
             });
         }
         let mut addressed_agent_id = None;
+        let mut reply_to_message_id = None;
         for pair in query.split('&') {
-            let Some(("addressed_agent_id", agent)) = pair.split_once('=') else {
-                continue;
-            };
-            addressed_agent_id = Some(parse_agent(agent)?);
+            match pair.split_once('=') {
+                Some(("addressed_agent_id", agent)) => {
+                    addressed_agent_id = Some(parse_agent(agent)?);
+                }
+                Some(("reply_to_message_id", message)) => {
+                    reply_to_message_id = Some(parse_message(message)?);
+                }
+                Some(_) => {}
+                None => {}
+            }
         }
         let post = Post {
             text: format!("[Voice message]\n{VOICE_TRANSCRIPT}"),
             addressed_agent_id,
             client_message_id,
+            reply_to_message_id,
         };
         if self.posted.contains_key(&post.client_message_id) {
-            return to_json(&self.accept(surface, post, Vec::new(), None)?);
+            return to_json(&self.accept(surface, post, Vec::new())?);
         }
         let id = AttachmentId(VOICE_ATTACHMENTS + i64::try_from(self.media.len()).unwrap_or(0));
         let attachment = Attachment {
@@ -1339,7 +1347,7 @@ impl World {
             duration_ms: None,
         };
         self.media.insert(id, Media::Owned(bytes));
-        to_json(&self.accept(surface, post, vec![attachment], None)?)
+        to_json(&self.accept(surface, post, vec![attachment])?)
     }
 
     fn accept(
@@ -1347,7 +1355,6 @@ impl World {
         surface: SurfaceId,
         post: Post,
         attachments: Vec<Attachment>,
-        reply_to: Option<MessageId>,
     ) -> Result<Posted, ApiError> {
         if let Some((first, posted)) = self.posted.get(&post.client_message_id) {
             if *first != surface {
@@ -1358,6 +1365,20 @@ impl World {
         let Some(found) = self.surface(surface) else {
             return Err(ApiError::NotFound);
         };
+        let reply_to = post.reply_to_message_id;
+        if let Some(quoted) = reply_to {
+            let mut here = false;
+            for message in &self.messages {
+                if message.id == quoted && message.surface_id == surface {
+                    here = true;
+                }
+            }
+            if !here {
+                return Err(ApiError::Invalid(
+                    "reply_to_message_id is not a message of this surface".into(),
+                ));
+            }
+        }
         let mut wired = None;
         if let Some(addressed) = post.addressed_agent_id {
             for wiring in &found.agents {
@@ -1451,8 +1472,9 @@ impl World {
             text: option,
             addressed_agent_id: answer.author.agent_id,
             client_message_id,
+            reply_to_message_id: Some(message),
         };
-        self.accept(answer.surface_id, post, Vec::new(), Some(message))
+        self.accept(answer.surface_id, post, Vec::new())
     }
 
     fn replies_now(&self, message: &Message) -> Option<SuggestedReplies> {
@@ -3168,6 +3190,7 @@ mod tests {
             text: text.into(),
             addressed_agent_id: addressed,
             client_message_id: ClientMessageId::random(),
+            reply_to_message_id: None,
         }
     }
 
@@ -3186,6 +3209,7 @@ mod tests {
             bytes: bytes.to_vec(),
             addressed_agent_id: None,
             client_message_id: client_message_id.clone(),
+            reply_to_message_id: None,
         }
     }
 
@@ -3574,6 +3598,29 @@ mod tests {
             Err(_) => false,
             Ok(_) => false,
         }
+    }
+
+    #[test]
+    fn a_post_can_reply_to_a_message_of_its_own_surface_only() {
+        let (_mock, client) = stepped();
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let quoted = page.messages.first().expect("a message").id;
+        let mut reply = post("About that", None);
+        reply.reply_to_message_id = Some(quoted);
+        let posted = block_on(client.post(SurfaceId(1), &reply)).expect("posted");
+        let page = block_on(client.messages(SurfaceId(1), 200)).expect("page");
+        let mut stored = None;
+        for message in page.messages {
+            if message.id == posted.message_id {
+                stored = Some(message.reply_to_message_id);
+            }
+        }
+        assert_eq!(stored, Some(Some(quoted)));
+        let mut elsewhere = post("About that", None);
+        elsewhere.reply_to_message_id = Some(quoted);
+        assert!(matches_invalid(block_on(
+            client.post(SurfaceId(3), &elsewhere)
+        )));
     }
 
     #[test]

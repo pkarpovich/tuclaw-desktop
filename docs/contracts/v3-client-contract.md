@@ -436,3 +436,10 @@ Agreed 2026-10-07 with the desktop. An agent can attach up to three one-tap repl
 - An answer whose run ended `[SILENT]`, interrupted or with no visible answer has no message, so its options are dropped. A scheduled run's answer carries the options its run set. A run that restarts its answer (a crash retry) drops the options its earlier attempt set.
 - Telegram shows no buttons; the answer is posted there as before.
 - Fixtures: `testdata/v3/messages_page.json` (one answer with open options) and every message fixture gains `"suggested_replies": null`.
+
+## v3.13 additions: replies from the client
+
+Agreed 2026-10-08 after the desktop shipped without a way to reply to a message. Addressing an agent stays `addressed_agent_id`, which the client sets from an @ autocomplete; the server does not parse mentions out of the text.
+
+- **`POST /api/v3/surfaces/{id}/messages`** takes an optional `reply_to_message_id`. The message it names must be on the same surface; an unknown message, one on another surface, or an id that is not positive is `400`, with nothing stored. The stored message carries it as its `reply_to_message_id`, and the agent's prompt names it (`[reply to msg:N]`).
+- **`POST /api/v3/surfaces/{id}/voice`** takes the same reply-to as a query parameter, `?reply_to_message_id=N`, beside `addressed_agent_id`. A malformed one is `400` before the upload is read, and one naming a message of another surface is `400` after transcription, with nothing stored.

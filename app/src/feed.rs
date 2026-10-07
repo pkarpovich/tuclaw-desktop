@@ -20,15 +20,17 @@ use crate::icon::{Glyph, icon};
 use crate::live::{LiveLook, OnStop, RunView, owner, run_card, run_view};
 use crate::local;
 use crate::message::{
-    Actions, Fold, Look, OnPicture, OnPlay, OnReply, OnToggle, Stripe, message_row,
+    Actions, Fold, Look, OnChoose, OnPicture, OnPlay, OnToggle, Quote, Stripe, message_row,
 };
 use crate::people::People;
+use crate::plain;
 use crate::runlog::{self, OnDisclose};
 use crate::state::{AppState, History, StateEvent};
 
 const PREFETCH: usize = 3;
 const QUIET_GAP: time::Duration = time::Duration::hours(1);
 const SEEN_AFTER: std::time::Duration = std::time::Duration::from_secs(2);
+const QUOTE_LIMIT: usize = 80;
 use crate::theme;
 
 pub struct Feed {
@@ -122,14 +124,18 @@ impl Feed {
                     feed.composer
                         .update(cx, |composer, cx| composer.restore(text, window, cx));
                 }
-                StateEvent::Mention(text) => {
-                    let text = text.clone();
+                StateEvent::Mention(mention) => {
+                    let mention = mention.clone();
                     feed.composer
-                        .update(cx, |composer, cx| composer.insert(&text, window, cx));
+                        .update(cx, |composer, cx| composer.mention(mention, window, cx));
                 }
                 StateEvent::TasksLoaded => feed.resync(Resync::Labels, cx),
                 StateEvent::ChannelsChanged => {}
                 StateEvent::Alert(_) => {}
+                StateEvent::ReplyStarted => {
+                    let focus = feed.composer.read(cx).focus_handle(cx);
+                    window.focus(&focus, cx);
+                }
                 StateEvent::PictureOpened => {}
                 StateEvent::PicturesLoaded => {
                     feed.list.remeasure();
@@ -172,11 +178,13 @@ impl Feed {
         let composer = cx.new(|cx| {
             Composer::new(
                 placeholder,
-                Box::new(move |body, cx| sender.update(cx, |state, cx| state.send(body, cx))),
+                Box::new(move |draft, cx| {
+                    sender.update(cx, |state, cx| state.send_draft(draft, cx))
+                }),
                 window,
                 cx,
             )
-            .with_voice(state.clone(), cx)
+            .with_state(state.clone(), cx)
         });
         state.update(cx, |state, cx| state.read_to_newest(cx));
         Feed {
@@ -190,6 +198,18 @@ impl Feed {
             _activation: activation,
             _seen: None,
             painted: Rc::new(RefCell::new(HashMap::new())),
+        }
+    }
+
+    fn reveal(&mut self, target: MessageId) {
+        for (index, item) in self.items.iter().enumerate() {
+            let Item::Message(message, _trigger) = item else {
+                continue;
+            };
+            if message.id == target {
+                self.list.scroll_to_reveal_item(index);
+                return;
+            }
         }
     }
 
@@ -375,7 +395,7 @@ impl Feed {
         cx.notify();
     }
 
-    fn body(&self) -> AnyElement {
+    fn body(&self, cx: &Context<Self>) -> AnyElement {
         if self.items.is_empty() {
             return empty_state().into_any_element();
         }
@@ -400,15 +420,25 @@ impl Feed {
             viewer.update(cx, |state, cx| state.view_picture(viewed, cx));
         });
         let chooser = self.state.clone();
-        let on_reply: OnReply = Rc::new(move |message, option, _window, cx| {
+        let on_choose: OnChoose = Rc::new(move |message, option, _window, cx| {
             chooser.update(cx, |state, cx| state.choose_reply(message, option, cx));
+        });
+        let replier = self.state.clone();
+        let on_reply: OnToggle = Rc::new(move |message, _window, cx| {
+            replier.update(cx, |state, cx| state.start_reply(message, cx));
+        });
+        let jumper = cx.entity().downgrade();
+        let on_jump: OnToggle = Rc::new(move |message, _window, cx| {
+            jumper.update(cx, |feed, _cx| feed.reveal(message)).ok();
         });
         let actions = Actions {
             on_toggle,
             on_play,
             on_disclose,
             on_picture,
+            on_choose,
             on_reply,
+            on_jump,
             card: card::actions(&self.state),
         };
         let stopper = self.state.clone();
@@ -459,7 +489,7 @@ impl Feed {
                     };
                     let look = Look {
                         stripe: stripe_of(state, message),
-                        question: question_of(state, message),
+                        quote: quote_of(state, message),
                         fold,
                         player: state.player(message.id),
                         waveform,
@@ -549,7 +579,7 @@ impl Render for Feed {
                     .flex_col()
                     .flex_1()
                     .min_h(px(0.))
-                    .child(self.body())
+                    .child(self.body(cx))
                     .children(self.pill(cx)),
             )
             .child(self.composer.clone())
@@ -722,31 +752,44 @@ fn fresh_text(fresh: Fresh) -> String {
     format!("New · {}", parts.join(", "))
 }
 
-fn question_of(state: &AppState, message: &Message) -> Option<OffsetDateTime> {
-    if message.weight == Weight::Mine {
-        return None;
-    }
-    let asked = message.reply_to?;
+fn quote_of(state: &AppState, message: &Message) -> Option<Quote> {
+    let target = message.reply_to?;
     let mut previous = None;
+    let mut quoted = None;
     for candidate in state.messages() {
         if candidate.id == message.id {
             break;
         }
-        if candidate.weight != Weight::Mine {
-            previous = Some(candidate.id);
+        previous = Some(candidate.id);
+        if candidate.id == target {
+            quoted = Some(candidate);
         }
     }
-    let mut at = None;
-    for candidate in state.messages() {
-        if candidate.id == asked {
-            at = Some(candidate.sent_at);
-        }
-    }
-    let at = at?;
-    if previous.is_none_or(|previous| previous < asked) {
+    if previous == Some(target) {
         return None;
     }
-    Some(at)
+    let Some(quoted) = quoted else {
+        return Some(Quote {
+            target,
+            author: SharedString::from("An earlier message"),
+            text: String::new(),
+        });
+    };
+    let writer = crate::message::writer(quoted.author, &state.people());
+    Some(Quote {
+        target,
+        author: writer.name,
+        text: clip_quote(&plain::plain_text(&crate::message::source(&quoted.body))),
+    })
+}
+
+fn clip_quote(text: &str) -> String {
+    if text.chars().count() <= QUOTE_LIMIT {
+        return text.to_string();
+    }
+    let mut clipped: String = text.chars().take(QUOTE_LIMIT).collect();
+    clipped.push('…');
+    clipped
 }
 
 fn stripe_of(state: &AppState, message: &Message) -> Stripe {
@@ -2036,6 +2079,49 @@ mod tests {
     enum Wanted {
         Run(tuclaw_core::v3::RunId),
         Text(String),
+    }
+
+    #[gpui::test]
+    fn the_reply_action_quotes_a_message_and_the_reply_links_back(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        let quoted = state.read_with(cx, |state, _cx| {
+            let messages = state.messages();
+            let tuclaw_core::model::MessageId(raw) = messages[messages.len() - 3].id;
+            raw
+        });
+        click(cx, format!("message-{quoted}-reply"));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                state.replying().map(|message| message.id),
+                Some(tuclaw_core::model::MessageId(quoted))
+            )
+        });
+        assert!(cx.debug_bounds("composer-reply").is_some());
+        state.update(cx, |state, cx| {
+            state
+                .send("About the first one".to_string(), cx)
+                .expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        while mock.step() {}
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("composer-reply").is_none());
+        let reply = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for message in state.messages() {
+                if message.reply_to == Some(tuclaw_core::model::MessageId(quoted)) {
+                    let tuclaw_core::model::MessageId(raw) = message.id;
+                    found = Some(raw);
+                }
+            }
+            found.expect("the reply is in the feed")
+        });
+        let link: &'static str = Box::leak(format!("message-{reply}-quote-link").into_boxed_str());
+        assert!(
+            cx.debug_bounds(link).is_some(),
+            "the reply shows what it quotes"
+        );
     }
 
     #[gpui::test]

@@ -275,7 +275,43 @@ fn suggested_replies() -> Result<Vec<(&'static str, RgbaImage)>, String> {
     ])
 }
 
-const SCENES: [(&str, Scene); 7] = [
+fn reply_and_mention() -> Result<Vec<(&'static str, RgbaImage)>, String> {
+    let mut stage = Stage::new();
+    stage.select("General");
+    let window = stage.open();
+    stage.mock.agent_posts(
+        SurfaceId(1),
+        AgentId(1),
+        "I asked @magnet_feed for the weekly list; it will answer here.",
+    );
+    stage.deliver();
+    let mut quoted = None;
+    stage.cx.update(|cx| {
+        let messages = stage.state.read(cx).messages();
+        quoted = messages
+            .get(messages.len().saturating_sub(3))
+            .map(|message| message.id);
+    });
+    let Some(quoted) = quoted else {
+        return Err("General has no messages".to_string());
+    };
+    stage.update(|state, cx| state.start_reply(quoted, cx));
+    let replying = stage.shot(window);
+    stage.update(|state, cx| {
+        state
+            .send("And the morning summary?".to_string(), cx)
+            .map_err(|error| error.to_string())
+            .ok();
+    });
+    stage.mock.pump_control();
+    stage.deliver();
+    Ok(vec![
+        ("general-replying", replying),
+        ("general-reply-quote", stage.shot(window)),
+    ])
+}
+
+const SCENES: [(&str, Scene); 8] = [
     ("away from General", away_from_general),
     ("scrolled up", scrolled_up),
     ("automations", automations),
@@ -283,6 +319,7 @@ const SCENES: [(&str, Scene); 7] = [
     ("quoted reply", quoted_reply),
     ("sidebar activity", sidebar_activity),
     ("suggested replies", suggested_replies),
+    ("reply and mention", reply_and_mention),
 ];
 
 fn baselines() -> PathBuf {

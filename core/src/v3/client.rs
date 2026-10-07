@@ -151,10 +151,19 @@ impl Client {
             bytes,
             addressed_agent_id,
             client_message_id,
+            reply_to_message_id,
         } = voice;
-        let path = match addressed_agent_id {
-            Some(AgentId(agent)) => format!("/surfaces/{surface}/voice?addressed_agent_id={agent}"),
-            None => format!("/surfaces/{surface}/voice"),
+        let mut query = Vec::new();
+        if let Some(AgentId(agent)) = addressed_agent_id {
+            query.push(format!("addressed_agent_id={agent}"));
+        }
+        if let Some(MessageId(message)) = reply_to_message_id {
+            query.push(format!("reply_to_message_id={message}"));
+        }
+        let path = if query.is_empty() {
+            format!("/surfaces/{surface}/voice")
+        } else {
+            format!("/surfaces/{surface}/voice?{}", query.join("&"))
         };
         let request = self.transport.send(Request {
             method: Method::Post,

@@ -1057,9 +1057,11 @@ pub struct FireMark {
 ///     text: "hello".into(),
 ///     addressed_agent_id: None,
 ///     client_message_id: ClientMessageId("8b0c".into()),
+///     reply_to_message_id: None,
 /// };
 /// let json = serde_json::to_value(&post).unwrap();
 /// assert_eq!(json["addressed_agent_id"], serde_json::Value::Null);
+/// assert!(json.get("reply_to_message_id").is_none());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Post {
@@ -1069,6 +1071,9 @@ pub struct Post {
     pub addressed_agent_id: Option<AgentId>,
     /// The idempotency key.
     pub client_message_id: ClientMessageId,
+    /// The message this one replies to; it must be on the same surface. Sent only when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_to_message_id: Option<MessageId>,
 }
 
 /// The audio containers a voice message can be uploaded in.
@@ -1109,6 +1114,8 @@ pub struct VoicePost {
     pub addressed_agent_id: Option<AgentId>,
     /// The idempotency key.
     pub client_message_id: ClientMessageId,
+    /// The message this one replies to, on the same surface (v3.13).
+    pub reply_to_message_id: Option<MessageId>,
 }
 
 /// The `202` answer to a post.
