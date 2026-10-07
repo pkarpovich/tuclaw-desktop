@@ -24,6 +24,7 @@ use crate::notify::Alert;
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
 use crate::pictures::{self, Remote, Shelf, Viewed};
+use crate::plain;
 use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
@@ -3008,11 +3009,7 @@ fn alerting_agent(message: &v3::Message) -> Option<Option<v3::AgentId>> {
 }
 
 fn alert_body(text: &str) -> String {
-    let mut words = Vec::new();
-    for word in text.split_whitespace() {
-        words.push(word);
-    }
-    let line = words.join(" ");
+    let line = plain::plain_text(text);
     if line.chars().count() <= ALERT_LIMIT {
         return line;
     }
