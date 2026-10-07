@@ -102,6 +102,7 @@ impl Session {
             text: text.into(),
             addressed_agent_id: None,
             client_message_id: client_message_id.clone(),
+            reply_to_message_id: None,
         };
         block_on(self.client.post(surface, &post)).expect("posted");
         client_message_id

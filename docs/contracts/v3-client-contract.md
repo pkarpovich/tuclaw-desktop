@@ -351,3 +351,95 @@ Agreed 2026-10-05 with the desktop (Pavel's pick: the sidebar number counts only
 
   It counts the messages past the cursor written by an agent (`author.kind = agent`) in a run the user's own message started (`origin = user`), of kind `answer` or `post`. The posts count because a run may reply partly or wholly through them. a2a handoffs, notices and scheduled or a2a-origin messages do not count.
 - **`reply_to_message_id` on an answer** is now the user message the run answered: the message whose input the run claimed first. It stays `null` for scheduled, a2a-origin and task-notification answers. A migration backfills the existing answers whose run's input is still kept (inputs are pruned after 30 days). Telegram is unaffected; it still replies only for a2a handoffs.
+
+## v3.10 additions: one surface's events as server-sent events
+
+Agreed 2026-10-07 with the watch app. watchOS allows a WebSocket only to an app that is streaming audio or is in a VoIP call (Apple TN3135), so the watch cannot use `/api/v3/events`. Plain HTTP streaming works.
+
+- **`GET /api/v3/surfaces/{id}/events?since=<seq>`**, `text/event-stream`. It carries the same frames as the socket, scoped to one surface.
+  - Each frame is `event: <type>`, then `id: <seq>` on persisted frames only, then `data: <the same envelope JSON as the socket>`, then a blank line.
+  - `since` is the last applied seq, as on the socket. A reconnect may send `Last-Event-ID` instead of `since`.
+- **On connect**, frames arrive in this order:
+  1. `hello{head, floor, ...}`.
+  2. `gap{floor}` under the socket's rule: `since + 1 < floor` or `since > head`. After a gap, the live part starts from the head.
+  3. With `since`, the replay of this surface's persisted events in `(since, head]`.
+  4. One `run.snapshot` per running run on this surface.
+  5. Live frames.
+- **Only this surface's persisted events** are sent, so `groups.changed` and other surfaces' events are absent.
+- **The surface counts as focused** from the start, so `text.delta` (coalesced per run, as on the socket) and `input.accepted` flow.
+- **No client frames.**
+- **A `: ping` comment every 20 s** keeps the stream and the client's request timeout alive.
+- **Errors before the stream starts** use the usual JSON error body:
+  - an unknown surface is `404`;
+  - a surface id or `since` that is not an integer is `400`.
+- **Answering a voice post:** open the stream first, then `POST /surfaces/{id}/voice`. Match `run.started.input_ids` against the returned `input_id`. Render `text.delta` / `step.text` / `run.reset`. Finish on the run's `message.created` and `run.finished`. This is the socket's "connect before fetching" rule.
+- Fixture: `testdata/v3/sse_surface.txt` is a short transcript built from the golden frames: hello, input.accepted, run.started, text.delta, step.text, a keepalive, message.created, run.finished.
+
+## v3.11 additions: push notifications
+
+Agreed 2026-10-07 with the watch app. The daemon pushes an alert to every registered Apple device through APNs, so the watch rings even when the app is not running and Telegram can stay muted.
+
+- **`POST /api/v3/devices`** `{token, platform, bundle_id, environment}` registers a device and answers `204`. It is an upsert by `token`, so the app sends it on every launch.
+  - `token` is the APNs device token in hex, 16 to 200 characters.
+  - `platform` is `watchos` or `ios`.
+  - `bundle_id` is the app's bundle id; it becomes the `apns-topic` of every push to this device.
+  - `environment` is `sandbox` (a debug build from Xcode) or `production` (TestFlight and the App Store).
+  - Anything else is `400`.
+- **`DELETE /api/v3/devices/{token}`** unregisters a device and answers `204`, also for an unknown token.
+- **Which messages push:** an agent's `answer` or `post`, and a `notice` an agent authored (a failed run, a failed task). Never the user's own messages, an `a2a` handoff, the daemon's own notices (command replies) or anything on an archived surface. Only live messages push: a message committed while the daemon was down stays unpushed.
+- **The payload:**
+
+  ```json
+  {
+    "aps": {
+      "alert": {"title": "General", "subtitle": "magnet_feed", "body": "the message text"},
+      "sound": "default",
+      "thread-id": "surface-10"
+    },
+    "surface_id": 10,
+    "message_id": 1234,
+    "run_id": "…"
+  }
+  ```
+
+  - `title` is the surface's name.
+  - `subtitle` names the author only when it is not the surface's lead agent.
+  - `body` is the message text as plain text (Markdown markup dropped, a link shown as its text), cut on a character boundary with `…` so the payload stays within APNs' 4 KB.
+  - `thread-id` groups a surface's alerts. `run_id` is absent on a message with no run.
+  - `apns-collapse-id` is `message-<id>`, so a repeated push replaces the earlier one.
+- **A token APNs rejects** (`410`, `BadDeviceToken`, `Unregistered`, `DeviceTokenNotForTopic`) is dropped from the registry. The app registers it again on its next launch.
+- **The daemon pushes only when it is configured with an APNs key**. Without one the device routes still work and nothing is sent.
+
+## v3.12 additions: suggested replies
+
+Agreed 2026-10-07 with the desktop. An agent can attach up to three one-tap replies to its answer, shown as buttons under the message. A tap posts an ordinary user message with the option's text as a reply to that answer, which wakes the agent like any message. The free-text field stays available, and nothing blocks: the agent's turn ends normally.
+
+- **`suggested_replies`** is on every message: the REST pages, `message.created` frames (socket and SSE).
+
+  ```json
+  "suggested_replies": {"options": ["Do it", "Skip"], "open": true, "chosen": null}
+  ```
+
+  - It is `null` for a message without options. Only an `answer` can carry options; a `post` of the same run never does.
+  - `options` are 1 to 3 strings, each 1 to 24 characters, in the agent's order.
+  - `open` is `true` until the user writes anything on the surface after this message: a tap, typed text, voice, Telegram, any channel.
+  - `chosen` is the option the user picked: the text of the first user message after this one, when that message replies to this one (`reply_to_message_id`) and its text equals an option. Otherwise `null`, also when the replies were closed by a typed message.
+  - `open` and `chosen` are computed when the message is read, so a page fetched later shows the current state.
+- **`POST /messages/{id}/reply`** `{"option": "Do it", "client_message_id": "<uuid>"}` taps an option.
+  - `202 {"message_id", "input_id", "agent_id"}`, the same answer as `POST /surfaces/{id}/messages`. The posted message is a `user` message on the answer's surface with `text` = the option, `reply_to_message_id` = the answer, `channel` = `desktop`, addressed to the answer's author.
+  - `client_message_id` makes the tap idempotent like a post. A retried tap with the same id answers with the first post's ids even though the replies are closed by then; an id already used on another surface is `409`.
+  - `404`: unknown message.
+  - `400`: the message has no suggested replies, `option` is not one of them, or `client_message_id` is not a UUID.
+  - `409`: the replies are already closed. Two taps on one answer with different `client_message_id`s are served one after the other, so only the first is posted and the second gets `409`.
+- **`reply_to_message_id` on a user message** is now set for a tapped reply (it was always `null` on user messages before).
+- **Live closing needs no new frame.** A client receiving `message.created` for a `user` message on a surface closes the open replies of every earlier message on that surface. When that message replies to one of them and its text equals an option, the client marks that option chosen.
+- An answer whose run ended `[SILENT]`, interrupted or with no visible answer has no message, so its options are dropped. A scheduled run's answer carries the options its run set. A run that restarts its answer (a crash retry) drops the options its earlier attempt set.
+- Telegram shows no buttons; the answer is posted there as before.
+- Fixtures: `testdata/v3/messages_page.json` (one answer with open options) and every message fixture gains `"suggested_replies": null`.
+
+## v3.13 additions: replies from the client
+
+Agreed 2026-10-08 after the desktop shipped without a way to reply to a message. Addressing an agent stays `addressed_agent_id`, which the client sets from an @ autocomplete; the server does not parse mentions out of the text.
+
+- **`POST /api/v3/surfaces/{id}/messages`** takes an optional `reply_to_message_id`. The message it names must be on the same surface; an unknown message, one on another surface, or an id that is not positive is `400`, with nothing stored. The stored message carries it as its `reply_to_message_id`, and the agent's prompt names it (`[reply to msg:N]`).
+- **`POST /api/v3/surfaces/{id}/voice`** takes the same reply-to as a query parameter, `?reply_to_message_id=N`, beside `addressed_agent_id`. A malformed one is `400` before the upload is read, and one naming a message of another surface is `400` after transcription, with nothing stored.

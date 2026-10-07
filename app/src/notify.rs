@@ -224,7 +224,7 @@ mod tests {
         mock.agent_posts(
             SurfaceId(3),
             AgentId(2),
-            "The living room\n\nlights are off.",
+            "The **living room**\n\n- lights are `off`.",
         );
         deliver(&mock, cx);
         let heard = notifier.0.borrow();

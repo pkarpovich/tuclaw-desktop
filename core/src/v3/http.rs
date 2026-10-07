@@ -481,6 +481,7 @@ mod tests {
                 bytes: b"....ftypM4A ".to_vec(),
                 addressed_agent_id: Some(AgentId(3)),
                 client_message_id: ClientMessageId("0f8e-voice".into()),
+                reply_to_message_id: Some(MessageId(9281)),
             },
         ))
         .expect("the voice is posted");
@@ -489,7 +490,7 @@ mod tests {
         assert_eq!(requests[0].method, "POST");
         assert_eq!(
             requests[0].target,
-            "/api/v3/surfaces/4/voice?addressed_agent_id=3"
+            "/api/v3/surfaces/4/voice?addressed_agent_id=3&reply_to_message_id=9281"
         );
         assert_eq!(requests[0].content_type.as_deref(), Some("audio/mp4"));
         assert_eq!(requests[0].client_message_id.as_deref(), Some("0f8e-voice"));
@@ -682,6 +683,7 @@ mod tests {
             text: "Лисички?".into(),
             addressed_agent_id: Some(AgentId(3)),
             client_message_id: ClientMessageId("8b0c".into()),
+            reply_to_message_id: None,
         };
         let posted = within(client(&daemon).post(SurfaceId(1), &post)).expect("the post lands");
         assert_eq!(

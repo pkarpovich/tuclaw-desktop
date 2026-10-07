@@ -177,12 +177,123 @@ pub fn markdown(id: impl Into<ElementId>, text: impl Into<SharedString>, ink: In
         .with_link(theme::accent())
         .with_code_background(theme::sunken())
         .with_border(theme::border());
-    TextView::markdown(id, text).style(style)
+    TextView::markdown(id, text)
+        .style(style)
+        .on_link_click(|url, _event, _window, cx| {
+            if url.starts_with(MENTION_SCHEME) {
+                return;
+            }
+            cx.open_url(url);
+        })
+}
+
+pub const MENTION_SCHEME: &str = "tuclaw:agent/";
+
+pub struct Known {
+    pub handle: String,
+    pub agent: i64,
+}
+
+pub fn link_mentions(text: &str, known: &[Known]) -> String {
+    let mut out = String::new();
+    let mut fenced = false;
+    for (index, line) in text.split('\n').enumerate() {
+        if index > 0 {
+            out.push('\n');
+        }
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            out.push_str(line);
+            continue;
+        }
+        if fenced {
+            out.push_str(line);
+            continue;
+        }
+        out.push_str(&link_line(line, known));
+    }
+    out
+}
+
+fn link_line(line: &str, known: &[Known]) -> String {
+    let mut out = String::new();
+    let mut code = false;
+    let mut previous: Option<char> = None;
+    let mut letters = line.char_indices();
+    while let Some((at, letter)) = letters.next() {
+        if letter == '`' {
+            code = !code;
+        }
+        let opens = previous.is_none_or(|before| before.is_whitespace() || before == '(');
+        previous = Some(letter);
+        if letter != '@' || code || !opens {
+            out.push(letter);
+            continue;
+        }
+        let rest = &line[at + 1..];
+        let mut name = String::new();
+        for next in rest.chars() {
+            if next.is_alphanumeric() || next == '_' || next == '-' {
+                name.push(next);
+            } else {
+                break;
+            }
+        }
+        let mut agent = None;
+        for candidate in known {
+            if candidate.handle.to_lowercase() == name.to_lowercase() {
+                agent = Some(candidate.agent);
+            }
+        }
+        let Some(agent) = agent.filter(|_| !name.is_empty()) else {
+            out.push(letter);
+            continue;
+        };
+        out.push_str(&format!("[@{name}]({MENTION_SCHEME}{agent})"));
+        for _ in 0..name.chars().count() {
+            letters.next();
+        }
+        previous = name.chars().last();
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn known() -> Vec<Known> {
+        vec![
+            Known {
+                handle: "jarvis".into(),
+                agent: 1,
+            },
+            Known {
+                handle: "media_review".into(),
+                agent: 4,
+            },
+        ]
+    }
+
+    #[test]
+    fn a_known_mention_becomes_a_link() {
+        assert_eq!(
+            link_mentions("@Jarvis, ask @media_review about it", &known()),
+            "[@Jarvis](tuclaw:agent/1), ask [@media_review](tuclaw:agent/4) about it"
+        );
+    }
+
+    #[test]
+    fn unknown_names_mail_addresses_and_code_stay_as_they_are() {
+        assert_eq!(
+            link_mentions("mail me@jarvis or @nobody, `@jarvis`", &known()),
+            "mail me@jarvis or @nobody, `@jarvis`"
+        );
+        assert_eq!(
+            link_mentions("```\n@jarvis\n```\n@jarvis", &known()),
+            "```\n@jarvis\n```\n[@jarvis](tuclaw:agent/1)"
+        );
+    }
 
     #[test]
     fn a_picture_on_its_own_line_becomes_its_own_segment() {

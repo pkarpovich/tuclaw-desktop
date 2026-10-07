@@ -1,6 +1,6 @@
 use tuclaw_core::model::{
-    Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Message, MessageId,
-    Picture, RecordingId, RunOutcome, RunRef, Span, Voice, Weight,
+    Agent, AgentId, AgentStatus, Author, Channel, ChannelId, ChannelKind, Choice, Message,
+    MessageId, Picture, RecordingId, RunOutcome, RunRef, Span, Suggestions, Voice, Weight,
 };
 use tuclaw_core::v3;
 
@@ -182,6 +182,24 @@ pub fn message(message: &v3::Message) -> Message {
         run: run_ref(message),
         weight: weight(message),
         reply_to: message.reply_to_message_id.map(message_id),
+        suggestions: message.suggested_replies.as_ref().map(suggestions),
+    }
+}
+
+pub fn suggestions(replies: &v3::SuggestedReplies) -> Suggestions {
+    let v3::SuggestedReplies {
+        options,
+        open,
+        chosen,
+    } = replies;
+    let choice = match (open, chosen) {
+        (true, _) => Choice::Open,
+        (false, Some(option)) => Choice::Chosen(option.clone()),
+        (false, None) => Choice::Closed,
+    };
+    Suggestions {
+        options: options.clone(),
+        choice,
     }
 }
 
@@ -478,6 +496,7 @@ mod tests {
             created_at: at,
             run_summary: None,
             attachments: Vec::new(),
+            suggested_replies: None,
         };
         assert_eq!(
             message(&make(v3::AuthorKind::User, None)).author,

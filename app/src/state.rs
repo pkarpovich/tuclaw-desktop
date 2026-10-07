@@ -7,8 +7,8 @@ use futures::channel::mpsc::UnboundedSender;
 use gpui::{AsyncApp, Context, EventEmitter, Task, WeakEntity};
 use time::OffsetDateTime;
 use tuclaw_core::model::{
-    Agent, AgentId, Author, Channel, ChannelId, Message, MessageId, Picture, RecordingId, Span,
-    Voice, Weight,
+    Agent, AgentId, Author, Channel, ChannelId, Choice, Message, MessageId, Picture, RecordingId,
+    Span, Voice, Weight,
 };
 use tuclaw_core::v3::{
     self, Applied, Backoff, ClientFrame, ClientMessageId, Frame, InputAccepted, Post, Run, RunId,
@@ -24,6 +24,7 @@ use crate::notify::Alert;
 use crate::people::{self, Gallery, Me, People};
 use crate::picture::{self, Upload};
 use crate::pictures::{self, Remote, Shelf, Viewed};
+use crate::plain;
 use crate::recorder::{self, NoRecorder, Recorder, Take};
 use crate::runlog::{self, Disclosure, RunLog};
 
@@ -88,10 +89,11 @@ pub enum StateEvent {
     PicturesLoaded,
     PictureOpened,
     SendFailed(String),
-    Mention(String),
+    Mention(Mention),
     TasksLoaded,
     ChannelsChanged,
     Alert(Alert),
+    ReplyStarted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +140,26 @@ struct Playback {
 struct Pending {
     client_message_id: ClientMessageId,
     local: MessageId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Draft {
+    pub body: String,
+    pub addressed: Option<AgentId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mention {
+    pub agent: AgentId,
+    pub name: String,
+    pub ident: String,
+}
+
+struct Tapped {
+    answer: MessageId,
+    option: String,
+    client_message_id: ClientMessageId,
+    posted: Result<v3::Posted, v3::ApiError>,
 }
 
 #[derive(Default)]
@@ -193,6 +215,7 @@ pub struct AppState {
     seen: HashSet<MessageId>,
     following: bool,
     held: Option<ChannelId>,
+    replying: Option<MessageId>,
     window_active: bool,
     recording: Recording,
     playback: Option<Playback>,
@@ -257,6 +280,7 @@ impl AppState {
             seen: HashSet::new(),
             following: true,
             held: None,
+            replying: None,
             automations: AutomationsPanel::default(),
             window_active: true,
             recording: Recording::Idle,
@@ -1004,6 +1028,7 @@ impl AppState {
                 bytes,
                 addressed_agent_id: None,
                 client_message_id: ClientMessageId::random(),
+                reply_to_message_id: self.replying.take().map(link::v3_message_id),
             },
         );
         cx.spawn(async move |this, cx| {
@@ -2102,9 +2127,13 @@ impl AppState {
         let Some(known) = self.directory_agent(agent) else {
             return;
         };
-        let ident = known.ident.clone();
+        let mention = Mention {
+            agent,
+            name: known.name.clone(),
+            ident: known.ident.clone(),
+        };
         self.view = View::Conversation;
-        cx.emit(StateEvent::Mention(format!("@{ident} ")));
+        cx.emit(StateEvent::Mention(mention));
         cx.notify();
     }
 
@@ -2337,6 +2366,7 @@ impl AppState {
         }
         if self.selected != Some(channel) {
             self.held = None;
+            self.replying = None;
             self.seen.clear();
             self.following = true;
             self.divider = self.divider_for(channel);
@@ -2380,6 +2410,17 @@ impl AppState {
     }
 
     pub fn send(&mut self, body: String, cx: &mut Context<Self>) -> Result<()> {
+        self.send_draft(
+            Draft {
+                body,
+                addressed: None,
+            },
+            cx,
+        )
+    }
+
+    pub fn send_draft(&mut self, draft: Draft, cx: &mut Context<Self>) -> Result<()> {
+        let Draft { body, addressed } = draft;
         let text = body.trim().to_string();
         if text.is_empty() {
             return Ok(());
@@ -2388,6 +2429,7 @@ impl AppState {
             bail!("no channel is selected");
         };
         let client_message_id = ClientMessageId::random();
+        let reply_to = self.replying.take();
         self.next_local -= 1;
         let local = MessageId(self.next_local);
         self.messages.push(Message {
@@ -2398,7 +2440,8 @@ impl AppState {
             voice: None,
             run: None,
             weight: Weight::Mine,
-            reply_to: None,
+            reply_to,
+            suggestions: None,
         });
         self.pending.push(Pending {
             client_message_id: client_message_id.clone(),
@@ -2406,8 +2449,9 @@ impl AppState {
         });
         let post = Post {
             text: text.clone(),
-            addressed_agent_id: self.addressed(channel, &text),
+            addressed_agent_id: addressed.map(link::v3_agent_id),
             client_message_id: client_message_id.clone(),
+            reply_to_message_id: reply_to.map(link::v3_message_id),
         };
         let request = self.client.post(link::surface_id(channel), &post);
         cx.spawn(async move |this, cx| {
@@ -2421,6 +2465,153 @@ impl AppState {
         cx.emit(StateEvent::MessageAppended);
         cx.notify();
         Ok(())
+    }
+
+    pub fn choose_reply(&mut self, answer: MessageId, option: String, cx: &mut Context<Self>) {
+        if self.selected.is_none() {
+            return;
+        }
+        let mut offered = false;
+        for message in &mut self.messages {
+            if message.id != answer {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            if suggestions.choice == Choice::Open && suggestions.options.contains(&option) {
+                suggestions.choice = Choice::Chosen(option.clone());
+                offered = true;
+            }
+        }
+        if !offered {
+            return;
+        }
+        let client_message_id = ClientMessageId::random();
+        self.next_local -= 1;
+        let local = MessageId(self.next_local);
+        self.messages.push(Message {
+            id: local,
+            author: Author::User,
+            body: vec![Span::Text(option.clone())],
+            sent_at: crate::local::now(),
+            voice: None,
+            run: None,
+            weight: Weight::Mine,
+            reply_to: Some(answer),
+            suggestions: None,
+        });
+        self.pending.push(Pending {
+            client_message_id: client_message_id.clone(),
+            local,
+        });
+        let tap = v3::ReplyPost {
+            option: option.clone(),
+            client_message_id: client_message_id.clone(),
+        };
+        let request = self.client.reply(link::v3_message_id(answer), &tap);
+        cx.spawn(async move |this, cx| {
+            let posted = request.await;
+            this.update(cx, |state, cx| {
+                state.tapped(
+                    Tapped {
+                        answer,
+                        option,
+                        client_message_id,
+                        posted,
+                    },
+                    cx,
+                )
+            })
+            .ok();
+        })
+        .detach();
+        cx.emit(StateEvent::MessageAppended);
+        cx.notify();
+    }
+
+    fn tapped(&mut self, tapped: Tapped, cx: &mut Context<Self>) {
+        let Tapped {
+            answer,
+            option,
+            client_message_id,
+            posted,
+        } = tapped;
+        let choice = match posted {
+            Ok(posted) => {
+                self.posted(client_message_id, Ok(posted), option, cx);
+                return;
+            }
+            Err(v3::ApiError::Conflict) => Choice::Closed,
+            Err(_error) => Choice::Open,
+        };
+        let mut local = None;
+        for (position, pending) in self.pending.iter().enumerate() {
+            if pending.client_message_id == client_message_id {
+                local = Some((position, pending.local));
+            }
+        }
+        if let Some((position, id)) = local {
+            self.pending.remove(position);
+            self.messages.retain(|message| message.id != id);
+        }
+        let mut answered = false;
+        for message in &self.messages {
+            let MessageId(raw) = message.id;
+            if raw > 0 && message.reply_to == Some(answer) {
+                answered = true;
+            }
+        }
+        if answered {
+            cx.notify();
+            return;
+        }
+        for message in &mut self.messages {
+            if message.id != answer {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            if suggestions.choice == Choice::Chosen(option.clone()) {
+                suggestions.choice = choice.clone();
+            }
+        }
+        if choice == Choice::Open {
+            cx.emit(StateEvent::SendFailed(option));
+        }
+        cx.notify();
+    }
+
+    fn close_replies(&mut self, written: &v3::Message) {
+        let closes = match written.author.kind {
+            v3::AuthorKind::User => true,
+            v3::AuthorKind::Agent => false,
+            v3::AuthorKind::System => false,
+            v3::AuthorKind::Unknown => false,
+        };
+        if !closes {
+            return;
+        }
+        let id = link::message_id(written.id);
+        let replied = written.reply_to_message_id.map(link::message_id);
+        for message in &mut self.messages {
+            let MessageId(raw) = message.id;
+            if raw <= 0 || message.id >= id {
+                continue;
+            }
+            let Some(suggestions) = &mut message.suggestions else {
+                continue;
+            };
+            let picked = replied == Some(message.id) && suggestions.options.contains(&written.text);
+            if picked {
+                suggestions.choice = Choice::Chosen(written.text.clone());
+                continue;
+            }
+            if suggestions.choice == Choice::Open {
+                suggestions.choice = Choice::Closed;
+            }
+        }
     }
 
     pub fn interrupt(&mut self, run: &RunId, cx: &mut Context<Self>) {
@@ -2437,31 +2628,84 @@ impl AppState {
         cx.notify();
     }
 
-    fn addressed(&self, channel: ChannelId, text: &str) -> Option<v3::AgentId> {
-        let ident = text.strip_prefix('@')?;
-        let mut name = String::new();
-        for letter in ident.chars() {
-            if letter.is_alphanumeric() || letter == '_' {
-                name.push(letter);
-            } else {
-                break;
-            }
-        }
+    fn wired_directory(&self, channel: ChannelId) -> Vec<&v3::Agent> {
         let surface = link::surface_id(channel);
-        let mut found = None;
+        let mut wired = Vec::new();
         for candidate in &self.surfaces {
             if candidate.id != surface {
                 continue;
             }
             for wiring in &candidate.agents {
                 for agent in &self.directory {
-                    if agent.id == wiring.agent_id && agent.ident == name {
-                        found = Some(agent.id);
+                    if agent.id == wiring.agent_id {
+                        wired.push(agent);
                     }
                 }
             }
         }
+        wired
+    }
+
+    pub fn mention_candidates(&self, query: &str) -> Vec<Mention> {
+        let Some(channel) = self.selected else {
+            return Vec::new();
+        };
+        let query = query.to_lowercase();
+        let mut found = Vec::new();
+        for agent in self.wired_directory(channel) {
+            let v3::Agent {
+                id,
+                name,
+                ident,
+                bot_username,
+                ..
+            } = agent;
+            let mut names = vec![ident.to_lowercase(), name.to_lowercase()];
+            if let Some(bot) = bot_username {
+                names.push(bot.to_lowercase());
+            }
+            let mut matches = query.is_empty();
+            for candidate in &names {
+                if candidate.starts_with(&query) {
+                    matches = true;
+                }
+            }
+            if matches {
+                found.push(Mention {
+                    agent: link::agent_id(*id),
+                    name: name.clone(),
+                    ident: ident.clone(),
+                });
+            }
+        }
         found
+    }
+
+    pub fn replying(&self) -> Option<&Message> {
+        let replying = self.replying?;
+        let mut found = None;
+        for message in &self.messages {
+            if message.id == replying {
+                found = Some(message);
+            }
+        }
+        found
+    }
+
+    pub fn start_reply(&mut self, message: MessageId, cx: &mut Context<Self>) {
+        let MessageId(raw) = message;
+        if raw <= 0 {
+            return;
+        }
+        self.replying = Some(message);
+        cx.emit(StateEvent::ReplyStarted);
+        cx.notify();
+    }
+
+    pub fn cancel_reply(&mut self, cx: &mut Context<Self>) {
+        if self.replying.take().is_some() {
+            cx.notify();
+        }
     }
 
     fn posted(
@@ -2952,6 +3196,7 @@ impl AppState {
         if !shown {
             return;
         }
+        self.close_replies(message);
         let mapped = link::message(message);
         let mut pending = None;
         if let Some(id) = &message.client_message_id {
@@ -2966,8 +3211,9 @@ impl AppState {
             self.messages.retain(|candidate| candidate.id != local);
         }
         let mut seen = false;
-        for candidate in &self.messages {
+        for candidate in &mut self.messages {
             if candidate.id == mapped.id {
+                *candidate = mapped.clone();
                 seen = true;
             }
         }
@@ -3008,11 +3254,7 @@ fn alerting_agent(message: &v3::Message) -> Option<Option<v3::AgentId>> {
 }
 
 fn alert_body(text: &str) -> String {
-    let mut words = Vec::new();
-    for word in text.split_whitespace() {
-        words.push(word);
-    }
-    let line = words.join(" ");
+    let line = plain::plain_text(text);
     if line.chars().count() <= ALERT_LIMIT {
         return line;
     }
@@ -3227,7 +3469,7 @@ mod tests {
     use tuclaw_core::v3::MockTransport;
 
     use super::{
-        AppState, Filter, Inspector, Link, Player, Segment, SidebarVisibility, TICK, View,
+        AppState, Draft, Filter, Inspector, Link, Player, Segment, SidebarVisibility, TICK, View,
     };
     use crate::testing::{FakeSpeaker, channel_named, loaded, mocked, play, speaking};
 
@@ -3464,20 +3706,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_leading_mention_addresses_a_wired_agent_only(cx: &mut TestAppContext) {
-        let (_mock, state) = loaded(cx);
-        state.read_with(cx, |state, _cx| {
-            let general = ChannelId(1);
-            assert_eq!(
-                state.addressed(general, "@magnet_feed что нового?"),
-                Some(WireAgent(3))
-            );
-            assert_eq!(state.addressed(general, "@scout найди"), None);
-            assert_eq!(state.addressed(general, "привет @magnet_feed"), None);
-        });
-    }
-
-    #[gpui::test]
     fn a_blank_body_sends_nothing(cx: &mut TestAppContext) {
         let (mock, state) = loaded(cx);
         state.update(cx, |state, cx| {
@@ -3485,6 +3713,105 @@ mod tests {
         });
         state.read_with(cx, |state, _cx| assert_eq!(state.messages().len(), 30));
         assert_eq!(mock.pending(), 0);
+    }
+
+    fn posted_rows(mock: &MockTransport) -> Vec<v3::Message> {
+        let client = v3::Client::mock(mock);
+        futures::executor::block_on(client.messages(v3::SurfaceId(1), 200))
+            .expect("page")
+            .messages
+    }
+
+    fn send_in_general(
+        mock: &MockTransport,
+        state: &Entity<AppState>,
+        cx: &mut TestAppContext,
+        text: &str,
+    ) -> v3::Message {
+        let general = channel_named(state, cx, "General");
+        state.update(cx, |state, cx| state.select(general, cx));
+        cx.run_until_parked();
+        state.update(cx, |state, cx| {
+            state.send(text.to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        let mut found = None;
+        for message in posted_rows(mock) {
+            if message.text == text {
+                found = Some(message);
+            }
+        }
+        found.expect("the post reached the daemon")
+    }
+
+    #[gpui::test]
+    fn only_a_picked_mention_addresses_an_agent(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let typed = send_in_general(&mock, &state, cx, "@Jarvis, what is on tonight?");
+        assert_eq!(typed.addressed_agent_id, None);
+        state.update(cx, |state, cx| {
+            state
+                .send_draft(
+                    Draft {
+                        body: "@magnet_feed any releases?".to_string(),
+                        addressed: Some(AgentId(3)),
+                    },
+                    cx,
+                )
+                .expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        let mut picked = None;
+        for message in posted_rows(&mock) {
+            if message.text == "@magnet_feed any releases?" {
+                picked = Some(message.addressed_agent_id);
+            }
+        }
+        assert_eq!(picked, Some(Some(WireAgent(3))));
+    }
+
+    #[gpui::test]
+    fn mention_candidates_are_the_wired_agents_matching_the_prefix(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.select(general, cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            let mut all = Vec::new();
+            for mention in state.mention_candidates("") {
+                all.push(mention.ident);
+            }
+            assert_eq!(all, vec!["tuclaw".to_string(), "magnet_feed".to_string()]);
+            let mut by_name = Vec::new();
+            for mention in state.mention_candidates("JAR") {
+                by_name.push(mention.ident);
+            }
+            assert_eq!(by_name, vec!["tuclaw".to_string()]);
+            assert!(state.mention_candidates("scout").is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn a_reply_carries_the_quoted_message_and_is_used_once(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let general = channel_named(&state, cx, "General");
+        state.update(cx, |state, cx| state.select(general, cx));
+        cx.run_until_parked();
+        let quoted = state.read_with(cx, |state, _cx| {
+            state.messages().first().expect("a message").id
+        });
+        state.update(cx, |state, cx| state.start_reply(quoted, cx));
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.replying().map(|message| message.id), Some(quoted))
+        });
+        let reply = send_in_general(&mock, &state, cx, "About that one");
+        let MessageId(raw) = quoted;
+        assert_eq!(reply.reply_to_message_id, Some(v3::MessageId(raw)));
+        state.read_with(cx, |state, _cx| assert!(state.replying().is_none()));
+        let plain = send_in_general(&mock, &state, cx, "Something else");
+        assert_eq!(plain.reply_to_message_id, None);
     }
 
     #[gpui::test]

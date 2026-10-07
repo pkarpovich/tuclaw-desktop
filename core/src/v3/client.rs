@@ -10,8 +10,8 @@ use serde_json::Value;
 use super::dto::{
     Agent, AgentId, AgentPatch, AttachmentId, AvatarSet, AvatarUrl, Group, GroupId, GroupPatch,
     ImageKind, Me, MePatch, MessageId, MessagesPage, NewGroup, Placement, Post, Posted, ReadAnswer,
-    RunDetail, RunId, Seq, Surface, SurfaceId, SurfacePatch, Task, TaskId, TaskRun, VoicePost,
-    WiringChange,
+    ReplyPost, RunDetail, RunId, Seq, Surface, SurfaceId, SurfacePatch, Task, TaskId, TaskRun,
+    VoicePost, WiringChange,
 };
 use super::http::{ClientToken, HttpTransport};
 use super::mock::MockTransport;
@@ -114,6 +114,27 @@ impl Client {
         async move { body(request.await?) }
     }
 
+    /// Taps one of an answer's suggested replies; the posted message arrives on the event socket.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::Conflict`] once the replies are closed, and [`ApiError::Invalid`] for
+    /// an option the answer does not offer.
+    pub fn reply(
+        &self,
+        message: MessageId,
+        tap: &ReplyPost,
+    ) -> impl Future<Output = Result<Posted, ApiError>> + Send + 'static {
+        let MessageId(message) = message;
+        let request = match serde_json::to_value(tap) {
+            Ok(encoded) => self
+                .transport
+                .post(&format!("/messages/{message}/reply"), Some(encoded)),
+            Err(error) => ready(Err(ApiError::Decode(error.to_string()))).boxed(),
+        };
+        async move { body(request.await?) }
+    }
+
     /// Posts a recorded voice message; the daemon answers once it has the transcript.
     ///
     /// # Errors
@@ -130,10 +151,19 @@ impl Client {
             bytes,
             addressed_agent_id,
             client_message_id,
+            reply_to_message_id,
         } = voice;
-        let path = match addressed_agent_id {
-            Some(AgentId(agent)) => format!("/surfaces/{surface}/voice?addressed_agent_id={agent}"),
-            None => format!("/surfaces/{surface}/voice"),
+        let mut query = Vec::new();
+        if let Some(AgentId(agent)) = addressed_agent_id {
+            query.push(format!("addressed_agent_id={agent}"));
+        }
+        if let Some(MessageId(message)) = reply_to_message_id {
+            query.push(format!("reply_to_message_id={message}"));
+        }
+        let path = if query.is_empty() {
+            format!("/surfaces/{surface}/voice")
+        } else {
+            format!("/surfaces/{surface}/voice?{}", query.join("&"))
         };
         let request = self.transport.send(Request {
             method: Method::Post,
