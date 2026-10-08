@@ -276,7 +276,10 @@ impl Render for AutomationsView {
             .flex_col()
             .size_full()
             .min_h(px(0.))
-            .child(header(active, paused))
+            .child(match self.width {
+                Width::Wide => header(active, paused),
+                Width::Narrow => large_header(active, paused),
+            })
             .child(list)
     }
 }
@@ -311,6 +314,27 @@ fn header(active: usize, paused: usize) -> Div {
             div()
                 .text_size(px(12.5))
                 .text_color(theme::text_muted())
+                .child(format!("{active} active · {paused} paused")),
+        )
+}
+
+fn large_header(active: usize, paused: usize) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .flex_none()
+        .px(px(18.))
+        .pb(px(10.))
+        .child(
+            div()
+                .text_size(px(28.))
+                .font_weight(FontWeight::BOLD)
+                .child("Automations"),
+        )
+        .child(
+            div()
+                .text_size(px(13.))
+                .text_color(theme::text_label())
                 .child(format!("{active} active · {paused} paused")),
         )
 }

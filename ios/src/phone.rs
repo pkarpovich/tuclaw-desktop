@@ -260,27 +260,22 @@ impl Phone {
                     .gap(px(6.))
                     .pt(frame::insets().top)
                     .px(px(12.))
-                    .pb(px(10.))
-                    .border_b_1()
-                    .border_color(theme::hairline())
+                    .pb(px(4.))
                     .child(
                         div()
                             .id("channels-back")
                             .debug_selector(|| "channels-back".to_string())
                             .flex()
                             .items_center()
-                            .justify_center()
-                            .size(px(34.))
+                            .gap(px(2.))
+                            .h(px(34.))
+                            .text_size(px(17.))
+                            .text_color(theme::accent())
                             .on_click(move |_event, _window, cx| {
                                 navigator.update(cx, |navigator, cx| navigator.back(cx))
                             })
-                            .child(icon(Glyph::Back, px(22.), theme::accent())),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(17.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("Channels"),
+                            .child(icon(Glyph::Back, px(22.), theme::accent()))
+                            .child("Home"),
                     ),
             )
             .child(

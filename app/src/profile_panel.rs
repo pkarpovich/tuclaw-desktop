@@ -256,12 +256,16 @@ impl Render for ProfilePanel {
                     .py(px(12.))
                     .border_b_1()
                     .border_color(theme::hairline())
-                    .child(
-                        div()
+                    .child(match self.closing {
+                        Closing::Closable => div()
                             .text_size(px(13.5))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Your profile"),
-                    )
+                        Closing::Fixed => div()
+                            .text_size(px(28.))
+                            .font_weight(FontWeight::BOLD)
+                            .child("You"),
+                    })
                     .child(div().flex_1())
                     .child(saving_label(&saving))
                     .children(

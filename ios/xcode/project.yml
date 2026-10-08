@@ -13,11 +13,15 @@ targets:
       - path: main.m
       - path: tuclaw_ios.h
         buildPhase: headers
+      - path: ../../app/resources/AppIcon.icon
+        type: file
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.pkarpovich.tuclaw.ios
         PRODUCT_NAME: Tuclaw
         INFOPLIST_FILE: Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: $(TUCLAW_VERSION)
         CURRENT_PROJECT_VERSION: $(TUCLAW_BUILD)
         TARGETED_DEVICE_FAMILY: "1"
