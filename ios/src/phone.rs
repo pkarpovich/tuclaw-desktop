@@ -160,6 +160,14 @@ impl Phone {
             .child(bar)
     }
 
+    pub fn navigator(&self) -> &Entity<Navigator> {
+        &self.navigator
+    }
+
+    pub fn talk(&self) -> &Entity<Talk> {
+        &self.talk
+    }
+
     fn sync_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let wanted = match self
             .state

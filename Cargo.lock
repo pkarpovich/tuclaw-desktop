@@ -7878,6 +7878,8 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-mobile",
+ "gpui-pre-platform",
+ "image",
  "libc",
  "log",
  "serde_json",

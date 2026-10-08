@@ -65,6 +65,10 @@ run = "fish script/ios.fish --run --mock"
 description = "Regenerate ios/demo/world.json, the synthetic world ios-mock launches on"
 run = "cargo run -q -p tuclaw-ios --example demo_world"
 
+[tasks.ios-visual]
+description = "Render the phone's visual scenes headless at 402x874 and compare them with ios/tests/visual (UPDATE_BASELINE=1 rewrites them)"
+run = "cargo test -p tuclaw-ios --test visual"
+
 [tasks.ios-lint]
 description = "Clippy for the iPhone app on the simulator target, warnings as errors"
 run = "cargo clippy -p tuclaw-ios --lib --target aarch64-apple-ios-sim -- -D warnings"

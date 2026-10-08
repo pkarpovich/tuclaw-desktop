@@ -18,7 +18,15 @@ time = { workspace = true }
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/longbridge/gpui-mobile", rev = "9075e3aa", default-features = false, features = ["camera", "video_player"] }
 log = "0.4"
 
+[[test]]
+name = "visual"
+harness = false
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui_platform = { workspace = true, features = ["test-support"] }
+
 [dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 futures = "0.3.34"
 serde_json = { workspace = true }
 gpui = { workspace = true, features = ["test-support"] }

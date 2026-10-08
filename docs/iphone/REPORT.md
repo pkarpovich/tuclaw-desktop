@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 19, 8 visual scenes), build.
+Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 19 plus 5 phone visual scenes, 8 Mac visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -153,7 +153,7 @@ The phone-specific code is mostly navigation and chrome. The test discipline car
 - Nothing occludes by default: a GPUI overlay lets taps through unless it says otherwise. That was the review's blocker, now fixed and tested.
 - iOS niceties are missing and would have to be hand-built: an interactive swipe-back (there is only a gesture, no slide), scroll-to-top on a status-bar tap, keyboard animation curves, haptics, a real share sheet and a photo picker.
 - A Rust static library inside an Xcode shell with `-force_load` is workable but heavy: the debug `.a` is 1.2 GB.
-- The simulator loop is slower than the Mac's headless snapshot loop. A phone snapshot example (headless, 402×874, over the demo world) would be the next tooling investment.
+- The simulator loop is slower than the Mac's. `mise run ios-visual` now renders five phone scenes headless at 402×874 with the real Metal renderer and compares them with baselines. Each scene also asserts behaviour, as on the Mac, and runs in `mise run test`. Its 70-line image comparison is copied from `app/tests/visual.rs`; sharing it needs a test-support module both harnesses can reach.
 
 **Verdict.** For one user on a LAN, sharing all the logic with the Mac is a real win, and the app is maintainable here. The cost is owning a thin, growing layer of platform glue and accepting gpui-mobile's maturity: plan on upstreaming the keyboard hook, the asset source and the feature gates. If the phone must feel fully native (swipe-back, system text features, rich notifications), expect that glue to keep growing.
 
@@ -166,6 +166,7 @@ mise run ios-run       # build and launch on "Tuclaw iPhone 17 Pro" (iOS 26.5) a
 mise run ios-mock      # the same, on the mock daemon over ios/demo/world.json
 mise run ios-build     # build only; --release via `fish script/ios.fish --release`
 mise run ios-lint      # clippy for aarch64-apple-ios-sim, warnings as errors
+mise run ios-visual    # the phone's headless visual scenes (UPDATE_BASELINE=1 rewrites them)
 mise run ios-demo-world  # regenerate the synthetic demo world (deterministic)
 ```
 
