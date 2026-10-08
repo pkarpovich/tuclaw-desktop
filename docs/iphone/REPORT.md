@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 19 plus 5 phone visual scenes, 8 Mac visual scenes), build.
+Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 20 plus 5 phone visual scenes, 8 Mac visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -23,7 +23,7 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
   - `05-voice-message.png` - a voice message playing; `05b-hold-to-talk.png` - the held-mic overlay; `05c-voice-sent.png`
   - `06-agent-settings.png` - agent settings sheet
   - `07-automations.png`, `07b-automation-detail.png` - automations
-  - extras: `08-inspector.png` (run inspector), `09-suggested-replies.png`
+  - extras: `08-inspector.png` (run inspector), `09-suggested-replies.png`, `10-notification.png` (a notification from the backgrounded app)
 - `docs/iphone/acceptance.mp4` (89 s, half resolution) - the acceptance scenario, with General standing in for #phone-qa, on the mock:
   1. open the app, pick the channel;
   2. send a text and watch the answer stream;
@@ -67,7 +67,7 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 | | `task.fired` marks in the conversation | done | trigger tags, quiet rows, failure cards are the shared feed's |
 | | per-channel automations panel | done | a button in the conversation header (with a dot for unseen failures) opens the Mac panel as a sheet; a task in it, or a trigger tag in the feed, opens it on the Automations tab |
 | Channels management | groups, rename, order, archive | done | the Mac `ChannelsView`, pushed from Home's pencil |
-| Notifications | local banner while backgrounded | partial | see Rough edges |
+| Notifications | local notification while backgrounded | done | an agent's answer that arrives while the app is in the background is posted through `UNUserNotificationCenter` and lands in Notification Center (`10-notification.png`); only while iOS keeps the process alive, see Rough edges |
 | | app badge | done | `setBadgeCount`; Home screen showed "7" |
 | Agent card "View run" | | done | opens the run's conversation (`StateEvent::RunViewed`) |
 
@@ -104,10 +104,9 @@ App-side changes, each kept behaviour-neutral for the Mac:
 ## 3. Rough edges a user would hit
 
 - **Live daemon unverified** (above). On a device iOS will ask for Local Network access first. The plist carries `NSLocalNetworkUsageDescription`.
-- **Notifications are best effort.**
-  - What works: authorization, the badge, the alert firing in the background, and SpringBoard accepting the request (it logged `shouldPresentAlert: YES` once).
-  - What I couldn't show: a visible banner on the simulator, and Notification Center stayed empty. The likely cause is timing, since the in-process mock answers while the app is still transitioning.
-  - Without APNs, iOS suspends the app seconds after it goes to the background, so banners only cover that window. Real background delivery needs APNs (out of scope).
+- **Notifications only while the app is alive.**
+  - Authorization, the app badge, and a notification for an answer that arrives after you leave the app all work: it lands in Notification Center with the app icon. Live banners were not captured on the simulator.
+  - iOS suspends the app seconds after it goes to the background, so anything later needs APNs. The daemon already pushes to devices registered through `POST /api/v3/devices` (contract v3.11). The phone needs its bundle id and push entitlement, and a token registration, which were out of scope tonight.
 - **Typing.**
   - gpui-mobile turns autocorrect off and keeps UIKit's text view empty between keystrokes, so the predictive bar never offers words (no ёжик for ежик).
   - Dictation couldn't be tested on the simulator.
@@ -138,7 +137,7 @@ The result: the phone reuses the hardest parts unchanged:
 - the conversation feed with all its list bookkeeping;
 - the settings, profile, channel and automation panels.
 
-The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 19 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
+The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 20 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
 
 **What makes it painful.**
 - The platform layer is young. gpui-mobile 0.1 is pinned to an unpublished commit, and I hit a run of gaps:

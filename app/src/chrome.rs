@@ -79,8 +79,8 @@ pub fn on_touch_drag(
 ) -> Stateful<Div> {
     element.child(
         canvas(
-            |_bounds, _window, _cx| {},
-            move |bounds, _state, window, _cx| {
+            |bounds, window, _cx| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            move |_bounds, hitbox, window, _cx| {
                 let held = held.clone();
                 let on_hold = on_hold.clone();
                 window.on_mouse_event(move |event: &TouchDragEvent, phase, window, cx| {
@@ -94,7 +94,7 @@ pub fn on_touch_drag(
                                 Arming::Armed => {}
                                 Arming::Disarmed => return,
                             }
-                            if !bounds.contains(&event.start_position) {
+                            if !hitbox.is_hovered(window) {
                                 return;
                             }
                             held.set(true);

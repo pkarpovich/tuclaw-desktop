@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
@@ -37,6 +38,7 @@ pub struct Phone {
     channels: Entity<ChannelsView>,
     settings: Option<Entity<SettingsPanel>>,
     talk: Entity<Talk>,
+    covered: Cell<Covered>,
     viewer_focus: FocusHandle,
     _observation: Subscription,
     _navigation: Subscription,
@@ -44,6 +46,12 @@ pub struct Phone {
 }
 
 type Action = Box<dyn Fn(&mut Window, &mut App)>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Covered {
+    Open,
+    Overlaid,
+}
 
 struct Choice {
     selector: &'static str,
@@ -85,6 +93,7 @@ impl Phone {
             channels,
             settings: None,
             talk,
+            covered: Cell::new(Covered::Open),
             viewer_focus: cx.focus_handle(),
             _observation: observation,
             _navigation: navigation,
@@ -438,6 +447,10 @@ fn cancel() -> Choice {
     }
 }
 
+fn viewer_open(state: &Entity<AppState>, cx: &App) -> bool {
+    state.read(cx).viewer().is_some()
+}
+
 fn sheet_frame(selector: &'static str, content: AnyElement, on_dismiss: OnTap) -> AnyElement {
     div()
         .id(selector)
@@ -523,6 +536,20 @@ impl Render for Phone {
             Some(Screen::Channels) => None,
             None => None,
         };
+        let covered = if inspector.is_some()
+            || automations.is_some()
+            || settings.is_some()
+            || sheet.is_some()
+            || viewer_open(&self.state, cx)
+        {
+            Covered::Overlaid
+        } else {
+            Covered::Open
+        };
+        let was = self.covered.replace(covered);
+        if covered == Covered::Overlaid && was == Covered::Open {
+            keyboard::hide();
+        }
         let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx).map(|picture| {
             div()
                 .id("phone-picture")

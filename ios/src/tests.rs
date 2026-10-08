@@ -312,3 +312,40 @@ fn a_short_edge_swipe_stays(cx: &mut TestAppContext) {
     touch(cx, TouchPhase::Ended, edge + gpui::point(px(30.), px(0.)));
     assert!(cx.debug_bounds("conversation-back").is_some());
 }
+
+#[gpui::test]
+fn a_sheet_over_the_mic_keeps_its_taps(cx: &mut TestAppContext) {
+    let (state, cx) = talking(cx);
+    let mic = cx.debug_bounds("composer-hold").expect("the mic").center();
+    let ids = state.read_with(cx, |state, _cx| {
+        let mut ids = Vec::new();
+        for message in state.messages() {
+            ids.push(message.id);
+        }
+        ids
+    });
+    let mut drawn = None;
+    for id in ids.into_iter().rev() {
+        let tuclaw_core::model::MessageId(raw) = id;
+        let selector: &'static str = Box::leak(format!("message-{raw}").into_boxed_str());
+        if let Some(bounds) = cx.debug_bounds(selector)
+            && bounds.center().y > px(150.)
+            && bounds.center().y < mic.y - px(100.)
+        {
+            drawn = Some(bounds);
+            break;
+        }
+    }
+    let message = drawn.expect("a message is drawn on screen");
+    let held = gpui::point(message.origin.x + px(30.), message.center().y);
+    touch(cx, TouchPhase::Started, held);
+    cx.executor().advance_clock(Duration::from_millis(700));
+    cx.run_until_parked();
+    touch(cx, TouchPhase::Ended, held);
+    let cancel = cx.debug_bounds("sheet-cancel").expect("the menu is open");
+    let over_mic = gpui::point(mic.x, cancel.center().y);
+    touch(cx, TouchPhase::Started, over_mic);
+    touch(cx, TouchPhase::Ended, over_mic);
+    assert_eq!(recording(&state, cx), Recording::Idle);
+    assert!(cx.debug_bounds("sheet-cancel").is_none());
+}
