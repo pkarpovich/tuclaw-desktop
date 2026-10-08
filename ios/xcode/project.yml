@@ -34,15 +34,17 @@ targets:
           - $(TUCLAW_RUST_LIB)
           - -lc++
           - -framework UIKit
+          - -framework AudioToolbox
+          - -framework AVFAudio
+          - -framework AVFoundation
+          - -framework CoreAudio
+          - -framework CoreFoundation
+          - -framework CoreGraphics
+          - -framework CoreMedia
+          - -framework CoreText
+          - -framework Foundation
           - -framework Metal
           - -framework QuartzCore
-          - -framework CoreGraphics
-          - -framework CoreText
-          - -framework CoreFoundation
-          - -framework Foundation
           - -framework Security
-          - -framework SystemConfiguration
-          - -framework AudioToolbox
-          - -framework AVFoundation
-          - -framework CoreMedia
           - -framework UniformTypeIdentifiers
+          - -framework UserNotifications

@@ -36,7 +36,9 @@ impl Notifier for NoNotifier {
 pub fn system() -> Rc<dyn Notifier> {
     #[cfg(target_os = "macos")]
     return Rc::new(mac::MacNotifier::new());
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "ios")]
+    return Rc::new(ios::IosNotifier::new());
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     return Rc::new(NoNotifier);
 }
 
@@ -72,13 +74,11 @@ fn show_badge(notifier: &dyn Notifier, shown: &Cell<Option<usize>>, count: usize
     notifier.badge(count);
 }
 
-#[cfg(target_os = "macos")]
-mod mac {
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod banner {
     use block2::RcBlock;
-    use objc2::MainThreadMarker;
     use objc2::rc::Retained;
     use objc2::runtime::Bool;
-    use objc2_app_kit::{NSApplication, NSSound};
     use objc2_foundation::{NSBundle, NSError, NSString};
     use objc2_user_notifications::{
         UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationRequest,
@@ -86,7 +86,53 @@ mod mac {
     };
     use tuclaw_core::model::{ChannelId, MessageId};
 
-    use super::{Alert, Notifier, Presence};
+    use super::Alert;
+
+    pub fn center() -> Option<Retained<UNUserNotificationCenter>> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let center = UNUserNotificationCenter::currentNotificationCenter();
+        let answered = RcBlock::new(|_granted: Bool, _error: *mut NSError| {});
+        center.requestAuthorizationWithOptions_completionHandler(
+            UNAuthorizationOptions::Alert
+                | UNAuthorizationOptions::Sound
+                | UNAuthorizationOptions::Badge,
+            &answered,
+        );
+        Some(center)
+    }
+
+    pub fn post(center: &UNUserNotificationCenter, alert: &Alert) {
+        let Alert {
+            channel,
+            message,
+            title,
+            body,
+        } = alert;
+        let ChannelId(channel) = channel;
+        let MessageId(message) = message;
+        let content = UNMutableNotificationContent::new();
+        content.setTitle(&NSString::from_str(title));
+        content.setBody(&NSString::from_str(body));
+        content.setThreadIdentifier(&NSString::from_str(&format!("channel-{channel}")));
+        content.setSound(Some(&UNNotificationSound::defaultSound()));
+        let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
+            &NSString::from_str(&format!("message-{message}")),
+            &content,
+            None,
+        );
+        center.addNotificationRequest_withCompletionHandler(&request, None);
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod mac {
+    use objc2::MainThreadMarker;
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSApplication, NSSound};
+    use objc2_foundation::NSString;
+    use objc2_user_notifications::UNUserNotificationCenter;
+
+    use super::{Alert, Notifier, Presence, banner};
 
     const SOUND: &str = "Tink";
 
@@ -96,19 +142,8 @@ mod mac {
 
     impl MacNotifier {
         pub fn new() -> MacNotifier {
-            if NSBundle::mainBundle().bundleIdentifier().is_none() {
-                return MacNotifier { center: None };
-            }
-            let center = UNUserNotificationCenter::currentNotificationCenter();
-            let answered = RcBlock::new(|_granted: Bool, _error: *mut NSError| {});
-            center.requestAuthorizationWithOptions_completionHandler(
-                UNAuthorizationOptions::Alert
-                    | UNAuthorizationOptions::Sound
-                    | UNAuthorizationOptions::Badge,
-                &answered,
-            );
             MacNotifier {
-                center: Some(center),
+                center: banner::center(),
             }
         }
 
@@ -123,25 +158,7 @@ mod mac {
             let Some(center) = &self.center else {
                 return false;
             };
-            let Alert {
-                channel,
-                message,
-                title,
-                body,
-            } = alert;
-            let ChannelId(channel) = channel;
-            let MessageId(message) = message;
-            let content = UNMutableNotificationContent::new();
-            content.setTitle(&NSString::from_str(title));
-            content.setBody(&NSString::from_str(body));
-            content.setThreadIdentifier(&NSString::from_str(&format!("channel-{channel}")));
-            content.setSound(Some(&UNNotificationSound::defaultSound()));
-            let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
-                &NSString::from_str(&format!("message-{message}")),
-                &content,
-                None,
-            );
-            center.addNotificationRequest_withCompletionHandler(&request, None);
+            banner::post(center, alert);
             true
         }
     }
@@ -165,6 +182,52 @@ mod mac {
                 Presence::Background => {
                     if !self.banner(alert) {
                         self.chime();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+mod ios {
+    use objc2::rc::Retained;
+    use objc2_user_notifications::UNUserNotificationCenter;
+
+    use super::{Alert, Notifier, Presence, banner};
+
+    const RECEIVED: u32 = 1003;
+
+    unsafe extern "C" {
+        fn AudioServicesPlaySystemSound(sound: u32);
+    }
+
+    pub struct IosNotifier {
+        center: Option<Retained<UNUserNotificationCenter>>,
+    }
+
+    impl IosNotifier {
+        pub fn new() -> IosNotifier {
+            IosNotifier {
+                center: banner::center(),
+            }
+        }
+    }
+
+    impl Notifier for IosNotifier {
+        fn badge(&self, count: usize) {
+            let Some(center) = &self.center else {
+                return;
+            };
+            center.setBadgeCount_withCompletionHandler(count as isize, None);
+        }
+
+        fn alert(&self, alert: &Alert, presence: Presence) {
+            match presence {
+                Presence::Foreground => unsafe { AudioServicesPlaySystemSound(RECEIVED) },
+                Presence::Background => {
+                    if let Some(center) = &self.center {
+                        banner::post(center, alert);
                     }
                 }
             }

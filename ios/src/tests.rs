@@ -41,6 +41,10 @@ fn a_long_press_on_a_channel_opens_its_menu_and_the_release_keeps_it(cx: &mut Te
     let (_state, cx) = phone(cx);
     press(cx, "home-row-General", Duration::from_millis(700));
     assert!(cx.debug_bounds("sheet-mark-unread").is_some());
+    press(cx, "sheet-cancel", Duration::from_millis(50));
+    assert!(cx.debug_bounds("sheet-mark-unread").is_none());
+    assert!(cx.debug_bounds("conversation-back").is_none());
+    assert!(cx.debug_bounds("home-search").is_some());
 }
 
 #[gpui::test]
@@ -157,4 +161,81 @@ fn the_pencil_opens_channel_management_and_back_returns(cx: &mut TestAppContext)
     assert!(cx.debug_bounds("channels-back").is_some());
     press(cx, "channels-back", Duration::from_millis(50));
     assert!(cx.debug_bounds("home-search").is_some());
+}
+
+#[gpui::test]
+fn opening_a_channel_reads_what_arrived_while_on_home(cx: &mut TestAppContext) {
+    let (mock, state) = loaded(cx);
+    let built = state.clone();
+    let (_phone, cx) = cx.add_window_view(move |window, cx| Phone::new(built, window, cx));
+    cx.run_until_parked();
+    mock.agent_posts(
+        tuclaw_core::v3::SurfaceId(1),
+        tuclaw_core::v3::AgentId(1),
+        "While you were on the list.",
+    );
+    while mock.step() {}
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
+    assert_eq!(unread(&state, cx, "General"), 1);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert_eq!(unread(&state, cx, "General"), 0);
+}
+
+#[gpui::test]
+fn the_inspector_keeps_taps_from_the_conversation_beneath(cx: &mut TestAppContext) {
+    let (state, cx) = phone(cx);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    state.update(cx, |state, cx| {
+        let mut ran = None;
+        for message in state.messages() {
+            if message.run.is_some() {
+                ran = Some(message.id);
+            }
+        }
+        let ran = ran.expect("an answer with a run");
+        state.toggle(tuclaw_desktop::runlog::Disclosure::Inspect(ran), cx);
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("inspector").is_some());
+    press(cx, "conversation-back", Duration::from_millis(50));
+    assert!(cx.debug_bounds("inspector").is_some());
+    assert!(cx.debug_bounds("conversation-back").is_some());
+}
+
+#[gpui::test]
+fn the_settings_sheet_keeps_taps_from_the_cards_beneath(cx: &mut TestAppContext) {
+    let (state, cx) = phone(cx);
+    press(cx, "tab-agents", Duration::from_millis(50));
+    let second = cx
+        .debug_bounds("agents-tab-2")
+        .expect("a second card")
+        .center();
+    press(cx, "agents-tab-1", Duration::from_millis(50));
+    touch(cx, TouchPhase::Started, second);
+    touch(cx, TouchPhase::Ended, second);
+    let target = state.read_with(cx, |state, _cx| {
+        state.settings().map(|settings| settings.target)
+    });
+    assert_eq!(
+        target,
+        Some(tuclaw_desktop::agent_settings::Target::Agent(
+            tuclaw_core::model::AgentId(1)
+        ))
+    );
+}
+
+fn unread(state: &gpui::Entity<AppState>, cx: &mut VisualTestContext, name: &str) -> usize {
+    state.read_with(cx, |state, _cx| {
+        let mut unread = 0;
+        for channel in state.channels() {
+            if channel.name == name {
+                unread = channel.unread;
+            }
+        }
+        unread
+    })
 }

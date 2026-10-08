@@ -83,6 +83,7 @@ impl Shell {
                 StateEvent::FoldToggled => {}
                 StateEvent::OlderLoaded => {}
                 StateEvent::PicturesLoaded => {}
+                StateEvent::FeedShown => {}
                 StateEvent::SendFailed(_) => {}
                 StateEvent::Mention(_) => {}
                 StateEvent::TasksLoaded => {}

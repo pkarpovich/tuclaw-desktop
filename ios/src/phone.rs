@@ -147,10 +147,12 @@ impl Phone {
             );
         }
         div()
+            .id("tab-bar")
+            .occlude()
             .absolute()
             .left(px(14.))
             .right(px(14.))
-            .bottom(frame::insets().bottom - px(8.))
+            .bottom((frame::insets().bottom - px(8.)).max(px(8.)))
             .child(bar)
     }
 
@@ -183,6 +185,7 @@ impl Phone {
         Some(
             div()
                 .id("settings-sheet")
+                .occlude()
                 .absolute()
                 .top_0()
                 .left_0()
@@ -298,6 +301,7 @@ impl Phone {
         Some(
             div()
                 .id("phone-inspector")
+                .occlude()
                 .absolute()
                 .top_0()
                 .left_0()
@@ -360,6 +364,7 @@ impl Phone {
         }
         div()
             .id("sheet-scrim")
+            .occlude()
             .absolute()
             .top_0()
             .left_0()
@@ -492,7 +497,16 @@ impl Render for Phone {
             Some(Screen::Channels) => None,
             None => None,
         };
-        let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx);
+        let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx).map(|picture| {
+            div()
+                .id("phone-picture")
+                .occlude()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .child(picture)
+        });
         div()
             .relative()
             .size_full()

@@ -552,6 +552,15 @@ fn running_rows(state: &AppState) -> Vec<Running> {
             continue;
         };
         let channel = link::channel_id(surface);
+        let mut listed = false;
+        for candidate in state.channels() {
+            if candidate.id == channel {
+                listed = true;
+            }
+        }
+        if !listed {
+            continue;
+        }
         let place = state.surface_name(surface).unwrap_or_default();
         rows.push(Running {
             channel,

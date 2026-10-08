@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    App, DispatchPhase, Div, LongPressEvent, Pixels, Point, Stateful, TouchDragEvent, TouchPhase,
-    Window, canvas, prelude::*,
+    App, DispatchPhase, Div, HitboxBehavior, LongPressEvent, Pixels, Point, Stateful,
+    TouchDragEvent, TouchPhase, Window, canvas, prelude::*,
 };
 
 use crate::message::OnToggle;
@@ -35,9 +35,8 @@ pub struct Touch {
 pub fn on_long_press(element: Stateful<Div>, on_press: OnTap) -> Stateful<Div> {
     element.relative().child(
         canvas(
-            |_bounds, _window, _cx| {},
-            move |bounds, _state, window, _cx| {
-                let visible = bounds.intersect(&window.content_mask().bounds);
+            |bounds, window, _cx| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            move |_bounds, hitbox, window, _cx| {
                 let on_press = on_press.clone();
                 window.on_mouse_event(move |event: &LongPressEvent, phase, window, cx| {
                     let started = match event.phase {
@@ -50,7 +49,7 @@ pub fn on_long_press(element: Stateful<Div>, on_press: OnTap) -> Stateful<Div> {
                         DispatchPhase::Bubble => true,
                         DispatchPhase::Capture => false,
                     };
-                    if !started || !bubbling || !visible.contains(&event.start_position) {
+                    if !started || !bubbling || !hitbox.is_hovered(window) {
                         return;
                     }
                     window.prevent_default();

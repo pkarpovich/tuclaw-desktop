@@ -8,6 +8,7 @@ use gpui_mobile::ios::ffi;
 use tuclaw_desktop::failure::{self, Startup};
 use tuclaw_desktop::icon::Icons;
 use tuclaw_desktop::link::Config;
+use tuclaw_desktop::notify;
 
 use crate::phone::Phone;
 
@@ -60,6 +61,7 @@ fn open(startup: Startup, cx: &mut App) {
         Startup::Ready(state) => {
             let state = cx.new(|_| *state);
             state.update(cx, |state, cx| state.start(cx));
+            notify::attach(&state, notify::system(), cx);
             cx.open_window(WindowOptions::default(), |window, cx| {
                 let phone = cx.new(|cx| Phone::new(state, window, cx));
                 cx.new(|cx| Root::new(phone, window, cx))

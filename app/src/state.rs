@@ -32,6 +32,7 @@ const PAGE: u32 = 50;
 const TICK: Duration = Duration::from_millis(200);
 const TOAST_LIFETIME: Duration = Duration::from_secs(6);
 const ALERT_LIMIT: usize = 180;
+const VOICE_PREVIEW: &str = "Voice message";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -107,6 +108,7 @@ pub enum StateEvent {
     ChannelsChanged,
     Alert(Alert),
     ReplyStarted,
+    FeedShown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -815,7 +817,10 @@ impl AppState {
     pub fn set_feed(&mut self, presence: Presence, cx: &mut Context<Self>) {
         self.feed = presence;
         match presence {
-            Presence::Shown => self.read_to_newest(cx),
+            Presence::Shown => {
+                self.read_to_newest(cx);
+                cx.emit(StateEvent::FeedShown);
+            }
             Presence::Hidden => {}
         }
         cx.notify();
@@ -860,10 +865,11 @@ impl AppState {
         };
         let mapped = link::message(message);
         let text = plain::plain_text(&crate::message::source(&mapped.body));
-        let text = text.trim();
-        if text.is_empty() {
-            return;
-        }
+        let text = match (text.trim(), &mapped.voice) {
+            ("", Some(_)) => VOICE_PREVIEW,
+            ("", None) => return,
+            (text, _) => text,
+        };
         let channel = link::channel_id(message.surface_id);
         if let Some(known) = previews.get(&channel)
             && known.at > mapped.sent_at

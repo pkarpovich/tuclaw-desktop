@@ -81,6 +81,7 @@ fails, the pixels just stop updating.
 | `MessageAppended` | feed | rebuild, `reset(count)`, then `scroll_to_end()` |
 | `RunsChanged` | feed | rebuild items; `remeasure_items` over the run rows when the count is unchanged, else `reset(count)` |
 | `FoldToggled` | feed | `ListState::remeasure()` - a Thinking fold opened or closed |
+| `FeedShown` | feed | `read_to_newest`, then a seen pass: the phone showed the conversation again (`AppState::set_feed`) |
 | `SendFailed(text)` | feed | `Composer::restore(text)` |
 
 Every `match` on `StateEvent` lists all six variants, including the empty arms. No `_ =>`.

@@ -165,6 +165,10 @@ impl Feed {
                     feed.list.remeasure();
                     cx.notify();
                 }
+                StateEvent::FeedShown => {
+                    feed.read_to_newest(cx);
+                    feed.schedule_seen(cx);
+                }
             },
         );
         let watcher = state.clone();
@@ -217,7 +221,7 @@ impl Feed {
                 cx,
             )
             .with_state(state.clone(), cx)
-            .with_chrome(composer_chrome.clone())
+            .with_chrome(composer_chrome.clone(), cx)
         });
         state.update(cx, |state, cx| state.read_to_newest(cx));
         Feed {

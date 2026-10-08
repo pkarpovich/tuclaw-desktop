@@ -97,7 +97,13 @@ impl Composer {
         self
     }
 
-    pub fn with_chrome(mut self, chrome: Chrome) -> Composer {
+    pub fn with_chrome(mut self, chrome: Chrome, cx: &mut Context<Self>) -> Composer {
+        let submit = match chrome {
+            Chrome::Desktop => true,
+            Chrome::Phone(_) => false,
+        };
+        self.input
+            .update(cx, |input, cx| input.set_submit_on_enter(submit, cx));
         self.chrome = chrome;
         self
     }

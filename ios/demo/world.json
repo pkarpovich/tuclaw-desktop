@@ -58,7 +58,7 @@
         }
       ],
       "live_run": {
-        "run_id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d",
+        "run_id": "demo-run-21",
         "agent_id": 3
       },
       "topic_name": "Magnet Feed",
@@ -223,7 +223,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "d3bda0d1-e037-4d0f-9814-913b930a23c9",
+      "run_id": "demo-run-1",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -268,7 +268,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "a1b4bdb3-b98e-4812-9c43-1bc8733e16ab",
+      "run_id": "demo-run-2",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -353,7 +353,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "e15085cf-fcc3-49e0-851a-ed8057e80f5d",
+      "run_id": "demo-run-3",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -398,7 +398,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "f42c6535-fdb3-4c87-acd0-864d5623b2a4",
+      "run_id": "demo-run-4",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -483,7 +483,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "1b358411-c008-4f3f-b16d-470f48ce4473",
+      "run_id": "demo-run-5",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -528,7 +528,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "f87f1042-7325-4c0d-bbc6-9843a67ce31f",
+      "run_id": "demo-run-6",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -613,7 +613,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "3eb8a60e-bdbe-452c-9adc-57020518a3f4",
+      "run_id": "demo-run-7",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -658,7 +658,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "0d1beba5-e39b-4cea-9209-3e0806f5ae62",
+      "run_id": "demo-run-8",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -743,7 +743,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "7e961406-00d7-4468-b484-a12e11d48a7b",
+      "run_id": "demo-run-9",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -788,7 +788,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "bfceca71-1536-4530-a5bf-155ae7c2f7fb",
+      "run_id": "demo-run-10",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -873,7 +873,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "5510d0e1-01bc-4b32-a629-655480c4d89d",
+      "run_id": "demo-run-11",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -918,7 +918,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "2423b7ff-cda0-4242-8307-5a6ae111c80b",
+      "run_id": "demo-run-12",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1003,7 +1003,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "d51a1834-7449-4c7c-a94e-cbc3ce9e0616",
+      "run_id": "demo-run-13",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1048,7 +1048,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "8d055a57-c904-4c6a-9120-32eaea8de3c3",
+      "run_id": "demo-run-14",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1133,7 +1133,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "ecd49e73-eac6-455b-a705-f8c7ba781fd2",
+      "run_id": "demo-run-15",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1178,7 +1178,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "c40ab40c-7647-43c3-8fc9-bf3deec2f33c",
+      "run_id": "demo-run-16",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1291,7 +1291,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "90779672-00a6-496e-9935-3483bd7c42ac",
+      "run_id": "demo-run-17",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1336,7 +1336,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "6c54b987-fcaf-4049-8754-99afd4ecf8d8",
+      "run_id": "demo-run-18",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1421,7 +1421,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "acf3efc2-a086-4e42-ae7e-f7d55027d1b2",
+      "run_id": "demo-run-19",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1466,7 +1466,7 @@
       "addressed_agent_id": null,
       "reply_to_message_id": null,
       "text": "Всё спокойно, новых событий нет.",
-      "run_id": "1331c8c2-3d3b-4b6e-830b-f6ef6878d34e",
+      "run_id": "demo-run-20",
       "origin": "user",
       "channel": null,
       "client_message_id": null,
@@ -1597,7 +1597,7 @@
   "runs": [
     {
       "run": {
-        "id": "d3bda0d1-e037-4d0f-9814-913b930a23c9",
+        "id": "demo-run-1",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1627,7 +1627,7 @@
     },
     {
       "run": {
-        "id": "a1b4bdb3-b98e-4812-9c43-1bc8733e16ab",
+        "id": "demo-run-2",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1657,7 +1657,7 @@
     },
     {
       "run": {
-        "id": "e15085cf-fcc3-49e0-851a-ed8057e80f5d",
+        "id": "demo-run-3",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1687,7 +1687,7 @@
     },
     {
       "run": {
-        "id": "f42c6535-fdb3-4c87-acd0-864d5623b2a4",
+        "id": "demo-run-4",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1717,7 +1717,7 @@
     },
     {
       "run": {
-        "id": "1b358411-c008-4f3f-b16d-470f48ce4473",
+        "id": "demo-run-5",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1747,7 +1747,7 @@
     },
     {
       "run": {
-        "id": "f87f1042-7325-4c0d-bbc6-9843a67ce31f",
+        "id": "demo-run-6",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1777,7 +1777,7 @@
     },
     {
       "run": {
-        "id": "3eb8a60e-bdbe-452c-9adc-57020518a3f4",
+        "id": "demo-run-7",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1807,7 +1807,7 @@
     },
     {
       "run": {
-        "id": "0d1beba5-e39b-4cea-9209-3e0806f5ae62",
+        "id": "demo-run-8",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1837,7 +1837,7 @@
     },
     {
       "run": {
-        "id": "7e961406-00d7-4468-b484-a12e11d48a7b",
+        "id": "demo-run-9",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1867,7 +1867,7 @@
     },
     {
       "run": {
-        "id": "bfceca71-1536-4530-a5bf-155ae7c2f7fb",
+        "id": "demo-run-10",
         "agent_id": 1,
         "surface_id": 1,
         "origin": "user",
@@ -1897,7 +1897,7 @@
     },
     {
       "run": {
-        "id": "5510d0e1-01bc-4b32-a629-655480c4d89d",
+        "id": "demo-run-11",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -1927,7 +1927,7 @@
     },
     {
       "run": {
-        "id": "2423b7ff-cda0-4242-8307-5a6ae111c80b",
+        "id": "demo-run-12",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -1957,7 +1957,7 @@
     },
     {
       "run": {
-        "id": "d51a1834-7449-4c7c-a94e-cbc3ce9e0616",
+        "id": "demo-run-13",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -1987,7 +1987,7 @@
     },
     {
       "run": {
-        "id": "8d055a57-c904-4c6a-9120-32eaea8de3c3",
+        "id": "demo-run-14",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -2017,7 +2017,7 @@
     },
     {
       "run": {
-        "id": "ecd49e73-eac6-455b-a705-f8c7ba781fd2",
+        "id": "demo-run-15",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -2047,7 +2047,7 @@
     },
     {
       "run": {
-        "id": "c40ab40c-7647-43c3-8fc9-bf3deec2f33c",
+        "id": "demo-run-16",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "user",
@@ -2077,7 +2077,7 @@
     },
     {
       "run": {
-        "id": "90779672-00a6-496e-9935-3483bd7c42ac",
+        "id": "demo-run-17",
         "agent_id": 2,
         "surface_id": 3,
         "origin": "user",
@@ -2107,7 +2107,7 @@
     },
     {
       "run": {
-        "id": "6c54b987-fcaf-4049-8754-99afd4ecf8d8",
+        "id": "demo-run-18",
         "agent_id": 2,
         "surface_id": 3,
         "origin": "user",
@@ -2137,7 +2137,7 @@
     },
     {
       "run": {
-        "id": "acf3efc2-a086-4e42-ae7e-f7d55027d1b2",
+        "id": "demo-run-19",
         "agent_id": 2,
         "surface_id": 3,
         "origin": "user",
@@ -2167,7 +2167,7 @@
     },
     {
       "run": {
-        "id": "1331c8c2-3d3b-4b6e-830b-f6ef6878d34e",
+        "id": "demo-run-20",
         "agent_id": 2,
         "surface_id": 3,
         "origin": "user",
@@ -2197,7 +2197,7 @@
     },
     {
       "run": {
-        "id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d",
+        "id": "demo-run-21",
         "agent_id": 3,
         "surface_id": 2,
         "origin": "scheduled",

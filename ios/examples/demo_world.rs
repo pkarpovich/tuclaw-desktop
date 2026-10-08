@@ -44,6 +44,28 @@ fn main() {
             runs.push(detail);
         }
     }
+    let mut renamed = Vec::new();
+    for (index, detail) in runs.iter_mut().enumerate() {
+        let stable = RunId(format!("demo-run-{}", index + 1));
+        renamed.push((detail.run.id.clone(), stable.clone()));
+        detail.run.id = stable;
+    }
+    for message in &mut messages {
+        for (old, stable) in &renamed {
+            if message.run_id.as_ref() == Some(old) {
+                message.run_id = Some(stable.clone());
+            }
+        }
+    }
+    for surface in &mut surfaces {
+        for (old, stable) in &renamed {
+            if let Some(live) = &mut surface.live_run
+                && &live.run_id == old
+            {
+                live.run_id = stable.clone();
+            }
+        }
+    }
     let mut media = Vec::new();
     for message in &messages {
         for attachment in &message.attachments {

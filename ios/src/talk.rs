@@ -275,6 +275,7 @@ impl Talk {
         Some(
             div()
                 .id("talk-overlay")
+                .occlude()
                 .absolute()
                 .top_0()
                 .left_0()
