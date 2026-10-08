@@ -138,3 +138,23 @@ fn sliding_left_cancels_and_sliding_up_locks(cx: &mut TestAppContext) {
     touch(cx, TouchPhase::Ended, mic - gpui::point(px(0.), px(100.)));
     assert!(live(&recording(&state, cx)));
 }
+
+#[gpui::test]
+fn an_agent_card_opens_its_settings_as_a_sheet(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "tab-agents", Duration::from_millis(50));
+    press(cx, "agents-tab-1", Duration::from_millis(50));
+    assert!(cx.debug_bounds("settings-close").is_some());
+    press(cx, "settings-close", Duration::from_millis(50));
+    assert!(cx.debug_bounds("settings-close").is_none());
+    assert!(cx.debug_bounds("agents-tab-1").is_some());
+}
+
+#[gpui::test]
+fn the_pencil_opens_channel_management_and_back_returns(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "home-channels", Duration::from_millis(50));
+    assert!(cx.debug_bounds("channels-back").is_some());
+    press(cx, "channels-back", Duration::from_millis(50));
+    assert!(cx.debug_bounds("home-search").is_some());
+}

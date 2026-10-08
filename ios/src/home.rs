@@ -142,6 +142,22 @@ impl Home {
                     })),
             )
             .child(div().flex_1())
+            .child({
+                let navigator = self.navigator.clone();
+                div()
+                    .id("home-channels")
+                    .debug_selector(|| "home-channels".to_string())
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(34.))
+                    .rounded_full()
+                    .bg(theme::sunken())
+                    .on_click(move |_event, _window, cx| {
+                        navigator.update(cx, |navigator, cx| navigator.open_channels(cx))
+                    })
+                    .child(icon(Glyph::Rename, px(17.), theme::ink_soft()))
+            })
             .child(
                 div()
                     .id("home-me")

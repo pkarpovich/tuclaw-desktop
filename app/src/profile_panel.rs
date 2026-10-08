@@ -1,6 +1,6 @@
 use gpui::{
-    Context, Entity, FontWeight, IntoElement, PathPromptOptions, Render, SharedString,
-    Subscription, Window, div, prelude::*, px,
+    App, Context, Entity, FocusHandle, Focusable, FontWeight, IntoElement, PathPromptOptions,
+    Render, SharedString, Subscription, Window, div, prelude::*, px,
 };
 use gpui_kit::base::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 
@@ -18,7 +18,14 @@ pub struct ProfilePanel {
     state: Entity<AppState>,
     name: Entity<InputState>,
     description: Entity<TextareaState>,
+    closing: Closing,
     _subscriptions: Vec<Subscription>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Closing {
+    Closable,
+    Fixed,
 }
 
 impl ProfilePanel {
@@ -49,8 +56,21 @@ impl ProfilePanel {
             state,
             name,
             description,
+            closing: Closing::Closable,
             _subscriptions: subscriptions,
         }
+    }
+
+    pub fn with_closing(mut self, closing: Closing) -> ProfilePanel {
+        self.closing = closing;
+        self
+    }
+
+    pub fn text_fields(&self, cx: &App) -> Vec<FocusHandle> {
+        vec![
+            self.name.read(cx).focus_handle(cx),
+            self.description.read(cx).focus_handle(cx),
+        ]
     }
 
     fn on_name(
@@ -244,18 +264,24 @@ impl Render for ProfilePanel {
                     )
                     .child(div().flex_1())
                     .child(saving_label(&saving))
-                    .child(
-                        button("profile-close")
-                            .accessibility_label("Close the profile")
-                            .p(px(4.))
-                            .rounded(px(6.))
-                            .hover(|style| style.bg(theme::sunken()))
-                            .on_click(cx.listener(|panel, _event, _window, cx| {
-                                panel
-                                    .state
-                                    .update(cx, |state, cx| state.close_inspector(cx));
-                            }))
-                            .child(icon(Glyph::Close, px(14.), theme::text_secondary())),
+                    .children(
+                        match self.closing {
+                            Closing::Closable => Some(()),
+                            Closing::Fixed => None,
+                        }
+                        .map(|()| {
+                            button("profile-close")
+                                .accessibility_label("Close the profile")
+                                .p(px(4.))
+                                .rounded(px(6.))
+                                .hover(|style| style.bg(theme::sunken()))
+                                .on_click(cx.listener(|panel, _event, _window, cx| {
+                                    panel
+                                        .state
+                                        .update(cx, |state, cx| state.close_inspector(cx));
+                                }))
+                                .child(icon(Glyph::Close, px(14.), theme::text_secondary()))
+                        }),
                     ),
             )
             .child(

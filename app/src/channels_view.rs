@@ -1,6 +1,6 @@
 use gpui::{
-    Anchor, App, Context, Div, Entity, Focusable, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Window, div, prelude::*, px,
+    Anchor, App, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window, div, prelude::*, px,
 };
 use gpui_kit::base::Popover;
 use gpui_kit::base::input::{Input, InputEvent, InputState};
@@ -134,6 +134,14 @@ impl ChannelsView {
             Target::Group(group) => state.rename_group(group, value, cx),
         });
         cx.notify();
+    }
+
+    pub fn text_fields(&self, cx: &App) -> Vec<FocusHandle> {
+        let mut fields = vec![self.new_group.read(cx).focus_handle(cx)];
+        if let Some(editing) = &self.editing {
+            fields.push(editing.input.read(cx).focus_handle(cx));
+        }
+        fields
     }
 
     fn editor(&self, target: Target) -> Option<Entity<InputState>> {

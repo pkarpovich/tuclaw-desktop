@@ -15,6 +15,7 @@ pub enum Tab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Conversation,
+    Channels,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +60,22 @@ impl Navigator {
     pub fn switch(&mut self, tab: Tab, cx: &mut Context<Self>) {
         self.tab = tab;
         self.menu = None;
+        keyboard::hide();
+        match tab {
+            Tab::Automations => self.state.update(cx, |state, cx| state.load_tasks(cx)),
+            Tab::Home => {}
+            Tab::Agents => {}
+            Tab::You => {}
+        }
+        cx.notify();
+    }
+
+    pub fn open_channels(&mut self, cx: &mut Context<Self>) {
+        self.menu = None;
+        keyboard::hide();
+        self.state.update(cx, |state, cx| state.open_channels(cx));
+        self.stack.retain(|screen| *screen != Screen::Channels);
+        self.stack.push(Screen::Channels);
         cx.notify();
     }
 

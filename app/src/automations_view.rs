@@ -17,7 +17,14 @@ use crate::theme;
 pub struct AutomationsView {
     state: Entity<AppState>,
     confirming: Option<TaskId>,
+    width: Width,
     _observation: Subscription,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Width {
+    Wide,
+    Narrow,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -33,8 +40,14 @@ impl AutomationsView {
         AutomationsView {
             state,
             confirming: None,
+            width: Width::Wide,
             _observation: observation,
         }
+    }
+
+    pub fn with_width(mut self, width: Width) -> AutomationsView {
+        self.width = width;
+        self
     }
 
     fn row(&self, task: &Task, open: bool, cx: &mut Context<Self>) -> Div {
@@ -48,6 +61,25 @@ impl AutomationsView {
         let id = task.id.clone();
         let selector = format!("automation-{}", task.id.0);
         let opener = self.state.clone();
+        let glyph = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(30.))
+            .rounded(px(8.))
+            .bg(theme::sunken())
+            .child(icon(
+                Glyph::Automation,
+                px(15.),
+                task.last_outcome
+                    .map(outcome_tone)
+                    .unwrap_or_else(theme::text_muted),
+            ));
+        let title = div()
+            .text_size(px(13.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(SharedString::from(first_line(&task.prompt)));
         let header = row_button(selector)
             .w_full()
             .gap(px(12.))
@@ -56,42 +88,50 @@ impl AutomationsView {
             .on_click(move |_event, _window, cx| {
                 let id = id.clone();
                 opener.update(cx, |state, cx| state.open_task(id, cx));
-            })
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(px(30.))
-                    .rounded(px(8.))
-                    .bg(theme::sunken())
-                    .child(icon(
-                        Glyph::Automation,
-                        px(15.),
-                        task.last_outcome
-                            .map(outcome_tone)
-                            .unwrap_or_else(theme::text_muted),
-                    )),
-            )
-            .child(
+            });
+        let header = match self.width {
+            Width::Wide => header
+                .child(glyph)
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .gap(px(3.))
+                        .child(title.text_ellipsis())
+                        .child(meta_line(task, &people, &topic)),
+                )
+                .child(last_fire(task))
+                .child(self.actions(task, cx)),
+            Width::Narrow => header.flex_col().items_start().child(
                 div()
                     .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_w(px(0.))
-                    .gap(px(3.))
+                    .items_start()
+                    .gap(px(12.))
+                    .w_full()
+                    .child(glyph)
                     .child(
                         div()
-                            .text_size(px(13.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_ellipsis()
-                            .child(SharedString::from(first_line(&task.prompt))),
-                    )
-                    .child(meta_line(task, &people, &topic)),
-            )
-            .child(last_fire(task))
-            .child(self.actions(task, cx));
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .gap(px(5.))
+                            .child(title)
+                            .child(meta_line(task, &people, &topic).flex_wrap())
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(last_fire(task).items_start())
+                                    .child(div().flex_1())
+                                    .child(self.actions(task, cx)),
+                            ),
+                    ),
+            ),
+        };
         let mut card = div()
             .flex()
             .flex_col()

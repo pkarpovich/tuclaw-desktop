@@ -1,3 +1,4 @@
+pub mod agents_tab;
 pub mod conversation;
 pub mod frame;
 pub mod home;

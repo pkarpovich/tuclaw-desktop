@@ -3,12 +3,18 @@ use gpui::{
     SharedString, Subscription, Window, div, prelude::*, px,
 };
 use tuclaw_core::model::{ChannelId, MessageId};
+use tuclaw_desktop::agent_settings::Target;
+use tuclaw_desktop::automations_view::{AutomationsView, Width};
+use tuclaw_desktop::channels_view::ChannelsView;
 use tuclaw_desktop::icon::{Glyph, icon};
 use tuclaw_desktop::inspector;
 use tuclaw_desktop::message::source;
+use tuclaw_desktop::profile_panel::{Closing, ProfilePanel};
+use tuclaw_desktop::settings_panel::SettingsPanel;
 use tuclaw_desktop::state::AppState;
 use tuclaw_desktop::{theme, viewer};
 
+use crate::agents_tab::AgentsTab;
 use crate::conversation::Conversation;
 use crate::frame;
 use crate::home::{Home, TAB_BAR_HEIGHT};
@@ -21,6 +27,11 @@ pub struct Phone {
     navigator: Entity<Navigator>,
     home: Entity<Home>,
     conversation: Entity<Conversation>,
+    agents: Entity<AgentsTab>,
+    automations: Entity<AutomationsView>,
+    profile: Entity<ProfilePanel>,
+    channels: Entity<ChannelsView>,
+    settings: Option<Entity<SettingsPanel>>,
     talk: Entity<Talk>,
     viewer_focus: FocusHandle,
     _observation: Subscription,
@@ -48,6 +59,12 @@ impl Phone {
         let navigator = cx.new(|cx| Navigator::new(state.clone(), cx));
         let navigation = cx.observe(&navigator, |_phone, _navigator, cx| cx.notify());
         let home = cx.new(|cx| Home::new(state.clone(), navigator.clone(), window, cx));
+        let agents = cx.new(|cx| AgentsTab::new(state.clone(), cx));
+        let automations =
+            cx.new(|cx| AutomationsView::new(state.clone(), cx).with_width(Width::Narrow));
+        let profile =
+            cx.new(|cx| ProfilePanel::new(state.clone(), window, cx).with_closing(Closing::Fixed));
+        let channels = cx.new(|cx| ChannelsView::new(state.clone(), window, cx));
         let talk = cx.new(|cx| Talk::new(state.clone(), cx));
         let talking = cx.observe(&talk, |_phone, _talk, cx| cx.notify());
         let conversation = cx.new(|cx| {
@@ -58,6 +75,11 @@ impl Phone {
             navigator,
             home,
             conversation,
+            agents,
+            automations,
+            profile,
+            channels,
+            settings: None,
             talk,
             viewer_focus: cx.focus_handle(),
             _observation: observation,
@@ -130,6 +152,144 @@ impl Phone {
             .right(px(14.))
             .bottom(frame::insets().bottom - px(8.))
             .child(bar)
+    }
+
+    fn sync_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let wanted = match self
+            .state
+            .read(cx)
+            .settings()
+            .map(|settings| settings.target)
+        {
+            Some(Target::Agent(agent)) => Some(agent),
+            Some(Target::Me) => None,
+            None => None,
+        };
+        let current = self.settings.as_ref().map(|panel| panel.read(cx).agent());
+        if wanted == current {
+            return;
+        }
+        let state = self.state.clone();
+        self.settings =
+            wanted.map(|agent| cx.new(|cx| SettingsPanel::new(state, agent, window, cx)));
+        if self.settings.is_none() {
+            keyboard::hide();
+        }
+    }
+
+    fn settings_sheet(&self) -> Option<AnyElement> {
+        let panel = self.settings.clone()?;
+        let closer = self.state.clone();
+        Some(
+            div()
+                .id("settings-sheet")
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .flex_col()
+                .justify_end()
+                .bg(theme::scrim())
+                .child(
+                    div()
+                        .id("settings-sheet-scrim")
+                        .h(frame::insets().top + px(24.))
+                        .flex_none()
+                        .on_click(move |_event, _window, cx| {
+                            closer.update(cx, |state, cx| state.close_inspector(cx))
+                        }),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_h(px(0.))
+                        .pb(frame::insets().bottom)
+                        .rounded_t(px(18.))
+                        .overflow_hidden()
+                        .bg(theme::card())
+                        .child(panel),
+                )
+                .into_any_element(),
+        )
+    }
+
+    fn text_fields(&self, cx: &App) -> Vec<FocusHandle> {
+        let mut fields = Vec::new();
+        if let Some(panel) = &self.settings {
+            fields.extend(panel.read(cx).text_fields(cx));
+        }
+        let navigator = self.navigator.read(cx);
+        match (navigator.top(), navigator.tab()) {
+            (Some(Screen::Channels), _) => fields.extend(self.channels.read(cx).text_fields(cx)),
+            (Some(Screen::Conversation), _) => {}
+            (None, Tab::You) => fields.extend(self.profile.read(cx).text_fields(cx)),
+            (None, Tab::Home) => {}
+            (None, Tab::Agents) => {}
+            (None, Tab::Automations) => {}
+        }
+        fields
+    }
+
+    fn after_tap(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(focused) = window.focused(cx) else {
+            return;
+        };
+        if self.text_fields(cx).contains(&focused) {
+            keyboard::show();
+        }
+    }
+
+    fn channels_screen(&self) -> AnyElement {
+        let navigator = self.navigator.clone();
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .bg(theme::card())
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(6.))
+                    .pt(frame::insets().top)
+                    .px(px(12.))
+                    .pb(px(10.))
+                    .border_b_1()
+                    .border_color(theme::hairline())
+                    .child(
+                        div()
+                            .id("channels-back")
+                            .debug_selector(|| "channels-back".to_string())
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(34.))
+                            .on_click(move |_event, _window, cx| {
+                                navigator.update(cx, |navigator, cx| navigator.back(cx))
+                            })
+                            .child(icon(Glyph::Back, px(22.), theme::accent())),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(17.))
+                            .font_weight(FontWeight::BOLD)
+                            .child("Channels"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .pb(frame::insets().bottom)
+                    .child(self.channels.clone()),
+            )
+            .into_any_element()
     }
 
     fn inspector(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -286,56 +446,50 @@ fn cancel() -> Choice {
     }
 }
 
-fn placeholder(title: &'static str) -> AnyElement {
+fn tab_frame(content: AnyElement) -> AnyElement {
     div()
         .flex()
         .flex_col()
         .size_full()
-        .bg(theme::window())
+        .bg(theme::card())
         .pt(frame::insets().top)
-        .px(px(18.))
-        .child(
-            div()
-                .text_size(px(28.))
-                .font_weight(FontWeight::BOLD)
-                .child(title),
-        )
-        .child(
-            div()
-                .pt(px(8.))
-                .text_size(px(14.))
-                .text_color(theme::text_label())
-                .child("Coming in a later build."),
-        )
+        .pb(px(TAB_BAR_HEIGHT + 16.) + frame::insets().bottom)
+        .child(content)
         .into_any_element()
 }
 
 impl Render for Phone {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_settings(window, cx);
         let navigator = self.navigator.read(cx);
         let tab = navigator.tab();
         let top = navigator.top();
         let menu = navigator.menu();
         let screen: AnyElement = match top {
             Some(Screen::Conversation) => self.conversation.clone().into_any_element(),
+            Some(Screen::Channels) => self.channels_screen(),
             None => match tab {
                 Tab::Home => self.home.clone().into_any_element(),
-                Tab::Automations => placeholder("Automations"),
-                Tab::Agents => placeholder("Agents"),
-                Tab::You => placeholder("You"),
+                Tab::Automations => tab_frame(self.automations.clone().into_any_element()),
+                Tab::Agents => self.agents.clone().into_any_element(),
+                Tab::You => tab_frame(self.profile.clone().into_any_element()),
             },
         };
         let bar = match top {
             Some(Screen::Conversation) => None,
+            Some(Screen::Channels) => None,
             None => Some(self.tab_bar(tab)),
         };
         let inspector = match top {
             Some(Screen::Conversation) => self.inspector(cx),
+            Some(Screen::Channels) => None,
             None => None,
         };
+        let settings = self.settings_sheet();
         let sheet = menu.map(|menu| self.sheet(menu, cx));
         let held = match top {
             Some(Screen::Conversation) => self.talk.read(cx).overlay(cx),
+            Some(Screen::Channels) => None,
             None => None,
         };
         let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx);
@@ -346,8 +500,12 @@ impl Render for Phone {
             .text_color(theme::text_primary())
             .child(screen)
             .children(bar)
+            .capture_any_mouse_up(
+                cx.listener(|phone, _event, window, cx| phone.after_tap(window, cx)),
+            )
             .children(inspector)
             .children(held)
+            .children(settings)
             .children(sheet)
             .children(picture)
     }

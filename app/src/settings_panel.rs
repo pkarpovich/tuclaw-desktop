@@ -1,6 +1,6 @@
 use gpui::{
-    Anchor, AnyElement, App, Context, Div, Entity, FontWeight, IntoElement, PathPromptOptions,
-    Render, SharedString, Subscription, Window, div, prelude::*, px,
+    Anchor, AnyElement, App, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement,
+    PathPromptOptions, Render, SharedString, Subscription, Window, div, prelude::*, px,
 };
 use gpui_kit::base::Popover;
 use gpui_kit::base::input::{Input, InputEvent, InputState, Textarea, TextareaState};
@@ -65,6 +65,13 @@ impl SettingsPanel {
 
     pub fn agent(&self) -> AgentId {
         self.agent
+    }
+
+    pub fn text_fields(&self, cx: &App) -> Vec<FocusHandle> {
+        vec![
+            self.description.read(cx).focus_handle(cx),
+            self.model.read(cx).focus_handle(cx),
+        ]
     }
 
     fn on_description(

@@ -240,16 +240,38 @@ impl Talk {
                     ),
             );
         let mic = div()
+            .absolute()
+            .right(px(8.))
+            .bottom(insets.bottom - px(21.))
             .flex()
-            .flex_none()
             .items_center()
             .justify_center()
-            .size(px(64.))
+            .size(px(96.))
             .rounded_full()
-            .bg(theme::accent())
-            .border(px(10.))
-            .border_color(theme::accent_halo())
-            .child(icon(Glyph::Voice, px(26.), theme::chip_text()));
+            .bg(theme::accent_halo())
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(68.))
+                    .rounded_full()
+                    .bg(theme::accent())
+                    .child(icon(Glyph::Voice, px(28.), theme::chip_text())),
+            );
+        let strip = div()
+            .relative()
+            .flex_none()
+            .h(px(54.) + insets.bottom)
+            .px(px(16.))
+            .pt(px(17.))
+            .bg(theme::card())
+            .border_t_1()
+            .border_color(theme::hairline())
+            .text_size(px(13.))
+            .text_color(theme::text_secondary())
+            .child("Release to send")
+            .child(mic);
         Some(
             div()
                 .id("talk-overlay")
@@ -259,31 +281,22 @@ impl Talk {
                 .size_full()
                 .flex()
                 .flex_col()
-                .justify_end()
-                .bg(linear_gradient(
-                    180.,
-                    linear_color_stop(theme::scrim_clear(), 0.3),
-                    linear_color_stop(theme::scrim_deep(), 1.),
-                ))
-                .px(px(16.))
-                .pb(insets.bottom)
-                .gap(px(14.))
-                .child(card)
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .gap(px(14.))
-                        .w_full()
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_size(px(13.))
-                                .text_color(theme::on_scrim())
-                                .child("Release to send"),
-                        )
-                        .child(mic),
+                        .flex_col()
+                        .flex_1()
+                        .justify_end()
+                        .px(px(16.))
+                        .pb(px(14.))
+                        .bg(linear_gradient(
+                            180.,
+                            linear_color_stop(theme::scrim_clear(), 0.3),
+                            linear_color_stop(theme::scrim_deep(), 1.),
+                        ))
+                        .child(card),
                 )
+                .child(strip)
                 .into_any_element(),
         )
     }

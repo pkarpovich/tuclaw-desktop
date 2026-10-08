@@ -50,6 +50,7 @@ pub enum AvatarSize {
     Profile,
     Tile,
     Pocket,
+    Card,
 }
 
 #[derive(Clone)]
@@ -83,6 +84,7 @@ pub fn shaped_avatar(face: Face, size: AvatarSize, shape: AvatarShape) -> Avatar
         AvatarSize::Profile => (56., 15., 17.),
         AvatarSize::Tile => (44., 13., 12.),
         AvatarSize::Pocket => (32., 10., 10.5),
+        AvatarSize::Card => (38., 12., 11.),
     };
     let radius = match shape {
         AvatarShape::Square => radius,
