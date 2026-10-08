@@ -44,7 +44,7 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 | | last message preview | done | not in the API: one `messages?limit=1` per surface on load, then kept from `message.created` |
 | | search | done | local filter over names (the Mac's search is inert) |
 | Conversation | day groups, New divider, fresh-message stripes | done | the Mac `Feed`, phone chrome |
-| | paging back (`before`) | partial | shared code, not exercised on the phone (demo history is short) |
+| | paging back (`before`) | done | the demo world's Night Log has 320 messages; flicking back loads page after page (`?before=`) and the message under your finger stays put |
 | | Markdown, code, tables, links | done | GPUI Kit `TextView` |
 | | avatars of agents and the user | done | user is round on the phone, agents square |
 | | pictures in messages, viewer | partial | viewer mounted; no picture post was tested; blocks are 480 pt wide at most and can overflow a phone column |
@@ -117,6 +117,7 @@ App-side changes, each kept behaviour-neutral for the Mac:
 - **"Allow the microphone, then tap again"** stays in the composer after you grant permission, until the next tap. The permission callback runs off the main thread.
 - **Playback right after a recording** needs a device check: the session drops back to Playback without re-activating it.
 - **No live transcript while holding the mic.** The daemon transcribes after the upload, and the contract has no streaming speech-to-text.
+- In the simulator, `axe swipe` (a few sparse touch samples) sometimes produced a reversed or huge fling; real-finger-like drags (`axe drag` with 20 steps) and slow drags page smoothly. Worth a check with a finger on a device.
 - A `?` can wrap alone to the next line (GPUI's line breaker keeps `?` breakable for URLs; the Mac does the same).
 - Agent and user avatars can't be uploaded from Photos, only from Files.
 

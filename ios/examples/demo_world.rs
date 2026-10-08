@@ -9,6 +9,8 @@ use tuclaw_core::v3::{
 };
 
 const MOVIE_NIGHT: SurfaceId = SurfaceId(10);
+const NIGHT_LOG: SurfaceId = SurfaceId(11);
+const LOG_LENGTH: i64 = 320;
 const HOME: GroupId = GroupId(1);
 const MEDIA: GroupId = GroupId(2);
 const TONE: &str = "../../core/testdata/v3/media/tone.ogg";
@@ -91,6 +93,7 @@ fn main() {
         next = next.max(message.id);
         base = base.max(message.created_at);
     }
+    let log_template = template.clone();
     let movie = movie_night(&messages, &mut runs, next, base);
     let asked = movie[0].id;
     surfaces.push(Surface {
@@ -106,6 +109,24 @@ fn main() {
         ..template
     });
     messages.extend(movie);
+    let mut last = MessageId(0);
+    for message in &messages {
+        last = last.max(message.id);
+    }
+    let log = night_log(&messages, last, base);
+    surfaces.push(Surface {
+        id: NIGHT_LOG,
+        name: "Night Log".into(),
+        topic_name: "Night Log".into(),
+        display_name: None,
+        sort_order: 6,
+        group_id: None,
+        last_message_at: log.last().map(|message| message.created_at),
+        last_read_message_id: log.last().map(|message| message.id),
+        live_run: None,
+        ..log_template
+    });
+    messages.extend(log);
     let general = newest_of(&messages, SurfaceId(1), 3);
     for surface in &mut surfaces {
         match surface.name.as_str() {
@@ -148,6 +169,46 @@ fn main() {
     let json = serde_json::to_string_pretty(&seed).expect("the seed serializes");
     std::fs::write(&path, json).expect("the world is written");
     println!("{}", path.display());
+}
+
+fn night_log(messages: &[Message], last: MessageId, base: time::OffsetDateTime) -> Vec<Message> {
+    let MessageId(last) = last;
+    let mut user = None;
+    let mut post = None;
+    for message in messages {
+        if user.is_none() && message.run_id.is_none() && message.author.agent_id.is_none() {
+            user = Some(message.clone());
+        }
+        if post.is_none() && message.author.agent_id.is_some() && message.run_id.is_none() {
+            post = Some(message.clone());
+        }
+    }
+    let user = user.expect("a message by the user");
+    let post = post.expect("a post by an agent");
+    let mut log = Vec::new();
+    for index in 0..LOG_LENGTH {
+        let at = base - Duration::minutes(47 * (LOG_LENGTH - index));
+        let template = if index % 4 == 0 { &user } else { &post };
+        let text = if index % 4 == 0 {
+            format!("Проверка №{}: всё ли в порядке?", index + 1)
+        } else {
+            format!("Запись {} из {LOG_LENGTH}: ночной обход, всё штатно.", index + 1)
+        };
+        log.push(Message {
+            id: MessageId(last + 1 + index),
+            surface_id: NIGHT_LOG,
+            text,
+            created_at: at,
+            client_message_id: None,
+            reply_to_message_id: None,
+            run_id: None,
+            run_summary: None,
+            suggested_replies: None,
+            attachments: Vec::new(),
+            ..template.clone()
+        });
+    }
+    log
 }
 
 fn newest_of(messages: &[Message], surface: SurfaceId, skip: usize) -> Option<MessageId> {

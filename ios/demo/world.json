@@ -136,6 +136,42 @@
       "unread": 0,
       "unread_replies": 0,
       "marked_unread": false
+    },
+    {
+      "id": 11,
+      "kind": "channel",
+      "name": "Night Log",
+      "sort_order": 6,
+      "last_message_at": "2026-10-03T15:13:00Z",
+      "lead_agent_id": 1,
+      "agents": [
+        {
+          "agent_id": 1,
+          "role": "lead",
+          "listens": true
+        },
+        {
+          "agent_id": 3,
+          "role": "mention",
+          "listens": false
+        }
+      ],
+      "bindings": [
+        {
+          "channel": "telegram",
+          "external_id": "-1001234567890:0",
+          "mirror": "agent_only"
+        }
+      ],
+      "live_run": null,
+      "topic_name": "Night Log",
+      "display_name": null,
+      "group_id": null,
+      "archived_at": null,
+      "last_read_message_id": 9384,
+      "unread": 0,
+      "unread_replies": 0,
+      "marked_unread": false
     }
   ],
   "agents": [
@@ -1592,6 +1628,6406 @@
         "open": true,
         "chosen": null
       }
+    },
+    {
+      "id": 9065,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №1: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T05:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9066,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 2 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T06:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9067,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 3 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T06:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9068,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 4 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T07:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9069,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №5: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T08:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9070,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 6 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T09:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9071,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 7 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T10:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9072,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 8 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T10:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9073,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №9: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T11:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9074,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 10 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T12:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9075,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 11 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T13:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9076,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 12 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T13:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9077,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №13: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T14:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9078,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 14 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T15:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9079,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 15 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T16:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9080,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 16 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T17:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9081,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №17: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T17:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9082,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 18 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T18:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9083,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 19 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T19:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9084,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 20 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T20:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9085,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №21: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-23T21:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9086,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 22 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T21:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9087,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 23 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T22:34:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9088,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 24 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-23T23:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9089,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №25: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T00:08:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9090,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 26 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T00:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9091,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 27 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T01:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9092,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 28 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T02:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9093,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №29: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T03:16:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9094,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 30 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T04:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9095,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 31 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T04:50:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9096,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 32 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T05:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9097,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №33: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T06:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9098,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 34 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T07:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9099,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 35 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T07:58:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9100,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 36 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T08:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9101,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №37: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T09:32:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9102,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 38 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T10:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9103,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 39 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T11:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9104,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 40 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T11:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9105,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №41: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T12:40:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9106,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 42 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T13:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9107,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 43 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T14:14:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9108,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 44 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T15:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9109,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №45: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T15:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9110,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 46 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T16:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9111,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 47 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T17:22:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9112,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 48 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T18:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9113,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №49: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T18:56:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9114,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 50 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T19:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9115,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 51 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T20:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9116,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 52 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T21:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9117,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №53: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-24T22:04:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9118,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 54 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T22:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9119,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 55 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-24T23:38:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9120,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 56 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T00:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9121,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №57: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T01:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9122,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 58 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T01:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9123,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 59 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T02:46:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9124,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 60 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T03:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9125,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №61: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T04:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9126,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 62 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T05:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9127,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 63 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T05:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9128,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 64 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T06:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9129,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №65: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T07:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9130,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 66 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T08:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9131,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 67 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T09:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9132,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 68 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T09:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9133,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №69: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T10:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9134,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 70 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T11:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9135,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 71 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T12:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9136,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 72 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T12:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9137,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №73: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T13:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9138,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 74 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T14:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9139,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 75 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T15:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9140,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 76 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T16:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9141,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №77: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T16:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9142,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 78 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T17:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9143,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 79 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T18:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9144,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 80 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T19:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9145,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №81: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T20:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9146,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 82 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T20:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9147,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 83 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T21:34:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9148,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 84 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T22:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9149,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №85: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-25T23:08:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9150,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 86 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-25T23:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9151,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 87 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T00:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9152,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 88 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T01:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9153,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №89: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T02:16:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9154,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 90 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T03:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9155,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 91 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T03:50:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9156,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 92 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T04:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9157,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №93: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T05:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9158,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 94 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T06:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9159,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 95 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T06:58:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9160,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 96 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T07:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9161,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №97: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T08:32:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9162,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 98 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T09:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9163,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 99 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T10:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9164,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 100 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T10:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9165,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №101: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T11:40:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9166,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 102 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T12:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9167,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 103 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T13:14:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9168,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 104 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T14:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9169,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №105: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T14:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9170,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 106 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T15:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9171,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 107 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T16:22:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9172,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 108 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T17:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9173,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №109: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T17:56:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9174,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 110 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T18:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9175,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 111 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T19:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9176,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 112 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T20:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9177,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №113: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-26T21:04:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9178,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 114 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T21:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9179,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 115 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T22:38:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9180,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 116 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-26T23:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9181,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №117: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T00:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9182,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 118 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T00:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9183,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 119 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T01:46:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9184,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 120 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T02:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9185,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №121: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T03:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9186,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 122 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T04:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9187,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 123 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T04:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9188,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 124 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T05:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9189,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №125: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T06:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9190,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 126 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T07:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9191,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 127 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T08:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9192,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 128 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T08:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9193,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №129: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T09:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9194,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 130 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T10:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9195,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 131 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T11:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9196,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 132 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T11:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9197,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №133: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T12:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9198,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 134 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T13:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9199,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 135 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T14:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9200,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 136 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T15:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9201,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №137: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T15:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9202,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 138 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T16:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9203,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 139 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T17:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9204,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 140 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T18:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9205,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №141: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T19:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9206,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 142 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T19:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9207,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 143 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T20:34:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9208,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 144 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T21:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9209,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №145: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-27T22:08:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9210,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 146 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T22:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9211,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 147 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-27T23:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9212,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 148 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T00:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9213,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №149: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T01:16:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9214,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 150 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T02:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9215,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 151 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T02:50:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9216,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 152 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T03:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9217,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №153: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T04:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9218,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 154 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T05:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9219,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 155 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T05:58:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9220,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 156 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T06:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9221,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №157: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T07:32:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9222,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 158 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T08:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9223,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 159 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T09:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9224,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 160 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T09:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9225,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №161: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T10:40:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9226,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 162 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T11:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9227,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 163 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T12:14:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9228,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 164 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T13:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9229,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №165: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T13:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9230,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 166 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T14:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9231,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 167 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T15:22:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9232,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 168 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T16:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9233,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №169: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T16:56:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9234,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 170 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T17:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9235,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 171 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T18:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9236,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 172 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T19:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9237,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №173: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T20:04:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9238,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 174 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T20:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9239,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 175 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T21:38:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9240,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 176 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T22:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9241,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №177: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-28T23:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9242,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 178 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-28T23:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9243,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 179 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T00:46:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9244,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 180 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T01:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9245,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №181: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T02:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9246,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 182 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T03:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9247,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 183 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T03:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9248,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 184 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T04:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9249,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №185: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T05:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9250,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 186 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T06:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9251,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 187 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T07:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9252,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 188 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T07:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9253,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №189: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T08:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9254,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 190 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T09:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9255,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 191 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T10:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9256,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 192 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T10:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9257,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №193: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T11:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9258,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 194 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T12:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9259,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 195 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T13:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9260,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 196 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T14:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9261,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №197: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T14:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9262,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 198 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T15:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9263,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 199 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T16:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9264,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 200 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T17:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9265,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №201: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T18:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9266,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 202 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T18:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9267,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 203 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T19:34:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9268,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 204 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T20:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9269,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №205: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-29T21:08:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9270,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 206 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T21:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9271,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 207 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T22:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9272,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 208 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-29T23:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9273,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №209: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T00:16:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9274,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 210 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T01:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9275,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 211 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T01:50:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9276,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 212 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T02:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9277,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №213: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T03:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9278,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 214 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T04:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9279,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 215 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T04:58:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9280,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 216 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T05:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9281,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №217: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T06:32:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9282,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 218 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T07:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9283,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 219 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T08:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9284,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 220 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T08:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9285,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №221: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T09:40:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9286,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 222 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T10:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9287,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 223 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T11:14:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9288,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 224 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T12:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9289,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №225: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T12:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9290,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 226 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T13:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9291,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 227 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T14:22:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9292,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 228 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T15:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9293,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №229: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T15:56:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9294,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 230 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T16:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9295,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 231 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T17:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9296,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 232 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T18:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9297,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №233: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T19:04:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9298,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 234 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T19:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9299,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 235 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T20:38:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9300,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 236 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T21:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9301,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №237: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-09-30T22:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9302,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 238 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T22:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9303,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 239 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-09-30T23:46:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9304,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 240 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T00:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9305,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №241: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T01:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9306,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 242 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T02:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9307,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 243 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T02:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9308,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 244 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T03:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9309,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №245: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T04:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9310,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 246 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T05:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9311,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 247 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T06:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9312,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 248 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T06:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9313,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №249: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T07:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9314,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 250 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T08:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9315,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 251 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T09:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9316,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 252 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T09:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9317,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №253: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T10:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9318,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 254 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T11:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9319,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 255 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T12:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9320,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 256 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T13:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9321,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №257: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T13:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9322,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 258 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T14:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9323,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 259 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T15:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9324,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 260 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T16:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9325,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №261: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T17:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9326,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 262 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T17:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9327,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 263 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T18:34:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9328,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 264 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T19:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9329,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №265: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T20:08:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9330,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 266 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T20:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9331,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 267 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T21:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9332,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 268 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-01T22:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9333,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №269: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-01T23:16:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9334,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 270 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T00:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9335,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 271 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T00:50:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9336,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 272 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T01:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9337,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №273: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T02:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9338,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 274 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T03:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9339,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 275 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T03:58:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9340,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 276 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T04:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9341,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №277: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T05:32:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9342,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 278 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T06:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9343,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 279 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T07:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9344,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 280 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T07:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9345,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №281: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T08:40:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9346,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 282 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T09:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9347,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 283 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T10:14:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9348,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 284 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T11:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9349,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №285: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T11:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9350,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 286 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T12:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9351,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 287 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T13:22:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9352,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 288 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T14:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9353,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №289: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T14:56:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9354,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 290 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T15:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9355,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 291 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T16:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9356,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 292 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T17:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9357,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №293: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T18:04:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9358,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 294 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T18:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9359,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 295 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T19:38:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9360,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 296 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T20:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9361,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №297: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-02T21:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9362,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 298 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T21:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9363,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 299 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T22:46:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9364,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 300 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-02T23:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9365,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №301: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T00:20:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9366,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 302 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T01:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9367,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 303 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T01:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9368,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 304 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T02:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9369,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №305: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T03:28:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9370,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 306 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T04:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9371,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 307 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T05:02:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9372,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 308 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T05:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9373,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №309: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T06:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9374,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 310 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T07:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9375,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 311 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T08:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9376,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 312 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T08:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9377,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №313: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:44:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9378,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 314 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9379,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 315 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9380,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 316 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9381,
+      "surface_id": 11,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Проверка №317: всё ли в порядке?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:52:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9382,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 318 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9383,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 319 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:26:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9384,
+      "surface_id": 11,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Запись 320 из 320: ночной обход, всё штатно.",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
     }
   ],
   "runs": [
