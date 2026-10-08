@@ -48,6 +48,8 @@ pub enum AvatarSize {
     Account,
     Message,
     Profile,
+    Tile,
+    Pocket,
 }
 
 #[derive(Clone)]
@@ -69,6 +71,8 @@ pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
         AvatarSize::Account => (30., 9., 11.),
         AvatarSize::Message => (34., 10., 11.),
         AvatarSize::Profile => (56., 15., 17.),
+        AvatarSize::Tile => (44., 13., 12.),
+        AvatarSize::Pocket => (32., 10., 10.5),
     };
     let avatar = Avatar::new()
         .flex_none()

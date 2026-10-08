@@ -5,6 +5,7 @@ use gpui::{
 use gpui_kit::base::{Button, Popover};
 use tuclaw_core::model::{Agent, AgentId, AgentStatus, Channel, ChannelId, ChannelKind};
 
+use crate::badge::{self, Indicator};
 use crate::control::{AvatarSize, Face, avatar, button, row_button};
 use crate::icon::{Glyph, icon};
 use crate::link;
@@ -28,8 +29,8 @@ struct Row {
     channel: ChannelId,
     name: SharedString,
     lead: Lead,
-    unread: usize,
-    replies: usize,
+    indicator: Indicator,
+    attention: bool,
     marked: bool,
     working: Vec<String>,
     highlight: Highlight,
@@ -135,13 +136,12 @@ impl Sidebar {
             channel,
             name,
             lead,
-            unread,
-            replies,
+            indicator,
+            attention,
             marked,
             working,
             highlight,
         } = row;
-        let attention = unread > 0 || marked;
         let selector = format!("sidebar-row-{name}");
         let selector_name = name.clone();
         let element = row_frame(selector)
@@ -172,16 +172,12 @@ impl Sidebar {
         } else {
             element.child(working_dot(&selector_name))
         };
-        let element = if replies > 0 {
-            element.child(count_badge(replies, theme::accent()))
-        } else if marked && unread > 0 {
-            element.child(count_badge(unread, theme::accent()))
-        } else if marked {
-            element.child(marked_dot(&selector_name))
-        } else if unread > 0 {
-            element.child(activity_badge(&selector_name, unread))
-        } else {
-            element
+        let element = match indicator {
+            Indicator::Replies(count) => element.child(count_badge(count, theme::accent())),
+            Indicator::Unread(count) => element.child(count_badge(count, theme::accent())),
+            Indicator::Marked => element.child(marked_dot(&selector_name)),
+            Indicator::Activity(count) => element.child(activity_badge(&selector_name, count)),
+            Indicator::Nothing => element,
         };
         let element = match highlight {
             Highlight::On => element.bg(theme::selection()),
@@ -293,17 +289,17 @@ fn sections(state: &AppState) -> Vec<Section> {
     };
     let people = state.people();
     let mut sections: Vec<Section> = Vec::new();
-    for Channel {
-        id,
-        name,
-        group,
-        kind,
-        unread,
-        replies,
-        marked,
-        sort_index: _,
-    } in state.channels()
-    {
+    for channel in state.channels() {
+        let Channel {
+            id,
+            name,
+            group,
+            kind,
+            unread: _,
+            replies: _,
+            marked,
+            sort_index: _,
+        } = channel;
         let title = match kind {
             ChannelKind::Channel => group.clone().map(SharedString::from),
             ChannelKind::Direct(_) => Some(SharedString::new_static(DIRECT_MESSAGES)),
@@ -337,8 +333,8 @@ fn sections(state: &AppState) -> Vec<Section> {
             channel: *id,
             name: SharedString::from(name.clone()),
             lead,
-            unread: *unread,
-            replies: *replies,
+            indicator: badge::indicator(channel),
+            attention: badge::needs_attention(channel),
             marked: *marked,
             working: state.working(*id),
             highlight,

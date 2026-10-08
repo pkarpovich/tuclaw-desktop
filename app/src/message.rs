@@ -17,6 +17,7 @@ use gpui_kit::base::Avatar;
 
 use crate::audio::{PEAKS, Peaks, Waveform};
 use crate::card::{CardActions, with_card};
+use crate::chrome::{self, Chrome};
 use crate::control::{self, AvatarSize, Face, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::link;
@@ -77,6 +78,7 @@ pub struct Actions {
     pub on_reply: OnToggle,
     pub on_jump: OnToggle,
     pub card: CardActions,
+    pub chrome: Chrome,
 }
 
 pub type OnPicture = Rc<dyn Fn(Viewed, &mut Window, &mut App)>;
@@ -172,11 +174,7 @@ pub fn message_row(
             on_play: actions.on_play.clone(),
         };
         column = column.child(voice_card(*id, voice, answer, controls));
-        return with_reply(
-            row(selector, face, column, stripe),
-            *id,
-            actions.on_reply.clone(),
-        );
+        return with_reply(row(selector, face, column, stripe), *id, actions);
     }
     if let Some(thinking) = thinking.filter(|_| pane.is_none()) {
         column = column.child(thinking_fold(
@@ -211,7 +209,7 @@ pub fn message_row(
                 shelf,
                 actions.on_picture.clone(),
             )),
-            Segment::Quote(text) => column.child(quote_block(&key, text)),
+            Segment::Quote(text) => column.child(quote_block(&key, text, &actions.chrome)),
         };
     }
     if let Some(suggestions) = suggestions {
@@ -220,11 +218,7 @@ pub fn message_row(
     if let Some(pane) = pane {
         column = column.child(runlog::render(*id, pane, actions.on_disclose.clone()));
     }
-    with_reply(
-        row(selector, face, column, stripe),
-        *id,
-        actions.on_reply.clone(),
-    )
+    with_reply(row(selector, face, column, stripe), *id, actions)
 }
 
 fn known_agents(people: &People) -> Vec<Known> {
@@ -281,11 +275,19 @@ fn quote_link(id: MessageId, quote: Quote, on_jump: OnToggle) -> impl IntoElemen
         )
 }
 
-fn with_reply(row: Stateful<Div>, id: MessageId, on_reply: OnToggle) -> Stateful<Div> {
+fn with_reply(row: Stateful<Div>, id: MessageId, actions: &Actions) -> Stateful<Div> {
     let MessageId(raw) = id;
     if raw <= 0 {
         return row;
     }
+    let touch = match &actions.chrome {
+        Chrome::Desktop => None,
+        Chrome::Phone(touch) => Some(touch.on_press.clone()),
+    };
+    if let Some(on_press) = touch {
+        return chrome::on_long_press(row, Rc::new(move |window, cx| on_press(id, window, cx)));
+    }
+    let on_reply = actions.on_reply.clone();
     let group = SharedString::from(format!("message-{raw}-row"));
     row.group(group.clone()).relative().child(
         div()
@@ -368,12 +370,11 @@ enum ReplyState {
     Closed,
 }
 
-fn quote_block(key: &str, text: String) -> impl IntoElement {
+fn quote_block(key: &str, text: String, chrome: &Chrome) -> impl IntoElement {
     let group = SharedString::from(format!("{key}-quote"));
     let selector = format!("{key}-quote");
-    let copy = format!("{key}-quote-copy");
     let copied = text.clone();
-    div()
+    let block = div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
         .group(group.clone())
@@ -388,25 +389,30 @@ fn quote_block(key: &str, text: String) -> impl IntoElement {
             SharedString::from(format!("{key}-quote-md")),
             text,
             Ink::Muted,
-        ))
+        ));
+    match chrome {
+        Chrome::Desktop => block.child(quote_copy(key, group, copied)),
+        Chrome::Phone(_) => block,
+    }
+}
+
+fn quote_copy(key: &str, group: SharedString, copied: String) -> impl IntoElement {
+    div()
+        .absolute()
+        .top(px(0.))
+        .right(px(4.))
+        .opacity(0.)
+        .group_hover(group, |style| style.opacity(1.))
         .child(
-            div()
-                .absolute()
-                .top(px(0.))
-                .right(px(4.))
-                .opacity(0.)
-                .group_hover(group, |style| style.opacity(1.))
-                .child(
-                    button(copy)
-                        .accessibility_label("Copy the quote")
-                        .p(px(4.))
-                        .rounded(px(6.))
-                        .hover(|style| style.bg(theme::sunken()))
-                        .on_click(move |_event, _window, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(copied.clone()));
-                        })
-                        .child(icon(Glyph::Copy, px(13.), theme::text_muted())),
-                ),
+            button(format!("{key}-quote-copy"))
+                .accessibility_label("Copy the quote")
+                .p(px(4.))
+                .rounded(px(6.))
+                .hover(|style| style.bg(theme::sunken()))
+                .on_click(move |_event, _window, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(copied.clone()));
+                })
+                .child(icon(Glyph::Copy, px(13.), theme::text_muted())),
         )
 }
 

@@ -14,6 +14,7 @@ use tuclaw_core::v3;
 
 use crate::automation::{FireRow, OnTask, Quiet, failed_card, quiet_divider, trigger_tag};
 use crate::card;
+use crate::chrome::{Chrome, Touch};
 use crate::composer::Composer;
 use crate::control::{AvatarSize, Face, avatar};
 use crate::icon::{Glyph, icon};
@@ -35,6 +36,7 @@ use crate::theme;
 
 pub struct Feed {
     state: Entity<AppState>,
+    chrome: Chrome,
     list: ListState,
     items: Rc<Vec<Item>>,
     composer: Entity<Composer>,
@@ -82,6 +84,28 @@ enum Header {
 
 impl Feed {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Feed {
+        Feed::build(state, Chrome::Desktop, window, cx)
+    }
+
+    pub fn phone(
+        state: Entity<AppState>,
+        touch: Touch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Feed {
+        Feed::build(state, Chrome::Phone(touch), window, cx)
+    }
+
+    pub fn composer(&self) -> &Entity<Composer> {
+        &self.composer
+    }
+
+    fn build(
+        state: Entity<AppState>,
+        chrome: Chrome,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Feed {
         let observation = cx.observe(&state, |_feed, _state, cx| cx.notify());
         let events = cx.subscribe_in(
             &state,
@@ -156,7 +180,14 @@ impl Feed {
         list.set_follow_mode(FollowMode::Tail);
         let pager = state.downgrade();
         let scrolled = cx.weak_entity();
-        list.set_scroll_handler(move |event: &ListScrollEvent, _window, cx| {
+        let on_drag = match &chrome {
+            Chrome::Desktop => None,
+            Chrome::Phone(touch) => Some(touch.on_drag.clone()),
+        };
+        list.set_scroll_handler(move |event: &ListScrollEvent, window, cx| {
+            if let Some(on_drag) = &on_drag {
+                on_drag(window, cx);
+            }
             let following = event.is_following_tail;
             scrolled
                 .update(cx, |feed, cx| feed.scrolled(following, cx))
@@ -175,6 +206,7 @@ impl Feed {
         });
         let placeholder = placeholder(state.read(cx));
         let sender = state.clone();
+        let composer_chrome = chrome.clone();
         let composer = cx.new(|cx| {
             Composer::new(
                 placeholder,
@@ -185,10 +217,12 @@ impl Feed {
                 cx,
             )
             .with_state(state.clone(), cx)
+            .with_chrome(composer_chrome.clone())
         });
         state.update(cx, |state, cx| state.read_to_newest(cx));
         Feed {
             state,
+            chrome,
             list,
             items: Rc::new(items),
             composer,
@@ -440,6 +474,7 @@ impl Feed {
             on_reply,
             on_jump,
             card: card::actions(&self.state),
+            chrome: self.chrome.clone(),
         };
         let stopper = self.state.clone();
         let on_stop: OnStop = Rc::new(move |run, _window, cx| {
@@ -566,12 +601,16 @@ impl Render for Feed {
                 }
             });
         });
+        let header = match self.chrome {
+            Chrome::Desktop => Some(header_element(header, pulse, on_pulse)),
+            Chrome::Phone(_) => None,
+        };
         div()
             .flex()
             .flex_col()
             .size_full()
             .min_h(px(0.))
-            .child(header_element(header, pulse, on_pulse))
+            .children(header)
             .child(
                 div()
                     .relative()
@@ -1203,7 +1242,7 @@ mod tests {
     use super::{Feed, Header, Item, header};
     use crate::live::RunView;
     use crate::runlog::{Row, StepStatus};
-    use crate::state::{AppState, Recording};
+    use crate::state::{AppState, Presence, Recording};
     use crate::testing::{FakeRecorder, channel_named, loaded, play};
 
     fn feed(
@@ -1401,6 +1440,25 @@ mod tests {
             cx.debug_bounds("feed-unread").is_some(),
             "the open channel marks where the new messages start"
         );
+        see_everything_fresh(&state, cx);
+        assert_eq!(unread_of(&state, cx, "General"), 0);
+    }
+
+    #[gpui::test]
+    fn a_hidden_feed_keeps_new_messages_unread_until_it_is_shown(cx: &mut TestAppContext) {
+        let (mock, state, _feed, cx) = feed(cx);
+        state.update(cx, |state, cx| state.set_feed(Presence::Hidden, cx));
+        posted_by_jarvis(&mock, &state, cx, "While you were on the list.");
+        assert_eq!(unread_of(&state, cx, "General"), 1);
+        see_everything_fresh(&state, cx);
+        assert_eq!(
+            unread_of(&state, cx, "General"),
+            1,
+            "nothing is seen while the feed is off screen"
+        );
+        state.update(cx, |state, cx| state.set_feed(Presence::Shown, cx));
+        cx.run_until_parked();
+        assert_eq!(unread_of(&state, cx, "General"), 1, "unread until seen");
         see_everything_fresh(&state, cx);
         assert_eq!(unread_of(&state, cx, "General"), 0);
     }

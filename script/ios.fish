@@ -2,14 +2,17 @@
 
 set -l profile debug
 set -l run no
+set -l mock no
 for arg in $argv
     switch $arg
         case --release
             set profile release
         case --run
             set run yes
+        case --mock
+            set mock yes
         case '*'
-            echo "usage: ios.fish [--release] [--run]" >&2
+            echo "usage: ios.fish [--release] [--run] [--mock]" >&2
             exit 2
     end
 end
@@ -65,6 +68,9 @@ xcrun simctl bootstatus $udid -b >/dev/null; or exit 1
 open -a Simulator --args -CurrentDeviceUDID $udid
 xcrun simctl install $udid $app; or exit 1
 set -l log $out/console.log
+if test $mock = yes
+    set -x SIMCTL_CHILD_TUCLAW_MOCK 1
+end
 xcrun simctl launch --terminate-running-process --stdout=$log --stderr=$log $udid $bundle_id; or exit 1
 echo "console: $log"
 echo "launched on $sim_name ($udid)"

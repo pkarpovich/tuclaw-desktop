@@ -7,6 +7,7 @@ use gpui_kit::base::input::{
     Enter, Escape, IndentInline, MoveDown, MoveUp, Textarea, TextareaState,
 };
 
+use crate::chrome::Chrome;
 use crate::control::{button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::message;
@@ -45,6 +46,7 @@ pub struct Composer {
     state: Option<Entity<AppState>>,
     mentions: Option<MentionMenu>,
     picked: Vec<Mention>,
+    chrome: Chrome,
     _observation: Subscription,
     _state_observation: Option<Subscription>,
 }
@@ -77,6 +79,7 @@ impl Composer {
             state: None,
             mentions: None,
             picked: Vec::new(),
+            chrome: Chrome::Desktop,
             _observation: observation,
             _state_observation: None,
         }
@@ -85,6 +88,11 @@ impl Composer {
     pub fn with_state(mut self, state: Entity<AppState>, cx: &mut Context<Self>) -> Composer {
         self._state_observation = Some(cx.observe(&state, |_composer, _state, cx| cx.notify()));
         self.state = Some(state);
+        self
+    }
+
+    pub fn with_chrome(mut self, chrome: Chrome) -> Composer {
+        self.chrome = chrome;
         self
     }
 
@@ -296,7 +304,10 @@ impl Composer {
             self.pick_highlighted(window, cx);
             return;
         }
-        self.submit(window, cx);
+        match self.chrome {
+            Chrome::Desktop => self.submit(window, cx),
+            Chrome::Phone(_) => cx.propagate(),
+        }
     }
 
     fn refresh_mentions(&mut self, cx: &mut Context<Self>) {
@@ -637,6 +648,95 @@ impl Composer {
     }
 }
 
+impl Composer {
+    fn phone_shape(
+        &self,
+        sendable: Sendable,
+        on_field: crate::chrome::OnTap,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let reply = self.reply_bar(cx);
+        let mentions = self.mention_menu(cx);
+        let recording = match &self.state {
+            Some(state) => state.read(cx).recording().clone(),
+            None => Recording::Idle,
+        };
+        let row = div().flex().items_end().gap(px(9.)).px(px(12.)).pt(px(8.));
+        let row = match recording {
+            Recording::Idle => row
+                .child(
+                    round_button("composer-mention", px(34.))
+                        .accessibility_label("Mention an agent")
+                        .bg(theme::sunken())
+                        .on_click(cx.listener(|composer, _event, window, cx| {
+                            composer.start_mention(window, cx)
+                        }))
+                        .child(icon(Glyph::Mention, px(17.), theme::ink_soft())),
+                )
+                .child(
+                    div()
+                        .id("input-feed")
+                        .debug_selector(|| "input-feed".to_string())
+                        .flex_1()
+                        .min_w(px(0.))
+                        .min_h(px(36.))
+                        .px(px(14.))
+                        .py(px(7.))
+                        .rounded(px(18.))
+                        .bg(theme::raised())
+                        .border_1()
+                        .border_color(theme::border())
+                        .text_size(px(15.))
+                        .line_height(px(21.))
+                        .on_action(cx.listener(Self::enter))
+                        .on_mouse_up(gpui::MouseButton::Left, move |_event, window, cx| {
+                            on_field(window, cx)
+                        })
+                        .child(Textarea::new(&self.input)),
+                )
+                .child(match sendable {
+                    Sendable::Ready => round_button("composer-send-feed", px(38.))
+                        .accessibility_label("Send")
+                        .bg(theme::accent())
+                        .on_click(
+                            cx.listener(|composer, _event, window, cx| composer.submit(window, cx)),
+                        )
+                        .child(icon(Glyph::Send, px(18.), theme::chip_text())),
+                    Sendable::Blank => round_button("composer-talk", px(38.))
+                        .accessibility_label("Record a voice message")
+                        .bg(theme::accent())
+                        .on_click(cx.listener(|composer, _event, _window, cx| composer.talk(cx)))
+                        .child(icon(Glyph::Voice, px(18.), theme::chip_text())),
+                }),
+            Recording::Live { .. } | Recording::Sending | Recording::Failed(_) => row
+                .justify_end()
+                .min_h(px(38.))
+                .child(div().flex_1())
+                .child(self.voice_controls(cx)),
+        };
+        div()
+            .on_action(cx.listener(Self::toggle_talk))
+            .capture_action(cx.listener(Self::up))
+            .capture_action(cx.listener(Self::down))
+            .capture_action(cx.listener(Self::tab))
+            .capture_action(cx.listener(Self::escape))
+            .flex()
+            .flex_none()
+            .flex_col()
+            .pb(px(8.))
+            .border_t_1()
+            .border_color(theme::hairline())
+            .bg(theme::card())
+            .children(mentions)
+            .children(reply)
+            .child(row)
+    }
+}
+
+fn round_button(selector: &'static str, size: gpui::Pixels) -> gpui_kit::base::Button {
+    button(selector).flex_none().w(size).h(size).rounded_full()
+}
+
 impl Render for Composer {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sendable = if self.input.read(cx).value().trim().is_empty() {
@@ -644,7 +744,12 @@ impl Render for Composer {
         } else {
             Sendable::Ready
         };
-        self.feed_shape(sendable, cx)
+        match self.chrome.clone() {
+            Chrome::Desktop => self.feed_shape(sendable, cx).into_any_element(),
+            Chrome::Phone(touch) => self
+                .phone_shape(sendable, touch.on_field, cx)
+                .into_any_element(),
+        }
     }
 }
 

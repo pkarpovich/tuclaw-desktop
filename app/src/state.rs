@@ -47,6 +47,19 @@ pub enum Direction {
     Down,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Preview {
+    pub author: Author,
+    pub text: String,
+    pub at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Presence {
+    Shown,
+    Hidden,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarVisibility {
     Shown,
@@ -217,6 +230,8 @@ pub struct AppState {
     held: Option<ChannelId>,
     replying: Option<MessageId>,
     window_active: bool,
+    feed: Presence,
+    previews: Option<HashMap<ChannelId, Preview>>,
     recording: Recording,
     playback: Option<Playback>,
     _playback: Option<Task<()>>,
@@ -283,6 +298,8 @@ impl AppState {
             replying: None,
             automations: AutomationsPanel::default(),
             window_active: true,
+            feed: Presence::Shown,
+            previews: None,
             recording: Recording::Idle,
             playback: None,
             _playback: None,
@@ -653,7 +670,7 @@ impl AppState {
     }
 
     pub fn mark_seen(&mut self, messages: Vec<MessageId>, cx: &mut Context<Self>) {
-        if !self.window_active || messages.is_empty() {
+        if !self.on_screen() || messages.is_empty() {
             return;
         }
         let mut newest = MessageId(0);
@@ -795,8 +812,83 @@ impl AppState {
         }
     }
 
+    pub fn set_feed(&mut self, presence: Presence, cx: &mut Context<Self>) {
+        self.feed = presence;
+        match presence {
+            Presence::Shown => self.read_to_newest(cx),
+            Presence::Hidden => {}
+        }
+        cx.notify();
+    }
+
+    pub fn keep_previews(&mut self, cx: &mut Context<Self>) {
+        if self.previews.is_none() {
+            self.previews = Some(HashMap::new());
+        }
+        self.fetch_previews(cx);
+    }
+
+    pub fn preview(&self, channel: ChannelId) -> Option<&Preview> {
+        self.previews.as_ref()?.get(&channel)
+    }
+
+    fn fetch_previews(&self, cx: &mut Context<Self>) {
+        if self.previews.is_none() {
+            return;
+        }
+        for surface in &self.surfaces {
+            let request = self.client.messages(surface.id, 1);
+            cx.spawn(async move |this, cx| {
+                let Ok(page) = request.await else {
+                    return;
+                };
+                this.update(cx, |state, cx| {
+                    for message in &page.messages {
+                        state.note_preview(message);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+    }
+
+    fn note_preview(&mut self, message: &v3::Message) {
+        let Some(previews) = &mut self.previews else {
+            return;
+        };
+        let mapped = link::message(message);
+        let text = plain::plain_text(&crate::message::source(&mapped.body));
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        let channel = link::channel_id(message.surface_id);
+        if let Some(known) = previews.get(&channel)
+            && known.at > mapped.sent_at
+        {
+            return;
+        }
+        previews.insert(
+            channel,
+            Preview {
+                author: mapped.author,
+                text: text.to_string(),
+                at: mapped.sent_at,
+            },
+        );
+    }
+
+    fn on_screen(&self) -> bool {
+        match self.feed {
+            Presence::Shown => self.window_active,
+            Presence::Hidden => false,
+        }
+    }
+
     pub fn read_to_newest(&mut self, cx: &mut Context<Self>) {
-        if !self.window_active {
+        if !self.on_screen() {
             return;
         }
         let Some(channel) = self.selected else {
@@ -1243,6 +1335,16 @@ impl AppState {
             }
         }
         runs
+    }
+
+    pub fn running(&self) -> Vec<&Run> {
+        let mut running = Vec::new();
+        for run in self.runs.values() {
+            if !run.state.is_finished() {
+                running.push(run);
+            }
+        }
+        running
     }
 
     pub fn working(&self, channel: ChannelId) -> Vec<String> {
@@ -2911,6 +3013,7 @@ impl AppState {
         self.directory = agents;
         self.refresh_agents();
         self.fill_pictures(cx);
+        self.fetch_previews(cx);
         let selected = match self.selected {
             Some(selected) => Some(selected),
             None => self.channels.first().map(|channel| channel.id),
@@ -3161,7 +3264,7 @@ impl AppState {
             return;
         };
         let shown = self.selected == Some(channel);
-        if shown && self.window_active && self.following {
+        if shown && self.on_screen() && self.following {
             return;
         }
         let title = match agent.and_then(|agent| self.directory_agent(link::agent_id(agent))) {
@@ -3186,11 +3289,12 @@ impl AppState {
             self.refresh_agents();
             cx.emit(StateEvent::RunsChanged);
         }
+        self.note_preview(message);
         let shown = self.selected == Some(link::channel_id(message.surface_id));
         if shown && self.held == self.selected {
             self.held = None;
         }
-        if !(shown && self.window_active && self.following) {
+        if !(shown && self.on_screen() && self.following) {
             self.count_unread(message, cx);
         }
         if !shown {
@@ -3459,7 +3563,7 @@ async fn run_link(this: WeakEntity<AppState>, client: v3::Client, cx: &mut Async
 #[cfg(test)]
 mod tests {
     use gpui::TestAppContext;
-    use tuclaw_core::model::{AgentId, AgentStatus, ChannelId};
+    use tuclaw_core::model::{AgentId, AgentStatus, Author, ChannelId};
     use tuclaw_core::v3::{self, AgentId as WireAgent, Scenario};
 
     use std::time::Duration;
@@ -3616,6 +3720,44 @@ mod tests {
                 drawn.push(people.picture(agent.picture.as_ref()).is_some());
             }
             assert_eq!(drawn, vec![true, false, false, false]);
+        });
+    }
+
+    #[gpui::test]
+    fn previews_are_only_fetched_when_asked_for(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let general = channel_named(&state, cx, "General");
+        state.read_with(cx, |state, _cx| assert!(state.preview(general).is_none()));
+        state.update(cx, |state, cx| state.keep_previews(cx));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert!(state.preview(general).is_some()));
+    }
+
+    #[gpui::test]
+    fn a_new_message_becomes_its_channel_preview_in_plain_text(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        state.update(cx, |state, cx| state.keep_previews(cx));
+        cx.run_until_parked();
+        let home = channel_named(&state, cx, "Smart Home");
+        mock.agent_posts(v3::SurfaceId(3), WireAgent(2), "The **lights** are\non.");
+        while mock.step() {}
+        cx.run_until_parked();
+        let preview = state
+            .read_with(cx, |state, _cx| state.preview(home).cloned())
+            .expect("a preview");
+        assert_eq!(preview.author, Author::Agent(AgentId(2)));
+        assert_eq!(preview.text, "The lights are on.");
+    }
+
+    #[gpui::test]
+    fn running_lists_the_unfinished_runs_of_every_channel(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        state.read_with(cx, |state, _cx| {
+            let mut agents = Vec::new();
+            for run in state.running() {
+                agents.push(run.agent_id);
+            }
+            assert_eq!(agents, vec![WireAgent(3)]);
         });
     }
 

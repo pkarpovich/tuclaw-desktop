@@ -24,6 +24,10 @@ pub fn hairline() -> Hsla {
     rgba(0x00000014).into()
 }
 
+pub fn scrim() -> Hsla {
+    rgba(0x1c1b1959).into()
+}
+
 pub fn shadow() -> Hsla {
     rgba(0x1e1c1a38).into()
 }

@@ -1,18 +1,11 @@
-use gpui::{Context, Div, FocusHandle, MouseButton, Stateful, Subscription, Window, prelude::*};
+use gpui::{Context, FocusHandle, Subscription, Window};
 
-pub fn follow_focus<V: 'static>(
+pub fn hide_on_blur<V: 'static>(
     focus: &FocusHandle,
     window: &mut Window,
     cx: &mut Context<V>,
-) -> [Subscription; 2] {
-    [
-        cx.on_focus(focus, window, |_, _, _| show()),
-        cx.on_blur(focus, window, |_, _, _| hide()),
-    ]
-}
-
-pub fn field(element: Stateful<Div>) -> Stateful<Div> {
-    element.on_mouse_up(MouseButton::Left, |_, _, _| show())
+) -> Subscription {
+    cx.on_blur(focus, window, |_, _, _| hide())
 }
 
 pub fn show() {

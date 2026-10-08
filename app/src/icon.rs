@@ -20,6 +20,7 @@ icon_assets!(
         Ellipsis,
         Folder,
         Hash,
+        House,
         List,
         LoaderCircle,
         Lock,
@@ -41,6 +42,8 @@ icon_assets!(
         Square,
         Type,
         Upload,
+        User,
+        Users,
         X,
         Zap,
     ]
@@ -85,10 +88,13 @@ pub enum Glyph {
     Folder,
     Channels,
     Copy,
+    Home,
+    Person,
+    People,
 }
 
 impl Glyph {
-    pub const ALL: [Glyph; 37] = [
+    pub const ALL: [Glyph; 40] = [
         Glyph::Send,
         Glyph::Mention,
         Glyph::Agents,
@@ -126,6 +132,9 @@ impl Glyph {
         Glyph::Folder,
         Glyph::Channels,
         Glyph::Copy,
+        Glyph::Home,
+        Glyph::Person,
+        Glyph::People,
     ];
 
     fn name(self) -> IconName {
@@ -167,6 +176,9 @@ impl Glyph {
             Glyph::Folder => IconName::Folder,
             Glyph::Channels => IconName::List,
             Glyph::Copy => IconName::Copy,
+            Glyph::Home => IconName::House,
+            Glyph::Person => IconName::User,
+            Glyph::People => IconName::Users,
         }
     }
 }

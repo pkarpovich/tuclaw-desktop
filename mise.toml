@@ -57,6 +57,10 @@ run = "fish script/ios.fish"
 description = "Build the iPhone app and launch it on the 'Tuclaw iPhone 17 Pro' simulator (iOS 26.5), creating it if missing"
 run = "fish script/ios.fish --run"
 
+[tasks.ios-mock]
+description = "The same as ios-run, with the app on the built-in mock daemon instead of bravo"
+run = "fish script/ios.fish --run --mock"
+
 [tasks.ios-lint]
 description = "Clippy for the iPhone app on the simulator target, warnings as errors"
 run = "cargo clippy -p tuclaw-ios --lib --target aarch64-apple-ios-sim -- -D warnings"

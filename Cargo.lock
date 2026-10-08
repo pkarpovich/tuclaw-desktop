@@ -7879,6 +7879,7 @@ dependencies = [
  "gpui-pre-mobile",
  "libc",
  "log",
+ "time",
  "tuclaw-core",
  "tuclaw-desktop",
 ]

@@ -4,8 +4,10 @@ pub mod audio;
 pub mod automation;
 pub mod automations_panel;
 pub mod automations_view;
+pub mod badge;
 pub mod card;
 pub mod channels_view;
+pub mod chrome;
 pub mod composer;
 pub mod control;
 #[cfg(target_os = "macos")]
