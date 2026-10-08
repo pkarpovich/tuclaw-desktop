@@ -35,8 +35,8 @@ pub mod settings_panel;
 pub mod shell;
 pub mod sidebar;
 pub mod state;
-#[cfg(test)]
-mod testing;
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
 pub mod theme;
 pub mod viewer;
 

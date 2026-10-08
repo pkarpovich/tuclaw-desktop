@@ -293,6 +293,8 @@ pub fn trigger_tag(row: &FireRow, on_open: OnTask) -> gpui_kit::base::Button {
     let task = row.task.clone();
     row_button(selector)
         .accessibility_label(format!("Open the automation {}", row.label))
+        .min_w(px(0.))
+        .overflow_hidden()
         .gap(px(4.))
         .px(px(6.))
         .py(px(1.))
@@ -302,8 +304,13 @@ pub fn trigger_tag(row: &FireRow, on_open: OnTask) -> gpui_kit::base::Button {
         .text_size(px(11.5))
         .text_color(theme::text_muted())
         .on_click(move |_event, window, cx| on_open(&task, window, cx))
-        .child(icon(Glyph::Automation, px(11.), outcome_tone(row.outcome)))
-        .child(SharedString::from(row.label.clone()))
+        .child(icon(Glyph::Automation, px(11.), outcome_tone(row.outcome)).flex_none())
+        .child(
+            div()
+                .min_w(px(0.))
+                .truncate()
+                .child(SharedString::from(row.label.clone())),
+        )
 }
 
 #[cfg(test)]

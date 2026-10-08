@@ -42,6 +42,8 @@ pub fn on_long_press(element: Stateful<Div>, on_press: OnTap) -> Stateful<Div> {
                     if !started || !bubbling || !visible.contains(&event.start_position) {
                         return;
                     }
+                    window.prevent_default();
+                    cx.stop_propagation();
                     on_press(window, cx);
                 });
             },

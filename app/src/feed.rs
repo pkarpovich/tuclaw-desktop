@@ -1239,7 +1239,14 @@ mod tests {
 
     use tuclaw_core::v3::RunState;
 
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use gpui::{LongPressEvent, TouchPhase};
+    use tuclaw_core::model::MessageId;
+
     use super::{Feed, Header, Item, header};
+    use crate::chrome::Touch;
     use crate::live::RunView;
     use crate::runlog::{Row, StepStatus};
     use crate::state::{AppState, Presence, Recording};
@@ -1257,6 +1264,44 @@ mod tests {
         let built = state.clone();
         let (feed, cx) = cx.add_window_view(move |window, cx| Feed::new(built, window, cx));
         (mock, state, feed, cx)
+    }
+
+    #[gpui::test]
+    fn a_long_press_on_a_message_reaches_the_phone(cx: &mut TestAppContext) {
+        let (_mock, state) = loaded(cx);
+        let pressed: Rc<RefCell<Vec<MessageId>>> = Rc::default();
+        let seen = pressed.clone();
+        let touch = Touch {
+            on_press: Rc::new(move |message, _window, _cx| seen.borrow_mut().push(message)),
+            on_field: Rc::new(|_window, _cx| {}),
+            on_drag: Rc::new(|_window, _cx| {}),
+        };
+        let built = state.clone();
+        let (_feed, cx) =
+            cx.add_window_view(move |window, cx| Feed::phone(built, touch, window, cx));
+        let ids = state.read_with(cx, |state, _cx| {
+            let mut ids = Vec::new();
+            for message in state.messages() {
+                ids.push(message.id);
+            }
+            ids
+        });
+        let mut drawn = None;
+        for id in ids.into_iter().rev() {
+            let MessageId(raw) = id;
+            let selector: &'static str = Box::leak(format!("message-{raw}").into_boxed_str());
+            if let Some(bounds) = cx.debug_bounds(selector) {
+                drawn = Some((id, bounds));
+                break;
+            }
+        }
+        let (id, bounds) = drawn.expect("a message is drawn");
+        cx.simulate_event(LongPressEvent {
+            phase: TouchPhase::Started,
+            start_position: bounds.center(),
+            position: bounds.center(),
+        });
+        assert_eq!(*pressed.borrow(), vec![id]);
     }
 
     const TURTLE: &[u8] = include_bytes!("../../core/testdata/v3/media/avatar_agent.png");

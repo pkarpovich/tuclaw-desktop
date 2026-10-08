@@ -909,8 +909,9 @@ pub fn avatar(writer: &Writer) -> Avatar {
 }
 
 fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Div {
-    let line = div().flex().items_center().gap(px(8.)).child(
+    let line = div().flex().items_center().min_w(px(0.)).gap(px(8.)).child(
         div()
+            .flex_none()
             .text_size(px(14.))
             .font_weight(FontWeight::SEMIBOLD)
             .child(writer.name.clone()),
@@ -921,6 +922,7 @@ fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Di
     };
     line.child(
         div()
+            .flex_none()
             .text_size(px(11.5))
             .text_color(theme::text_muted())
             .child(match quick {

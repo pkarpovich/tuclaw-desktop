@@ -7,3 +7,6 @@ pub mod phone;
 
 #[cfg(target_os = "ios")]
 mod entry;
+
+#[cfg(test)]
+mod tests;

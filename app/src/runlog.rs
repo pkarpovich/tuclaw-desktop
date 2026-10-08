@@ -16,7 +16,10 @@ use crate::live::tool_detail;
 use crate::rich::{self, Ink};
 use crate::theme;
 
+#[cfg(not(target_os = "ios"))]
 pub const MONO: &str = "Menlo";
+#[cfg(target_os = "ios")]
+pub const MONO: &str = ".AppleSystemUIFontMonospaced";
 
 pub type OnDisclose = Rc<dyn Fn(Disclosure, &mut Window, &mut App)>;
 

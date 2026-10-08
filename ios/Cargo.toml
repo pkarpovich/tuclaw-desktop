@@ -17,3 +17,7 @@ time = { workspace = true }
 [target.'cfg(target_os = "ios")'.dependencies]
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/longbridge/gpui-mobile", rev = "9075e3aa", default-features = false, features = ["camera", "video_player"] }
 log = "0.4"
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+tuclaw-desktop = { path = "../app", features = ["test-support"] }

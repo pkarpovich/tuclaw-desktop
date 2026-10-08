@@ -213,7 +213,7 @@ pub fn render(input: InspectorInput, actions: InspectorActions) -> Stateful<Div>
                         .flex_none()
                         .w(px(42.))
                         .pt(px(4.))
-                        .font_family("Menlo")
+                        .font_family(crate::runlog::MONO)
                         .text_size(px(11.))
                         .text_color(theme::text_muted())
                         .child(SharedString::from(

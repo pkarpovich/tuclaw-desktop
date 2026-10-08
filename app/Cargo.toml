@@ -29,6 +29,9 @@ objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageDesti
 objc2-core-foundation = { version = "0.3.2", features = ["CFData", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-graphics = { version = "0.3.2", features = ["CGImage"] }
 
+[features]
+test-support = ["gpui/test-support"]
+
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 gpui_platform = { workspace = true, features = ["test-support"] }
