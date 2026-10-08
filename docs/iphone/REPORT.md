@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 20 plus 5 phone visual scenes, 8 Mac visual scenes), build.
+Branch `iphone-app`, 17 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 20 plus 5 phone visual scenes, 8 Mac visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -77,13 +77,13 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 
 ## 2. What had to be built or bridged
 
-About 2,800 lines in `ios/` (views, navigation, tests, the host, the demo world) and +1,300/-275 lines in `app/` and `core/`.
+About 3,500 lines in `ios/` (views, navigation, tests and visual scenes, the host, the demo world generator; the generated `world.json` not counted) and +1,400/-325 lines in `app/` and `core/`.
 
 Bridging to platform APIs, about 450 lines in total:
 - **Host** (`ios/xcode/main.m` 77, header 17, XcodeGen spec 54, `script/ios.fish` 76): an Objective-C app delegate drives the Rust static library with a `CADisplayLink`.
 - **Entry** (`ios/src/entry.rs` 77): gpui-mobile's `run_app` can't register an `AssetSource`, so ours repeats its steps with `with_assets(Icons)`.
 - **Keyboard** (`keyboard.rs` 19, plus hooks in `chrome.rs`): gpui-mobile never implements GPUI's `show_soft_keyboard`. The phone raises the keyboard on a tap into a field and hides it on a list drag or a blur.
-- **Gestures** (`chrome.rs`, 127 lines): long press (claimed with a hitbox, the way gpui's tooltip does it) and a claimed touch drag for hold-to-talk.
+- **Gestures** (`chrome.rs`, 127 lines): a long press and a claimed touch drag (hold-to-talk, swipe-back), both hit-tested through a hitbox the way gpui's own tooltip does it.
 - **Audio** (`app/src/audio_session.rs` 50): `AVAudioSession` categories, the microphone permission, metering.
 - **Notifications** (iOS part of `notify.rs`, about 45): `UNUserNotificationCenter`, the badge, a system sound in the foreground. The banner code is now shared with the Mac.
 - **Safe areas and keyboard height** (`frame.rs` 33).
@@ -137,7 +137,7 @@ The result: the phone reuses the hardest parts unchanged:
 - the conversation feed with all its list bookkeeping;
 - the settings, profile, channel and automation panels.
 
-The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 20 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
+The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 20 GPUI tests that drive real touches through GPUI's gesture recognizer. Three of them pin bugs that review caught: taps passing through overlays, a reopened channel not being read, and a sheet's tap reaching the mic beneath it.
 
 **What makes it painful.**
 - The platform layer is young. gpui-mobile 0.1 is pinned to an unpublished commit, and I hit a run of gaps:
@@ -149,7 +149,7 @@ The phone-specific code is mostly navigation and chrome. The test discipline car
   - taps that zero-length synthetic touches drop.
 
   Each was cheap to work around, but every one was discovered at runtime, not compile time.
-- Nothing occludes by default: a GPUI overlay lets taps through unless it says otherwise. That was the review's blocker, now fixed and tested.
+- Nothing occludes by default: a GPUI overlay lets taps through unless it says otherwise, and paint-time gesture listeners ignore occlusion unless they hit-test a hitbox. Both bit tonight, and both are now fixed and tested; any new overlay or gesture has to follow the same rule (CLAUDE.md says so).
 - iOS niceties are missing and would have to be hand-built: an interactive swipe-back (there is only a gesture, no slide), scroll-to-top on a status-bar tap, keyboard animation curves, haptics, a real share sheet and a photo picker.
 - A Rust static library inside an Xcode shell with `-force_load` is workable but heavy: the debug `.a` is 1.2 GB.
 - The simulator loop is slower than the Mac's. `mise run ios-visual` now renders five phone scenes headless at 402×874 with the real Metal renderer and compares them with baselines. Each scene also asserts behaviour, as on the Mac, and runs in `mise run test`. Its 70-line image comparison is copied from `app/tests/visual.rs`; sharing it needs a test-support module both harnesses can reach.
