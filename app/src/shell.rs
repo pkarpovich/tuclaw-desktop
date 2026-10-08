@@ -13,10 +13,9 @@ use crate::channels_view::ChannelsView;
 use crate::control::{self, button};
 use crate::feed::Feed;
 use crate::icon::{Glyph, icon};
-use crate::inspector::{self, InspectorActions, InspectorInput, OnClose, OnFilter};
+use crate::inspector;
 use crate::link::Source;
 use crate::profile_panel::ProfilePanel;
-use crate::runlog::OnDisclose;
 use crate::settings_panel::{self, SettingsPanel};
 
 #[derive(Clone)]
@@ -280,45 +279,7 @@ impl Shell {
     }
 
     fn inspector_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let state = self.state.read(cx);
-        let inspector = state.inspector()?;
-        let mut found = None;
-        for message in state.messages() {
-            if message.id == inspector.message {
-                found = Some(message);
-            }
-        }
-        let message = found?;
-        let log = match &message.run {
-            Some(run) => state.run_log(&run.id),
-            None => None,
-        };
-        let discloser = self.state.clone();
-        let on_disclose: OnDisclose = std::rc::Rc::new(move |disclosure, _window, cx| {
-            discloser.update(cx, |state, cx| state.toggle(disclosure, cx));
-        });
-        let closer = self.state.clone();
-        let on_close: OnClose = std::rc::Rc::new(move |_window, cx| {
-            closer.update(cx, |state, cx| state.close_inspector(cx));
-        });
-        let filterer = self.state.clone();
-        let on_filter: OnFilter = std::rc::Rc::new(move |filter, _window, cx| {
-            filterer.update(cx, |state, cx| state.set_filter(filter, cx));
-        });
-        let panel = inspector::render(
-            InspectorInput {
-                inspector,
-                message,
-                log,
-                people: state.people(),
-                is_open: &|disclosure, by_default| state.is_open(disclosure, by_default),
-            },
-            InspectorActions {
-                on_disclose,
-                on_close,
-                on_filter,
-            },
-        );
+        let panel = inspector::from_state(&self.state, cx)?;
         Some(
             card()
                 .id("inspector-card")

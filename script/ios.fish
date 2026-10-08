@@ -69,7 +69,7 @@ open -a Simulator --args -CurrentDeviceUDID $udid
 xcrun simctl install $udid $app; or exit 1
 set -l log $out/console.log
 if test $mock = yes
-    set -x SIMCTL_CHILD_TUCLAW_MOCK 1
+    set -x SIMCTL_CHILD_TUCLAW_MOCK_WORLD $root/ios/demo/world.json
 end
 xcrun simctl launch --terminate-running-process --stdout=$log --stderr=$log $udid $bundle_id; or exit 1
 echo "console: $log"

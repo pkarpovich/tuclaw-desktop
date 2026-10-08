@@ -1,15 +1,16 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Div, Entity, FontWeight, Hsla, IntoElement, Render, SharedString,
-    Stateful, Subscription, Window, div, prelude::*, px,
+    AnyElement, Context, Div, Entity, Focusable, FontWeight, Hsla, IntoElement, MouseButton,
+    Render, SharedString, Stateful, Subscription, Window, div, prelude::*, px,
 };
+use gpui_kit::base::input::{Input, InputState};
 use time::OffsetDateTime;
 use tuclaw_core::model::{Author, Channel, ChannelId, ChannelKind};
 use tuclaw_core::v3::{Run, StepKind};
 use tuclaw_desktop::badge::{self, Indicator};
 use tuclaw_desktop::chrome::on_long_press;
-use tuclaw_desktop::control::{AvatarSize, Face, avatar};
+use tuclaw_desktop::control::{AvatarShape, AvatarSize, Face, avatar, shaped_avatar};
 use tuclaw_desktop::icon::{Glyph, icon, spinner};
 use tuclaw_desktop::local;
 use tuclaw_desktop::message::writer;
@@ -19,6 +20,7 @@ use tuclaw_desktop::state::{AppState, Link};
 use tuclaw_desktop::{link, theme};
 
 use crate::frame;
+use crate::keyboard;
 use crate::navigator::{Menu, Navigator, Tab};
 
 const UNGROUPED: &str = "Channels";
@@ -27,7 +29,10 @@ pub const TAB_BAR_HEIGHT: f32 = 62.;
 pub struct Home {
     state: Entity<AppState>,
     navigator: Entity<Navigator>,
+    search: Entity<InputState>,
     _observation: Subscription,
+    _search: Subscription,
+    _keyboard: Subscription,
 }
 
 struct Row {
@@ -61,14 +66,42 @@ impl Home {
     pub fn new(
         state: Entity<AppState>,
         navigator: Entity<Navigator>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Home {
         let observation = cx.observe(&state, |_home, _state, cx| cx.notify());
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
+        let searching = cx.observe(&search, |_home, _search, cx| cx.notify());
+        let focus = search.read(cx).focus_handle(cx);
+        let keyboard = keyboard::hide_on_blur(&focus, window, cx);
         Home {
             state,
             navigator,
+            search,
             _observation: observation,
+            _search: searching,
+            _keyboard: keyboard,
         }
+    }
+
+    fn search_field(&self) -> impl IntoElement {
+        div()
+            .id("home-search")
+            .debug_selector(|| "home-search".to_string())
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .mx(px(18.))
+            .mb(px(6.))
+            .h(px(36.))
+            .px(px(12.))
+            .rounded(px(11.))
+            .bg(theme::sunken())
+            .text_size(px(15.))
+            .on_mouse_up(MouseButton::Left, |_event, _window, _cx| keyboard::show())
+            .child(icon(Glyph::Search, px(15.), theme::text_label()))
+            .child(div().flex_1().min_w(px(0.)).child(Input::new(&self.search)))
     }
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -118,7 +151,7 @@ impl Home {
                     .on_click(move |_event, _window, cx| {
                         navigator.update(cx, |navigator, cx| navigator.switch(Tab::You, cx))
                     })
-                    .child(avatar(me, AvatarSize::Pocket).rounded_full()),
+                    .child(shaped_avatar(me, AvatarSize::Pocket, AvatarShape::Round)),
             )
     }
 
@@ -321,7 +354,8 @@ impl Home {
 
 impl Render for Home {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sections = sections(self.state.read(cx), local::now());
+        let query = self.search.read(cx).value().to_lowercase();
+        let sections = sections(self.state.read(cx), &query, local::now());
         let running = self.running(cx);
         let mut list = div()
             .id("home-list")
@@ -354,6 +388,7 @@ impl Render for Home {
             .size_full()
             .bg(theme::card())
             .child(self.header(cx))
+            .child(self.search_field())
             .child(list)
     }
 }
@@ -419,7 +454,7 @@ fn count_badge(count: usize, color: Hsla) -> AnyElement {
         .into_any_element()
 }
 
-fn sections(state: &AppState, now: OffsetDateTime) -> Vec<Section> {
+fn sections(state: &AppState, query: &str, now: OffsetDateTime) -> Vec<Section> {
     let people = state.people();
     let mut sections: Vec<Section> = Vec::new();
     for channel in state.channels() {
@@ -436,6 +471,9 @@ fn sections(state: &AppState, now: OffsetDateTime) -> Vec<Section> {
         match kind {
             ChannelKind::Channel => {}
             ChannelKind::Direct(_) => continue,
+        }
+        if !name.to_lowercase().contains(query) {
+            continue;
         }
         let title = SharedString::from(group.clone().unwrap_or_else(|| UNGROUPED.to_string()));
         let continues = match sections.last() {

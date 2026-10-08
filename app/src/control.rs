@@ -59,7 +59,17 @@ pub struct Face {
     pub picture: Option<Arc<Image>>,
 }
 
+#[derive(Clone, Copy)]
+pub enum AvatarShape {
+    Square,
+    Round,
+}
+
 pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
+    shaped_avatar(face, size, AvatarShape::Square)
+}
+
+pub fn shaped_avatar(face: Face, size: AvatarSize, shape: AvatarShape) -> Avatar {
     let Face {
         initials,
         color,
@@ -73,6 +83,10 @@ pub fn avatar(face: Face, size: AvatarSize) -> Avatar {
         AvatarSize::Profile => (56., 15., 17.),
         AvatarSize::Tile => (44., 13., 12.),
         AvatarSize::Pocket => (32., 10., 10.5),
+    };
+    let radius = match shape {
+        AvatarShape::Square => radius,
+        AvatarShape::Round => side / 2.,
     };
     let avatar = Avatar::new()
         .flex_none()

@@ -19,5 +19,7 @@ gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/longbridg
 log = "0.4"
 
 [dev-dependencies]
+futures = "0.3.34"
+serde_json = { workspace = true }
 gpui = { workspace = true, features = ["test-support"] }
 tuclaw-desktop = { path = "../app", features = ["test-support"] }

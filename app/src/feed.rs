@@ -2405,6 +2405,7 @@ mod tests {
             media: Vec::new(),
             me: None,
             tasks: Vec::new(),
+            groups: Vec::new(),
         }
     }
 

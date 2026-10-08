@@ -58,8 +58,12 @@ description = "Build the iPhone app and launch it on the 'Tuclaw iPhone 17 Pro' 
 run = "fish script/ios.fish --run"
 
 [tasks.ios-mock]
-description = "The same as ios-run, with the app on the built-in mock daemon instead of bravo"
+description = "The same as ios-run, with the app on the mock daemon over ios/demo/world.json instead of bravo"
 run = "fish script/ios.fish --run --mock"
+
+[tasks.ios-demo-world]
+description = "Regenerate ios/demo/world.json, the synthetic world ios-mock launches on"
+run = "cargo run -q -p tuclaw-ios --example demo_world"
 
 [tasks.ios-lint]
 description = "Clippy for the iPhone app on the simulator target, warnings as errors"

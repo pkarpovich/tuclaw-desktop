@@ -3,7 +3,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    App, Div, FontWeight, SharedString, Stateful, Window, div, phi, prelude::*, px, relative,
+    App, Div, Entity, FontWeight, SharedString, Stateful, Window, div, phi, prelude::*, px,
+    relative,
 };
 use gpui_kit::base::ToggleGroup;
 use tuclaw_core::model::{Message, RunOutcome, RunRef};
@@ -17,7 +18,7 @@ use crate::rich;
 use crate::runlog::{
     self, Disclosure, Footer, OnDisclose, Owner, Row, RunLog, StepStatus, ToolCall, duration_label,
 };
-use crate::state::{Filter, Inspector};
+use crate::state::{AppState, Filter, Inspector};
 use crate::theme;
 
 pub const WIDTH: f32 = 400.;
@@ -37,6 +38,48 @@ pub struct InspectorActions {
     pub on_disclose: OnDisclose,
     pub on_close: OnClose,
     pub on_filter: OnFilter,
+}
+
+pub fn from_state(state: &Entity<AppState>, cx: &App) -> Option<Stateful<Div>> {
+    let current = state.read(cx);
+    let inspector = current.inspector()?;
+    let mut found = None;
+    for message in current.messages() {
+        if message.id == inspector.message {
+            found = Some(message);
+        }
+    }
+    let message = found?;
+    let log = match &message.run {
+        Some(run) => current.run_log(&run.id),
+        None => None,
+    };
+    let discloser = state.clone();
+    let on_disclose: OnDisclose = Rc::new(move |disclosure, _window, cx| {
+        discloser.update(cx, |state, cx| state.toggle(disclosure, cx));
+    });
+    let closer = state.clone();
+    let on_close: OnClose = Rc::new(move |_window, cx| {
+        closer.update(cx, |state, cx| state.close_inspector(cx));
+    });
+    let filterer = state.clone();
+    let on_filter: OnFilter = Rc::new(move |filter, _window, cx| {
+        filterer.update(cx, |state, cx| state.set_filter(filter, cx));
+    });
+    Some(render(
+        InspectorInput {
+            inspector,
+            message,
+            log,
+            people: current.people(),
+            is_open: &|disclosure, by_default| current.is_open(disclosure, by_default),
+        },
+        InspectorActions {
+            on_disclose,
+            on_close,
+            on_filter,
+        },
+    ))
 }
 
 pub fn filtered(rows: Vec<Row>, filter: Filter) -> Vec<Row> {

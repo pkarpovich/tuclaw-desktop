@@ -18,7 +18,7 @@ use gpui_kit::base::Avatar;
 use crate::audio::{PEAKS, Peaks, Waveform};
 use crate::card::{CardActions, with_card};
 use crate::chrome::{self, Chrome};
-use crate::control::{self, AvatarSize, Face, button, row_button};
+use crate::control::{self, AvatarShape, AvatarSize, Face, button, row_button};
 use crate::icon::{Glyph, icon, spinner};
 use crate::link;
 use crate::local::clock;
@@ -145,7 +145,10 @@ pub fn message_row(
             people,
             &actions.card,
         ),
-        Author::User => avatar(&writer).into_any_element(),
+        Author::User => match actions.chrome {
+            Chrome::Desktop => avatar(&writer).into_any_element(),
+            Chrome::Phone(_) => round_avatar(&writer).into_any_element(),
+        },
         Author::System => avatar(&writer).into_any_element(),
     };
     let Parts { thinking, answer } = rich::split_thinking(&source(body));
@@ -893,19 +896,24 @@ pub fn writer(author: Author, people: &People) -> Writer {
 }
 
 pub fn avatar(writer: &Writer) -> Avatar {
+    control::avatar(writer_face(writer), AvatarSize::Message)
+}
+
+fn round_avatar(writer: &Writer) -> Avatar {
+    control::shaped_avatar(writer_face(writer), AvatarSize::Message, AvatarShape::Round)
+}
+
+fn writer_face(writer: &Writer) -> Face {
     let color = match writer.tone {
         Tone::User => theme::accent(),
         Tone::Agent(index) => theme::agent_chip(index),
         Tone::System => theme::status_idle(),
     };
-    control::avatar(
-        Face {
-            initials: writer.initials.clone(),
-            color,
-            picture: writer.picture.clone(),
-        },
-        AvatarSize::Message,
-    )
+    Face {
+        initials: writer.initials.clone(),
+        color,
+        picture: writer.picture.clone(),
+    }
 }
 
 fn byline(writer: &Writer, sent_at: OffsetDateTime, quick: Option<String>) -> Div {

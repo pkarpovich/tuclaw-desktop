@@ -420,8 +420,15 @@ fn source_key(source: &Source) -> String {
 
 pub fn load_seed(path: &Path) -> Result<v3::Seed, String> {
     let file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    serde_json::from_reader(BufReader::new(file))
-        .map_err(|error| format!("{}: {error}", path.display()))
+    let mut seed: v3::Seed = serde_json::from_reader(BufReader::new(file))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let folder = path.parent().unwrap_or(Path::new("."));
+    for media in &mut seed.media {
+        if media.path.is_relative() {
+            media.path = folder.join(&media.path);
+        }
+    }
+    Ok(seed)
 }
 
 #[cfg(test)]

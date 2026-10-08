@@ -1,12 +1,13 @@
 use gpui::{
-    AnyElement, App, ClipboardItem, Context, Entity, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Window, div, prelude::*, px,
+    AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window, div, prelude::*, px,
 };
 use tuclaw_core::model::{ChannelId, MessageId};
 use tuclaw_desktop::icon::{Glyph, icon};
+use tuclaw_desktop::inspector;
 use tuclaw_desktop::message::source;
 use tuclaw_desktop::state::AppState;
-use tuclaw_desktop::theme;
+use tuclaw_desktop::{theme, viewer};
 
 use crate::conversation::Conversation;
 use crate::frame;
@@ -19,6 +20,7 @@ pub struct Phone {
     navigator: Entity<Navigator>,
     home: Entity<Home>,
     conversation: Entity<Conversation>,
+    viewer_focus: FocusHandle,
     _observation: Subscription,
     _navigation: Subscription,
 }
@@ -42,7 +44,7 @@ impl Phone {
         let observation = cx.observe(&state, |_phone, _state, cx| cx.notify());
         let navigator = cx.new(|cx| Navigator::new(state.clone(), cx));
         let navigation = cx.observe(&navigator, |_phone, _navigator, cx| cx.notify());
-        let home = cx.new(|cx| Home::new(state.clone(), navigator.clone(), cx));
+        let home = cx.new(|cx| Home::new(state.clone(), navigator.clone(), window, cx));
         let conversation =
             cx.new(|cx| Conversation::new(state.clone(), navigator.clone(), window, cx));
         Phone {
@@ -50,6 +52,7 @@ impl Phone {
             navigator,
             home,
             conversation,
+            viewer_focus: cx.focus_handle(),
             _observation: observation,
             _navigation: navigation,
         }
@@ -119,6 +122,26 @@ impl Phone {
             .right(px(14.))
             .bottom(frame::insets().bottom - px(8.))
             .child(bar)
+    }
+
+    fn inspector(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let panel = inspector::from_state(&self.state, cx)?;
+        let insets = frame::insets();
+        Some(
+            div()
+                .id("phone-inspector")
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .flex_col()
+                .pt(insets.top)
+                .pb(insets.bottom)
+                .bg(theme::card())
+                .child(panel)
+                .into_any_element(),
+        )
     }
 
     fn sheet(&self, menu: Menu, cx: &mut Context<Self>) -> AnyElement {
@@ -280,7 +303,7 @@ fn placeholder(title: &'static str) -> AnyElement {
 }
 
 impl Render for Phone {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let navigator = self.navigator.read(cx);
         let tab = navigator.tab();
         let top = navigator.top();
@@ -298,7 +321,12 @@ impl Render for Phone {
             Some(Screen::Conversation) => None,
             None => Some(self.tab_bar(tab)),
         };
+        let inspector = match top {
+            Some(Screen::Conversation) => self.inspector(cx),
+            None => None,
+        };
         let sheet = menu.map(|menu| self.sheet(menu, cx));
+        let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx);
         div()
             .relative()
             .size_full()
@@ -306,6 +334,8 @@ impl Render for Phone {
             .text_color(theme::text_primary())
             .child(screen)
             .children(bar)
+            .children(inspector)
             .children(sheet)
+            .children(picture)
     }
 }

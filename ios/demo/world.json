@@ -1,0 +1,2394 @@
+{
+  "surfaces": [
+    {
+      "id": 1,
+      "kind": "channel",
+      "name": "General",
+      "sort_order": 0,
+      "last_message_at": "2026-10-03T12:30:00Z",
+      "lead_agent_id": 1,
+      "agents": [
+        {
+          "agent_id": 1,
+          "role": "lead",
+          "listens": true
+        },
+        {
+          "agent_id": 3,
+          "role": "mention",
+          "listens": false
+        }
+      ],
+      "bindings": [
+        {
+          "channel": "telegram",
+          "external_id": "-1001234567890:0",
+          "mirror": "agent_only"
+        }
+      ],
+      "live_run": null,
+      "topic_name": "General",
+      "display_name": null,
+      "group_id": null,
+      "archived_at": null,
+      "last_read_message_id": 9027,
+      "unread": 0,
+      "unread_replies": 0,
+      "marked_unread": false
+    },
+    {
+      "id": 2,
+      "kind": "channel",
+      "name": "Magnet Feed",
+      "sort_order": 1,
+      "last_message_at": "2026-10-03T15:00:00Z",
+      "lead_agent_id": 3,
+      "agents": [
+        {
+          "agent_id": 3,
+          "role": "lead",
+          "listens": true
+        }
+      ],
+      "bindings": [
+        {
+          "channel": "telegram",
+          "external_id": "-1001234567890:918",
+          "mirror": "agent_only"
+        }
+      ],
+      "live_run": {
+        "run_id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d",
+        "agent_id": 3
+      },
+      "topic_name": "Magnet Feed",
+      "display_name": null,
+      "group_id": 2,
+      "archived_at": null,
+      "last_read_message_id": 9061,
+      "unread": 0,
+      "unread_replies": 0,
+      "marked_unread": false
+    },
+    {
+      "id": 3,
+      "kind": "channel",
+      "name": "Smart Home",
+      "sort_order": 2,
+      "last_message_at": "2026-10-03T16:00:00Z",
+      "lead_agent_id": 2,
+      "agents": [
+        {
+          "agent_id": 2,
+          "role": "lead",
+          "listens": true
+        }
+      ],
+      "bindings": [
+        {
+          "channel": "telegram",
+          "external_id": "-1001234567890:731",
+          "mirror": "agent_only"
+        }
+      ],
+      "live_run": null,
+      "topic_name": "Smart Home",
+      "display_name": null,
+      "group_id": 1,
+      "archived_at": null,
+      "last_read_message_id": 9060,
+      "unread": 0,
+      "unread_replies": 0,
+      "marked_unread": true
+    },
+    {
+      "id": 10,
+      "kind": "channel",
+      "name": "Movie Night",
+      "sort_order": 5,
+      "last_message_at": "2026-10-03T16:12:00Z",
+      "lead_agent_id": 1,
+      "agents": [
+        {
+          "agent_id": 1,
+          "role": "lead",
+          "listens": true
+        },
+        {
+          "agent_id": 3,
+          "role": "mention",
+          "listens": false
+        }
+      ],
+      "bindings": [
+        {
+          "channel": "telegram",
+          "external_id": "-1001234567890:0",
+          "mirror": "agent_only"
+        }
+      ],
+      "live_run": null,
+      "topic_name": "Movie Night",
+      "display_name": null,
+      "group_id": 2,
+      "archived_at": null,
+      "last_read_message_id": 9062,
+      "unread": 0,
+      "unread_replies": 0,
+      "marked_unread": false
+    }
+  ],
+  "agents": [
+    {
+      "id": 1,
+      "name": "Jarvis",
+      "ident": "tuclaw",
+      "description": "The house butler",
+      "bot_username": "tuclaw_bot",
+      "model": "opus[1m]:medium",
+      "state": "idle",
+      "live_run": null,
+      "home_surface_id": 1,
+      "avatar_url": "/api/v3/agents/1/avatar?v=fdb747208689219a"
+    },
+    {
+      "id": 2,
+      "name": "Home",
+      "ident": "home",
+      "description": "Lights, heating and the robot vacuum",
+      "bot_username": "home_bot",
+      "model": "sonnet",
+      "state": "idle",
+      "live_run": null,
+      "home_surface_id": 3,
+      "avatar_url": null
+    },
+    {
+      "id": 3,
+      "name": "Magnet Feed",
+      "ident": "magnet_feed",
+      "description": "Tracks torrent releases",
+      "bot_username": "magnet_feed_bot",
+      "model": "sonnet",
+      "state": "running",
+      "live_run": {
+        "run_id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d",
+        "surface_id": 2
+      },
+      "home_surface_id": 2,
+      "avatar_url": null
+    },
+    {
+      "id": 4,
+      "name": "Scout",
+      "ident": "scout",
+      "description": "Research on request",
+      "bot_username": "scout_bot",
+      "model": "opus",
+      "state": "idle",
+      "live_run": null,
+      "home_surface_id": null,
+      "avatar_url": null
+    }
+  ],
+  "messages": [
+    {
+      "id": 9001,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:07:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9002,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "d3bda0d1-e037-4d0f-9814-913b930a23c9",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:14:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9003,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:21:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9004,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "a1b4bdb3-b98e-4812-9c43-1bc8733e16ab",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:28:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9005,
+      "surface_id": 1,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:35:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9006,
+      "surface_id": 1,
+      "kind": "a2a",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": 3,
+      "reply_to_message_id": null,
+      "text": "@magnet_feed что вышло за неделю?",
+      "run_id": null,
+      "origin": "a2a",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:42:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9007,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:49:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9008,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "e15085cf-fcc3-49e0-851a-ed8057e80f5d",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T09:56:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9009,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:03:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9010,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "f42c6535-fdb3-4c87-acd0-864d5623b2a4",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:10:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9011,
+      "surface_id": 1,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:17:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9012,
+      "surface_id": 1,
+      "kind": "a2a",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": 3,
+      "reply_to_message_id": null,
+      "text": "@magnet_feed что вышло за неделю?",
+      "run_id": null,
+      "origin": "a2a",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:24:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9013,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:31:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9014,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "1b358411-c008-4f3f-b16d-470f48ce4473",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:38:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9015,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:45:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9016,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "f87f1042-7325-4c0d-bbc6-9843a67ce31f",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:52:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9017,
+      "surface_id": 1,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T10:59:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9018,
+      "surface_id": 1,
+      "kind": "a2a",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": 3,
+      "reply_to_message_id": null,
+      "text": "@magnet_feed что вышло за неделю?",
+      "run_id": null,
+      "origin": "a2a",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:06:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9019,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:13:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9020,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "3eb8a60e-bdbe-452c-9adc-57020518a3f4",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:20:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9021,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:27:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9022,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "0d1beba5-e39b-4cea-9209-3e0806f5ae62",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:34:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9023,
+      "surface_id": 1,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:41:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9024,
+      "surface_id": 1,
+      "kind": "a2a",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": 3,
+      "reply_to_message_id": null,
+      "text": "@magnet_feed что вышло за неделю?",
+      "run_id": null,
+      "origin": "a2a",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:48:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9025,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T11:55:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9026,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "7e961406-00d7-4468-b484-a12e11d48a7b",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:02:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9027,
+      "surface_id": 1,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:09:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9028,
+      "surface_id": 1,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "bfceca71-1536-4530-a5bf-155ae7c2f7fb",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:16:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9029,
+      "surface_id": 1,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:23:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9030,
+      "surface_id": 1,
+      "kind": "a2a",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": 3,
+      "reply_to_message_id": null,
+      "text": "@magnet_feed что вышло за неделю?",
+      "run_id": null,
+      "origin": "a2a",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:30:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9031,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:37:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9032,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "5510d0e1-01bc-4b32-a629-655480c4d89d",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:44:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9033,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:51:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9034,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "2423b7ff-cda0-4242-8307-5a6ae111c80b",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T12:58:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9035,
+      "surface_id": 2,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:05:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9036,
+      "surface_id": 2,
+      "kind": "notice",
+      "author": {
+        "kind": "system",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Агент перезапущен после обновления.",
+      "run_id": null,
+      "origin": "system",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9037,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:19:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9038,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "d51a1834-7449-4c7c-a94e-cbc3ce9e0616",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:26:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9039,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:33:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9040,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "8d055a57-c904-4c6a-9120-32eaea8de3c3",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:40:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9041,
+      "surface_id": 2,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:47:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9042,
+      "surface_id": 2,
+      "kind": "notice",
+      "author": {
+        "kind": "system",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Агент перезапущен после обновления.",
+      "run_id": null,
+      "origin": "system",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T13:54:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9043,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:01:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9044,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "ecd49e73-eac6-455b-a705-f8c7ba781fd2",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:08:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9045,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:15:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9046,
+      "surface_id": 2,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "c40ab40c-7647-43c3-8fc9-bf3deec2f33c",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:22:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9047,
+      "surface_id": 2,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:29:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9048,
+      "surface_id": 2,
+      "kind": "notice",
+      "author": {
+        "kind": "system",
+        "agent_id": 3
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Агент перезапущен после обновления.",
+      "run_id": null,
+      "origin": "system",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:36:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9061,
+      "surface_id": 2,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "[Voice message]\nЧто вышло за неделю из сериалов?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:00:00Z",
+      "run_summary": null,
+      "attachments": [
+        {
+          "id": 1,
+          "kind": "voice",
+          "mime": "audio/ogg",
+          "size_bytes": 12760,
+          "duration_ms": 3006
+        }
+      ],
+      "suggested_replies": null
+    },
+    {
+      "id": 9049,
+      "surface_id": 3,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:43:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9050,
+      "surface_id": 3,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "90779672-00a6-496e-9935-3483bd7c42ac",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:50:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9051,
+      "surface_id": 3,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T14:57:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9052,
+      "surface_id": 3,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "6c54b987-fcaf-4049-8754-99afd4ecf8d8",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:04:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9053,
+      "surface_id": 3,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:11:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9054,
+      "surface_id": 3,
+      "kind": "notice",
+      "author": {
+        "kind": "system",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Агент перезапущен после обновления.",
+      "run_id": null,
+      "origin": "system",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:18:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9055,
+      "surface_id": 3,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что нового?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:25:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9056,
+      "surface_id": 3,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "acf3efc2-a086-4e42-ae7e-f7d55027d1b2",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:32:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9057,
+      "surface_id": 3,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "А подробнее?",
+      "run_id": null,
+      "origin": "user",
+      "channel": "desktop",
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:39:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9058,
+      "surface_id": 3,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Всё спокойно, новых событий нет.",
+      "run_id": "1331c8c2-3d3b-4b6e-830b-f6ef6878d34e",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:46:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 0,
+        "duration_ms": 9000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9059,
+      "surface_id": 3,
+      "kind": "post",
+      "author": {
+        "kind": "agent",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "**Сводка за утро**\n\n- новых релизов: 2\n- задач в очереди: 0",
+      "run_id": null,
+      "origin": "scheduled",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T15:53:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9060,
+      "surface_id": 3,
+      "kind": "notice",
+      "author": {
+        "kind": "system",
+        "agent_id": 2
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Агент перезапущен после обновления.",
+      "run_id": null,
+      "origin": "system",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T16:00:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9062,
+      "surface_id": 10,
+      "kind": "user",
+      "author": {
+        "kind": "user",
+        "agent_id": null
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что посмотрим сегодня вечером? Хочу что-нибудь атмосферное.",
+      "run_id": null,
+      "origin": "user",
+      "channel": "telegram",
+      "client_message_id": null,
+      "created_at": "2026-10-03T16:10:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9063,
+      "surface_id": 10,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": 9062,
+      "text": "Проверил библиотеку на NAS: из нуара есть **Touch of Evil** и **The Third Man**, оба в 4K с оригинальной дорожкой.",
+      "run_id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11",
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T16:11:00Z",
+      "run_summary": {
+        "status": "ok",
+        "step_count": 2,
+        "tool_count": 1,
+        "duration_ms": 13000
+      },
+      "attachments": [],
+      "suggested_replies": null
+    },
+    {
+      "id": 9064,
+      "surface_id": 10,
+      "kind": "answer",
+      "author": {
+        "kind": "agent",
+        "agent_id": 1
+      },
+      "addressed_agent_id": null,
+      "reply_to_message_id": null,
+      "text": "Что включить к 22:00?",
+      "run_id": null,
+      "origin": "user",
+      "channel": null,
+      "client_message_id": null,
+      "created_at": "2026-10-03T16:12:00Z",
+      "run_summary": null,
+      "attachments": [],
+      "suggested_replies": {
+        "options": [
+          "Touch of Evil",
+          "The Third Man",
+          "Что-нибудь новое"
+        ],
+        "open": true,
+        "chosen": null
+      }
+    }
+  ],
+  "runs": [
+    {
+      "run": {
+        "id": "d3bda0d1-e037-4d0f-9814-913b930a23c9",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T09:13:51Z",
+        "finished_at": "2026-10-03T09:14:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T09:13:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T09:13:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "a1b4bdb3-b98e-4812-9c43-1bc8733e16ab",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T09:27:51Z",
+        "finished_at": "2026-10-03T09:28:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T09:27:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T09:27:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "e15085cf-fcc3-49e0-851a-ed8057e80f5d",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T09:55:51Z",
+        "finished_at": "2026-10-03T09:56:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T09:55:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T09:55:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "f42c6535-fdb3-4c87-acd0-864d5623b2a4",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T10:09:51Z",
+        "finished_at": "2026-10-03T10:10:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T10:09:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T10:09:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "1b358411-c008-4f3f-b16d-470f48ce4473",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T10:37:51Z",
+        "finished_at": "2026-10-03T10:38:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T10:37:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T10:37:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "f87f1042-7325-4c0d-bbc6-9843a67ce31f",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T10:51:51Z",
+        "finished_at": "2026-10-03T10:52:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T10:51:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T10:51:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "3eb8a60e-bdbe-452c-9adc-57020518a3f4",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T11:19:51Z",
+        "finished_at": "2026-10-03T11:20:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T11:19:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T11:19:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "0d1beba5-e39b-4cea-9209-3e0806f5ae62",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T11:33:51Z",
+        "finished_at": "2026-10-03T11:34:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T11:33:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T11:33:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "7e961406-00d7-4468-b484-a12e11d48a7b",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T12:01:51Z",
+        "finished_at": "2026-10-03T12:02:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T12:01:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T12:01:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "bfceca71-1536-4530-a5bf-155ae7c2f7fb",
+        "agent_id": 1,
+        "surface_id": 1,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T12:15:51Z",
+        "finished_at": "2026-10-03T12:16:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T12:15:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T12:15:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "5510d0e1-01bc-4b32-a629-655480c4d89d",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T12:43:51Z",
+        "finished_at": "2026-10-03T12:44:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T12:43:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T12:43:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "2423b7ff-cda0-4242-8307-5a6ae111c80b",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T12:57:51Z",
+        "finished_at": "2026-10-03T12:58:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T12:57:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T12:57:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "d51a1834-7449-4c7c-a94e-cbc3ce9e0616",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T13:25:51Z",
+        "finished_at": "2026-10-03T13:26:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T13:25:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T13:25:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "8d055a57-c904-4c6a-9120-32eaea8de3c3",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T13:39:51Z",
+        "finished_at": "2026-10-03T13:40:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T13:39:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T13:39:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "ecd49e73-eac6-455b-a705-f8c7ba781fd2",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T14:07:51Z",
+        "finished_at": "2026-10-03T14:08:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T14:07:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T14:07:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "c40ab40c-7647-43c3-8fc9-bf3deec2f33c",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T14:21:51Z",
+        "finished_at": "2026-10-03T14:22:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T14:21:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T14:21:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "90779672-00a6-496e-9935-3483bd7c42ac",
+        "agent_id": 2,
+        "surface_id": 3,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T14:49:51Z",
+        "finished_at": "2026-10-03T14:50:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T14:49:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T14:49:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "6c54b987-fcaf-4049-8754-99afd4ecf8d8",
+        "agent_id": 2,
+        "surface_id": 3,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T15:03:51Z",
+        "finished_at": "2026-10-03T15:04:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T15:03:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T15:03:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "acf3efc2-a086-4e42-ae7e-f7d55027d1b2",
+        "agent_id": 2,
+        "surface_id": 3,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T15:31:51Z",
+        "finished_at": "2026-10-03T15:32:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T15:31:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T15:31:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "1331c8c2-3d3b-4b6e-830b-f6ef6878d34e",
+        "agent_id": 2,
+        "surface_id": 3,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T15:45:51Z",
+        "finished_at": "2026-10-03T15:46:00Z",
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверю.",
+          "started_at": "2026-10-03T15:45:52Z"
+        },
+        {
+          "seq": 2,
+          "kind": "text",
+          "output": "Всё спокойно, новых событий нет.",
+          "started_at": "2026-10-03T15:45:58Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "0b9d2c4e-5a61-4f7e-8c3d-1e2f3a4b5c6d",
+        "agent_id": 3,
+        "surface_id": 2,
+        "origin": "scheduled",
+        "kind": "scheduled",
+        "status": "running",
+        "terminal_reason": null,
+        "error": null,
+        "started_at": "2026-10-03T15:59:20Z",
+        "finished_at": null,
+        "usage": null,
+        "context": null
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Проверяю новые релизы.",
+          "started_at": "2026-10-03T15:59:22Z"
+        },
+        {
+          "seq": 2,
+          "kind": "tool",
+          "tool_use_id": "toolu_seed",
+          "name": "WebFetch",
+          "input": {
+            "url": "https://example.org/releases"
+          },
+          "output": "3 new entries",
+          "status": "ok",
+          "started_at": "2026-10-03T15:59:24Z",
+          "finished_at": "2026-10-03T15:59:29Z"
+        },
+        {
+          "seq": 3,
+          "kind": "status",
+          "name": "compacting",
+          "output": "context 91%",
+          "started_at": "2026-10-03T15:59:40Z"
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": "6763eb02-7f3e-4c4d-9b1a-2f0c5d8e9a11",
+        "agent_id": 1,
+        "surface_id": 10,
+        "origin": "user",
+        "kind": "user",
+        "status": "ok",
+        "terminal_reason": "success",
+        "error": null,
+        "started_at": "2026-10-03T15:26:00Z",
+        "finished_at": "2026-10-03T15:26:13Z",
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 412,
+          "cache_read_tokens": 321004,
+          "cache_creation_tokens": 2950,
+          "num_turns": 0,
+          "duration_api_ms": 0
+        },
+        "context": {
+          "tokens": 323968,
+          "max_tokens": 1000000,
+          "model": "claude-opus-5-5[1m]"
+        }
+      },
+      "steps": [
+        {
+          "seq": 1,
+          "kind": "text",
+          "output": "Посмотрю, что есть в заметках.",
+          "started_at": "2026-10-03T15:26:02Z"
+        },
+        {
+          "seq": 2,
+          "kind": "tool",
+          "tool_use_id": "toolu_01A2b3C4d5E6f7G8h9",
+          "name": "Bash",
+          "input": {
+            "command": "rg -i лисич ~/notes"
+          },
+          "output": "recipes.md: лисички со сливками",
+          "status": "ok",
+          "started_at": "2026-10-03T15:26:03Z",
+          "finished_at": "2026-10-03T15:26:04Z"
+        }
+      ]
+    }
+  ],
+  "media": [
+    {
+      "id": 1,
+      "path": "../../core/testdata/v3/media/tone.ogg"
+    }
+  ],
+  "me": {
+    "name": "You",
+    "description": "",
+    "avatar_url": "/api/v3/me/avatar?v=346ba77949a42630"
+  },
+  "tasks": [
+    {
+      "id": "task-weekly-releases",
+      "agent_id": 3,
+      "surface_id": 2,
+      "prompt": "Check the trackers for new releases and post a short digest",
+      "schedule": {
+        "type": "cron",
+        "value": "0 9 * * 1"
+      },
+      "recurring": false,
+      "condition": null,
+      "status": "active",
+      "next_run_at": "2026-10-05T09:00:00Z",
+      "last_run_at": null,
+      "last_outcome": null,
+      "active_from": null,
+      "active_until": null,
+      "created_at": "2026-09-21T09:00:00Z"
+    },
+    {
+      "id": "task-download-done",
+      "agent_id": 3,
+      "surface_id": 2,
+      "prompt": "Tell me when Touch of Evil finishes downloading",
+      "schedule": {
+        "type": "poll_until",
+        "value": "15m"
+      },
+      "recurring": false,
+      "condition": "check-torrent.sh touch-of-evil",
+      "status": "active",
+      "next_run_at": "2026-10-03T17:00:00Z",
+      "last_run_at": "2026-10-03T13:00:00Z",
+      "last_outcome": "ran",
+      "active_from": null,
+      "active_until": null,
+      "created_at": "2026-09-21T09:00:00Z"
+    },
+    {
+      "id": "task-evening-lights",
+      "agent_id": 2,
+      "surface_id": 3,
+      "prompt": "Dim the living room lights at sunset",
+      "schedule": {
+        "type": "interval",
+        "value": "24h"
+      },
+      "recurring": false,
+      "condition": null,
+      "status": "paused",
+      "next_run_at": null,
+      "last_run_at": null,
+      "last_outcome": null,
+      "active_from": null,
+      "active_until": null,
+      "created_at": "2026-09-21T09:00:00Z"
+    },
+    {
+      "id": "task-mac-jobs",
+      "agent_id": 1,
+      "surface_id": 1,
+      "prompt": "Report when a long job on the Mac finishes",
+      "schedule": {
+        "type": "event",
+        "value": "tuclaw.jobs.done.>"
+      },
+      "recurring": true,
+      "condition": null,
+      "status": "active",
+      "next_run_at": null,
+      "last_run_at": "2026-10-03T13:30:00Z",
+      "last_outcome": "silent",
+      "active_from": null,
+      "active_until": null,
+      "created_at": "2026-09-21T09:00:00Z"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Home",
+      "emoji": "🏠",
+      "sort_order": 0
+    },
+    {
+      "id": 2,
+      "name": "Media",
+      "emoji": "🎬",
+      "sort_order": 1
+    }
+  ]
+}

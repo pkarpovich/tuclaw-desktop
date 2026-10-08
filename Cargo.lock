@@ -7874,11 +7874,13 @@ dependencies = [
 name = "tuclaw-ios"
 version = "0.3.0"
 dependencies = [
+ "futures",
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-mobile",
  "libc",
  "log",
+ "serde_json",
  "time",
  "tuclaw-core",
  "tuclaw-desktop",

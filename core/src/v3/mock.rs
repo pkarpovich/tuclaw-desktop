@@ -76,6 +76,9 @@ pub struct Seed {
     /// The answer to `GET /tasks`.
     #[serde(default)]
     pub tasks: Vec<Task>,
+    /// The answer to `GET /groups`.
+    #[serde(default)]
+    pub groups: Vec<Group>,
 }
 
 /// A local file serving one attachment of a [`Seed`].
@@ -735,7 +738,18 @@ impl World {
             media: files,
             me,
             tasks,
+            groups,
         } = seed;
+        let mut seeded_cursors = HashMap::new();
+        let mut marked = HashSet::new();
+        for surface in &surfaces {
+            if let Some(cursor) = surface.last_read_message_id {
+                seeded_cursors.insert(surface.id, cursor);
+            }
+            if surface.marked_unread {
+                marked.insert(surface.id);
+            }
+        }
         let (my_name, my_description) = match me {
             Some(Me {
                 name,
@@ -813,8 +827,8 @@ impl World {
             media,
             public: HashMap::new(),
             cursors: HashMap::new(),
-            marked: HashSet::new(),
-            groups: Vec::new(),
+            marked,
+            groups,
             my_name,
             my_description,
             tasks,
@@ -825,6 +839,7 @@ impl World {
             next_input: 1,
         };
         world.read_everything();
+        world.cursors.extend(seeded_cursors);
         world
     }
 
@@ -4066,6 +4081,7 @@ mod tests {
             }],
             me: None,
             tasks: Vec::new(),
+            groups: Vec::new(),
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
@@ -4105,6 +4121,7 @@ mod tests {
             media: Vec::new(),
             me: None,
             tasks: Vec::new(),
+            groups: Vec::new(),
         };
         let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
         let client = Client::mock(&mock);
@@ -4122,6 +4139,41 @@ mod tests {
         assert_eq!(posted.agent_id, Some(AgentId(1)));
         let mut connection = block_on(client.connect(None)).expect("connects");
         assert_eq!(kinds(&drain(&mut connection)), vec!["hello"]);
+    }
+
+    #[test]
+    fn a_seed_keeps_its_read_cursors_marks_and_groups() {
+        let mut surfaces: Vec<Surface> =
+            serde_json::from_str(include_str!("../../testdata/v3/surfaces.json")).unwrap();
+        surfaces[1].marked_unread = true;
+        let agents: Vec<Agent> =
+            serde_json::from_str(include_str!("../../testdata/v3/agents.json")).unwrap();
+        let page: MessagesPage =
+            serde_json::from_str(include_str!("../../testdata/v3/messages_page.json")).unwrap();
+        let seed = Seed {
+            surfaces,
+            agents,
+            messages: page.messages,
+            runs: Vec::new(),
+            media: Vec::new(),
+            me: None,
+            tasks: Vec::new(),
+            groups: vec![Group {
+                id: GroupId(2),
+                name: "Media".into(),
+                emoji: Some("🎬".into()),
+                sort_order: 0,
+            }],
+        };
+        let mock = MockTransport::seeded(seed, Scenario::default(), Pace::Stepped);
+        let client = Client::mock(&mock);
+        let surfaces = block_on(client.surfaces()).expect("surfaces");
+        assert_eq!(surfaces[0].last_read_message_id, Some(MessageId(9191)));
+        assert_eq!(surfaces[0].unread, 1);
+        assert!(surfaces[1].marked_unread);
+        let groups = block_on(client.groups()).expect("groups");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].emoji.as_deref(), Some("🎬"));
     }
 
     #[test]

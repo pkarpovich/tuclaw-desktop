@@ -62,3 +62,13 @@ fn a_tap_on_a_channel_opens_it_and_back_returns_home(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("home-row-General").is_some());
     assert!(cx.debug_bounds("conversation-back").is_none());
 }
+
+#[gpui::test]
+fn the_search_field_filters_channels_by_name(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "home-search", Duration::from_millis(50));
+    cx.simulate_input("smart");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("home-row-Smart Home").is_some());
+    assert!(cx.debug_bounds("home-row-General").is_none());
+}
