@@ -84,6 +84,8 @@ impl Shell {
                 StateEvent::OlderLoaded => {}
                 StateEvent::PicturesLoaded => {}
                 StateEvent::FeedShown => {}
+                StateEvent::TaskOpened => {}
+                StateEvent::RunViewed => {}
                 StateEvent::SendFailed(_) => {}
                 StateEvent::Mention(_) => {}
                 StateEvent::TasksLoaded => {}
@@ -229,45 +231,7 @@ impl Shell {
     }
 
     fn automations_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let state = self.state.read(cx);
-        if !state.automations_open() {
-            return None;
-        }
-        let selected = state.selected()?;
-        let mut channel = SharedString::default();
-        for candidate in state.channels() {
-            if candidate.id == selected {
-                channel = SharedString::from(candidate.name.clone());
-            }
-        }
-        let closer = self.state.clone();
-        let on_close: automations_panel::OnClose = std::rc::Rc::new(move |_window, cx| {
-            closer.update(cx, |state, cx| state.close_automations(cx));
-        });
-        let opener = self.state.clone();
-        let on_task: crate::automation::OnTask = std::rc::Rc::new(move |task, _window, cx| {
-            let task = task.clone();
-            opener.update(cx, |state, cx| state.open_task(task, cx));
-        });
-        let toggler = self.state.clone();
-        let on_toggle_skipped: automations_panel::OnToggle =
-            std::rc::Rc::new(move |_window, cx| {
-                toggler.update(cx, |state, cx| state.toggle_skipped(cx));
-            });
-        let panel = automations_panel::render(
-            automations_panel::PanelInput {
-                channel,
-                tasks: state.channel_tasks(),
-                fires: state.fires(),
-                show_skipped: state.show_skipped(),
-                now: crate::local::now(),
-            },
-            automations_panel::PanelActions {
-                on_close,
-                on_task,
-                on_toggle_skipped,
-            },
-        );
+        let panel = automations_panel::from_state(&self.state, cx)?;
         Some(
             card()
                 .id("automations-card")

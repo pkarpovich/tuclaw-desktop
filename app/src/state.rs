@@ -109,6 +109,8 @@ pub enum StateEvent {
     Alert(Alert),
     ReplyStarted,
     FeedShown,
+    TaskOpened,
+    RunViewed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1758,6 +1760,7 @@ impl AppState {
         self.view = View::Automations;
         self.selected_task = Some(id.clone());
         self.load_task_runs(id, cx);
+        cx.emit(StateEvent::TaskOpened);
         cx.notify();
     }
 
@@ -2267,6 +2270,7 @@ impl AppState {
         self.settings = None;
         let v3::SurfaceId(raw) = live.surface_id;
         self.select(ChannelId(raw), cx);
+        cx.emit(StateEvent::RunViewed);
     }
 
     pub fn upload_avatar(&mut self, agent: AgentId, bytes: Vec<u8>, cx: &mut Context<Self>) {

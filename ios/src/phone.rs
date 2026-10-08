@@ -1,11 +1,15 @@
+use std::rc::Rc;
+
 use gpui::{
     AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
     SharedString, Subscription, Window, div, prelude::*, px,
 };
 use tuclaw_core::model::{ChannelId, MessageId};
 use tuclaw_desktop::agent_settings::Target;
+use tuclaw_desktop::automations_panel;
 use tuclaw_desktop::automations_view::{AutomationsView, Width};
 use tuclaw_desktop::channels_view::ChannelsView;
+use tuclaw_desktop::chrome::OnTap;
 use tuclaw_desktop::icon::{Glyph, icon};
 use tuclaw_desktop::inspector;
 use tuclaw_desktop::message::source;
@@ -182,41 +186,21 @@ impl Phone {
     fn settings_sheet(&self) -> Option<AnyElement> {
         let panel = self.settings.clone()?;
         let closer = self.state.clone();
-        Some(
-            div()
-                .id("settings-sheet")
-                .occlude()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .flex()
-                .flex_col()
-                .justify_end()
-                .bg(theme::scrim())
-                .child(
-                    div()
-                        .id("settings-sheet-scrim")
-                        .h(frame::insets().top + px(24.))
-                        .flex_none()
-                        .on_click(move |_event, _window, cx| {
-                            closer.update(cx, |state, cx| state.close_inspector(cx))
-                        }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_1()
-                        .min_h(px(0.))
-                        .pb(frame::insets().bottom)
-                        .rounded_t(px(18.))
-                        .overflow_hidden()
-                        .bg(theme::card())
-                        .child(panel),
-                )
-                .into_any_element(),
-        )
+        Some(sheet_frame(
+            "settings-sheet",
+            panel.into_any_element(),
+            Rc::new(move |_window, cx| closer.update(cx, |state, cx| state.close_inspector(cx))),
+        ))
+    }
+
+    fn automations_sheet(&self, cx: &App) -> Option<AnyElement> {
+        let panel = automations_panel::from_state(&self.state, cx)?;
+        let closer = self.state.clone();
+        Some(sheet_frame(
+            "automations-sheet",
+            panel.into_any_element(),
+            Rc::new(move |_window, cx| closer.update(cx, |state, cx| state.close_automations(cx))),
+        ))
     }
 
     fn text_fields(&self, cx: &App) -> Vec<FocusHandle> {
@@ -446,6 +430,40 @@ fn cancel() -> Choice {
     }
 }
 
+fn sheet_frame(selector: &'static str, content: AnyElement, on_dismiss: OnTap) -> AnyElement {
+    div()
+        .id(selector)
+        .occlude()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .flex()
+        .flex_col()
+        .justify_end()
+        .bg(theme::scrim())
+        .child(
+            div()
+                .id(SharedString::from(format!("{selector}-scrim")))
+                .h(frame::insets().top + px(24.))
+                .flex_none()
+                .on_click(move |_event, window, cx| on_dismiss(window, cx)),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_h(px(0.))
+                .pb(frame::insets().bottom)
+                .rounded_t(px(18.))
+                .overflow_hidden()
+                .bg(theme::card())
+                .child(content),
+        )
+        .into_any_element()
+}
+
 fn tab_frame(content: AnyElement) -> AnyElement {
     div()
         .flex()
@@ -485,6 +503,11 @@ impl Render for Phone {
             Some(Screen::Channels) => None,
             None => None,
         };
+        let automations = match top {
+            Some(Screen::Conversation) => self.automations_sheet(cx),
+            Some(Screen::Channels) => None,
+            None => None,
+        };
         let settings = self.settings_sheet();
         let sheet = menu.map(|menu| self.sheet(menu, cx));
         let held = match top {
@@ -513,6 +536,7 @@ impl Render for Phone {
                 cx.listener(|phone, _event, window, cx| phone.after_tap(window, cx)),
             )
             .children(inspector)
+            .children(automations)
             .children(held)
             .children(settings)
             .children(sheet)

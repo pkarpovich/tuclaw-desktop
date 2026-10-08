@@ -71,6 +71,48 @@ impl Conversation {
             }
             subtitle = subtitle_text(state.wired_agents(channel), state.working(channel).len());
         }
+        let automations = if state.channel_tasks().is_empty() {
+            None
+        } else {
+            let open = state.automations_open();
+            let failed = state.unseen_failures() > 0;
+            let toggler = self.state.clone();
+            Some(
+                div()
+                    .id("conversation-automations")
+                    .debug_selector(|| "conversation-automations".to_string())
+                    .relative()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(34.))
+                    .rounded_full()
+                    .bg(if open {
+                        theme::selection()
+                    } else {
+                        theme::sunken()
+                    })
+                    .on_click(move |_event, _window, cx| {
+                        toggler.update(cx, |state, cx| {
+                            if state.automations_open() {
+                                state.close_automations(cx);
+                            } else {
+                                state.open_automations(cx);
+                            }
+                        })
+                    })
+                    .child(icon(Glyph::Automation, px(17.), theme::ink_soft()))
+                    .children(failed.then(|| {
+                        div()
+                            .absolute()
+                            .top(px(2.))
+                            .right(px(2.))
+                            .size(px(9.))
+                            .rounded_full()
+                            .bg(theme::accent())
+                    })),
+            )
+        };
         let navigator = self.navigator.clone();
         div()
             .flex()
@@ -129,6 +171,7 @@ impl Conversation {
                             .child(SharedString::from(subtitle)),
                     ),
             )
+            .children(automations)
     }
 }
 

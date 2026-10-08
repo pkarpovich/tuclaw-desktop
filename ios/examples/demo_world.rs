@@ -192,7 +192,10 @@ fn night_log(messages: &[Message], last: MessageId, base: time::OffsetDateTime) 
         let text = if index % 4 == 0 {
             format!("Проверка №{}: всё ли в порядке?", index + 1)
         } else {
-            format!("Запись {} из {LOG_LENGTH}: ночной обход, всё штатно.", index + 1)
+            format!(
+                "Запись {} из {LOG_LENGTH}: ночной обход, всё штатно.",
+                index + 1
+            )
         };
         log.push(Message {
             id: MessageId(last + 1 + index),

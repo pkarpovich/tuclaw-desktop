@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 220, ios 14, 8 visual scenes), build.
+Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 220, ios 17, 8 visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -65,11 +65,11 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 | | avatar | partial | same as agent avatars |
 | Automations | list, pause, resume, two-step cancel, detail with runs | done | Mac view with a narrow layout |
 | | `task.fired` marks in the conversation | done | trigger tags, quiet rows, failure cards are the shared feed's |
-| | per-channel automations panel | missing | the Mac's header button has no phone place yet |
+| | per-channel automations panel | done | a button in the conversation header (with a dot for unseen failures) opens the Mac panel as a sheet; a task in it, or a trigger tag in the feed, opens it on the Automations tab |
 | Channels management | groups, rename, order, archive | done | the Mac `ChannelsView`, pushed from Home's pencil |
 | Notifications | local banner while backgrounded | partial | see Rough edges |
 | | app badge | done | `setBadgeCount`; Home screen showed "7" |
-| Agent card "View run" | | partial | it selects the channel but the phone does not navigate to it |
+| Agent card "View run" | | done | opens the run's conversation (`StateEvent::RunViewed`) |
 
 **Event stream: WebSocket, not per-surface SSE.** The Mac's link task is the WebSocket, and reusing it gives the phone every surface's frames. Home needs them for badges, previews, "Running now" and alerts on channels that aren't open. Per-surface SSE would need a second client and a stream per surface, or would lose all of that.
 
@@ -138,7 +138,7 @@ The result: the phone reuses the hardest parts unchanged:
 - the conversation feed with all its list bookkeeping;
 - the settings, profile, channel and automation panels.
 
-The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 14 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
+The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 17 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
 
 **What makes it painful.**
 - The platform layer is young. gpui-mobile 0.1 is pinned to an unpublished commit, and I hit a run of gaps:

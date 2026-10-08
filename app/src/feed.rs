@@ -169,6 +169,8 @@ impl Feed {
                     feed.read_to_newest(cx);
                     feed.schedule_seen(cx);
                 }
+                StateEvent::TaskOpened => {}
+                StateEvent::RunViewed => {}
             },
         );
         let watcher = state.clone();

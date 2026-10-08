@@ -1,6 +1,6 @@
-use gpui::{Context, Entity};
+use gpui::{Context, Entity, Subscription};
 use tuclaw_core::model::{ChannelId, MessageId};
-use tuclaw_desktop::state::{AppState, Presence};
+use tuclaw_desktop::state::{AppState, Presence, StateEvent};
 
 use crate::keyboard;
 
@@ -29,6 +29,7 @@ pub struct Navigator {
     tab: Tab,
     stack: Vec<Screen>,
     menu: Option<Menu>,
+    _events: Subscription,
 }
 
 impl Navigator {
@@ -37,12 +38,56 @@ impl Navigator {
             state.set_feed(Presence::Hidden, cx);
             state.keep_previews(cx);
         });
+        let events = cx.subscribe(
+            &state,
+            |navigator, _state, event: &StateEvent, cx| match event {
+                StateEvent::TaskOpened => navigator.show_task(cx),
+                StateEvent::RunViewed => navigator.show_selected(cx),
+                StateEvent::SelectionChanged => {}
+                StateEvent::MessagesLoaded => {}
+                StateEvent::MessageAppended => {}
+                StateEvent::RunsChanged => {}
+                StateEvent::FoldToggled => {}
+                StateEvent::OlderLoaded => {}
+                StateEvent::PicturesLoaded => {}
+                StateEvent::PictureOpened => {}
+                StateEvent::SendFailed(_) => {}
+                StateEvent::Mention(_) => {}
+                StateEvent::TasksLoaded => {}
+                StateEvent::ChannelsChanged => {}
+                StateEvent::Alert(_) => {}
+                StateEvent::ReplyStarted => {}
+                StateEvent::FeedShown => {}
+            },
+        );
         Navigator {
             state,
             tab: Tab::Home,
             stack: Vec::new(),
             menu: None,
+            _events: events,
         }
+    }
+
+    fn show_task(&mut self, cx: &mut Context<Self>) {
+        self.menu = None;
+        self.stack.clear();
+        self.tab = Tab::Automations;
+        keyboard::hide();
+        self.state.update(cx, |state, cx| {
+            state.close_automations(cx);
+            state.set_feed(Presence::Hidden, cx);
+        });
+        cx.notify();
+    }
+
+    fn show_selected(&mut self, cx: &mut Context<Self>) {
+        self.menu = None;
+        self.state
+            .update(cx, |state, cx| state.set_feed(Presence::Shown, cx));
+        self.stack.retain(|screen| *screen != Screen::Conversation);
+        self.stack.push(Screen::Conversation);
+        cx.notify();
     }
 
     pub fn tab(&self) -> Tab {

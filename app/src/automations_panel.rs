@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use gpui::{App, Div, FontWeight, Hsla, SharedString, Stateful, Window, div, prelude::*, px};
+use gpui::{
+    App, Div, Entity, FontWeight, Hsla, SharedString, Stateful, Window, div, prelude::*, px,
+};
 use time::{Duration, OffsetDateTime};
 use tuclaw_core::v3::{FireMark, Outcome, Task, TaskId, TaskStatus};
 
@@ -8,6 +10,7 @@ use crate::automation::{OnTask, label_of, outcome_tone, schedule_text};
 use crate::control::{button, row_button, switch};
 use crate::icon::{Glyph, icon};
 use crate::local::{clock, when};
+use crate::state::AppState;
 use crate::theme;
 
 pub const WIDTH: f32 = 400.;
@@ -17,6 +20,47 @@ const TICK: f32 = 4.;
 
 pub type OnClose = Rc<dyn Fn(&mut Window, &mut App)>;
 pub type OnToggle = Rc<dyn Fn(&mut Window, &mut App)>;
+
+pub fn from_state(state: &Entity<AppState>, cx: &App) -> Option<Stateful<Div>> {
+    let current = state.read(cx);
+    if !current.automations_open() {
+        return None;
+    }
+    let selected = current.selected()?;
+    let mut channel = SharedString::default();
+    for candidate in current.channels() {
+        if candidate.id == selected {
+            channel = SharedString::from(candidate.name.clone());
+        }
+    }
+    let closer = state.clone();
+    let on_close: OnClose = Rc::new(move |_window, cx| {
+        closer.update(cx, |state, cx| state.close_automations(cx));
+    });
+    let opener = state.clone();
+    let on_task: OnTask = Rc::new(move |task, _window, cx| {
+        let task = task.clone();
+        opener.update(cx, |state, cx| state.open_task(task, cx));
+    });
+    let toggler = state.clone();
+    let on_toggle_skipped: OnToggle = Rc::new(move |_window, cx| {
+        toggler.update(cx, |state, cx| state.toggle_skipped(cx));
+    });
+    Some(render(
+        PanelInput {
+            channel,
+            tasks: current.channel_tasks(),
+            fires: current.fires(),
+            show_skipped: current.show_skipped(),
+            now: crate::local::now(),
+        },
+        PanelActions {
+            on_close,
+            on_task,
+            on_toggle_skipped,
+        },
+    ))
+}
 
 pub struct PanelInput<'a> {
     pub channel: SharedString,

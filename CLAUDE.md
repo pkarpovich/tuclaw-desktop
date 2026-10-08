@@ -82,6 +82,7 @@ fails, the pixels just stop updating.
 | `RunsChanged` | feed | rebuild items; `remeasure_items` over the run rows when the count is unchanged, else `reset(count)` |
 | `FoldToggled` | feed | `ListState::remeasure()` - a Thinking fold opened or closed |
 | `FeedShown` | feed | `read_to_newest`, then a seen pass: the phone showed the conversation again (`AppState::set_feed`) |
+| `TaskOpened`, `RunViewed` | the phone's `Navigator` | show the Automations tab, or the conversation of the viewed run; the Mac ignores both |
 | `SendFailed(text)` | feed | `Composer::restore(text)` |
 
 Every `match` on `StateEvent` lists all six variants, including the empty arms. No `_ =>`.

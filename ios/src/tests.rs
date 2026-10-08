@@ -239,3 +239,46 @@ fn unread(state: &gpui::Entity<AppState>, cx: &mut VisualTestContext, name: &str
         unread
     })
 }
+
+#[gpui::test]
+fn the_automations_button_opens_the_channels_panel(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    press(cx, "conversation-automations", Duration::from_millis(50));
+    assert!(cx.debug_bounds("automations-panel").is_some());
+}
+
+#[gpui::test]
+fn opening_a_task_shows_it_on_the_automations_tab(cx: &mut TestAppContext) {
+    let (state, cx) = phone(cx);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    state.update(cx, |state, cx| {
+        let task = state.tasks().first().map(|task| task.id.clone());
+        state.open_task(task.expect("a task"), cx);
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("conversation-back").is_none());
+    assert!(cx.debug_bounds("automations-list").is_some());
+}
+
+#[gpui::test]
+fn viewing_a_run_opens_its_channel(cx: &mut TestAppContext) {
+    let (state, cx) = phone(cx);
+    press(cx, "tab-agents", Duration::from_millis(50));
+    state.update(cx, |state, cx| {
+        state.view_run(tuclaw_core::model::AgentId(3), cx)
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("conversation-back").is_some());
+    let name = state.read_with(cx, |state, _cx| {
+        let selected = state.selected();
+        let mut name = String::new();
+        for channel in state.channels() {
+            if Some(channel.id) == selected {
+                name = channel.name.clone();
+            }
+        }
+        name
+    });
+    assert_eq!(name, "Magnet Feed");
+}
