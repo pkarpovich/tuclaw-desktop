@@ -692,9 +692,13 @@ impl Composer {
                     round_button("composer-mention", px(34.))
                         .accessibility_label("Mention an agent")
                         .bg(theme::sunken())
-                        .on_click(cx.listener(|composer, _event, window, cx| {
-                            composer.start_mention(window, cx)
-                        }))
+                        .on_click({
+                            let on_field = on_field.clone();
+                            cx.listener(move |composer, _event, window, cx| {
+                                composer.start_mention(window, cx);
+                                on_field(window, cx);
+                            })
+                        })
                         .child(icon(Glyph::Mention, px(17.), theme::ink_soft())),
                 )
                 .child(
