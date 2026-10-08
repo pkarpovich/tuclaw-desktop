@@ -1,24 +1,40 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 17 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 20 plus 5 phone visual scenes, 8 Mac visual scenes), build.
+Branch `iphone-app`, on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 20 plus 5 phone visual scenes, 8 Mac visual scenes), build.
 
-**Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
-- From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
-- curl inside the same simulator, and curl on the Mac, both get 200/101 immediately.
-- Each reinstall puts the app at a new path, so an ad-hoc-signed build triggers a new prompt.
+## Outcome
 
-Approving or routing around a firewall prompt is your decision. I declined an ssh-tunnel workaround (`ssh -N -L 127.0.0.1:19090:localhost:9090 pi-bravo` plus `SIMCTL_CHILD_TUCLAW_DAEMON_URL=http://127.0.0.1:19090`) for that reason. Everything below ran on the in-process mock daemon, `MockTransport` in real time, driving the real `AppState` and reducer. No message was posted to any real topic, #phone-qa included.
+Tonight was a blind comparison: a second session built the same iPhone app natively in SwiftUI from the same brief. Pavel chose the native build. The reason is the framework, not this branch's work. `iphone-app` stays pushed and unmerged as the record of the GPUI attempt.
 
-**Live attempt after the Little Snitch allow (09:56-10:00)**
-- I ran `mise run ios-run` twice with no tunnel. Home stayed on "Offline: transport: timed out opening the event socket" and showed no channels, through about a minute of reconnect backoff each time.
-- In the same minutes, `curl http://192.168.199.72:9090/api/v3/surfaces` returned 200 in 0.1 s, both on the Mac and inside the simulator (`simctl spawn ... /usr/bin/curl`).
-- The rule most likely does not match this build. The installed app now lives at `.../Containers/Bundle/Application/920CE424-.../Tuclaw.app`, and every reinstall changes that path.
-- Per instructions I stopped there and did not route around it. Nothing was posted to #phone-qa, and `acceptance-live.mp4` was not recorded.
-- The in-app voice post stays **needs Pavel** in any case: the simulator records from the Mac's microphone.
+GPUI-on-iOS gaps this branch ran into:
+- **Text input.** gpui-mobile's input view has no autocorrect or predictive text, Russian included, and never implements `show_soft_keyboard`: the app raises and hides the keyboard itself (`ios/src/keyboard.rs`). The phone composer also doesn't grow while you type; only its first line stays visible (seen live, not fixed).
+- **Unreleased pins.** gpui-mobile is a git dependency at rev 9075e3a, because crates.io 0.1.0 pins an older gpui-pre. Its `camera` and `video_player` features are forced on by ungated upstream code. libc is pinned to `=0.2.189` for `backtrace` on iOS.
+- **Every control hand-drawn.** Sheets, menus, the tab bar and hold-to-talk are GPUI divs. Overlays must `.occlude()`, and gesture listeners must check their own hitbox, or taps fall through.
+- **Packaging.** It's a separate bundle, so it can't be the watch app's companion. The Photos picker blocks the main thread under gpui-mobile, so it wasn't done.
 
-**Morning actions**
-1. In Little Snitch, allow "any process" to reach 192.168.199.72:9090, or allow the app by its current path. Then `mise run ios-run`.
-2. Run the acceptance scenario live in #phone-qa (23), and re-check on a device what the simulator can't prove (see Rough edges).
+## Live verification on bravo (10:15-10:40)
+
+Pavel allowed the build in Little Snitch. Relaunching the existing install, with no reinstall and no tunnel, reached `192.168.199.72:9090`. The earlier attempt at 09:56-10:00 timed out on the event socket while curl got 200; the rule matched only the install's path. Six posts went to #phone-qa (23): 9816, 9818, 9820, 9822, 9824, 9826. There was no live voice recording, since the simulator would use the Mac's microphone.
+
+Verified live:
+- **Connection.** REST and the WebSocket (`hello`, then `focus` on opening #phone-qa) work, and Home loads surfaces, groups, avatars, badges and previews.
+- **Streaming.** An unaddressed post auto-provisioned a lead (agent 22), and its answer streamed token by token into the live run card, with tool rows, a working state, Stop, and "1 running" in the header.
+- **Run log.** "3 tools · 38 s" under the answer opens the log in place: tools, context and tokens, Open in panel.
+- **Suggested replies.** The lead called `suggest_replies`, and the chips appeared. Tapping one posted 9818 with `reply_to_message_id=9817`; the daemon marked the option chosen and the other chips greyed out.
+- **Reply with the @ picker.** Long press, Reply, then @, meetings: 9822 has `reply_to_message_id=9821` and `addressed_agent_id=18`.
+- **Ranges by curl** on `/attachments/796`: 200 with `Accept-Ranges: bytes` and `audio/mp4`, 206 for `bytes=0-99` and `bytes=100-` with correct `Content-Range`, and 416 past the end and for the suffix form, which is by contract.
+- **Recording.** `target/ios/acceptance-live.mp4` (575 s) covers opening the app with Home filtered to "phone", streaming, the run log, the chip, and the reply with the @ picker. It stays local, not committed: the repository is public, and Home shows real chats.
+
+Not verified live, **needs Pavel**:
+- **Stop.** All six runs ended `ok`. Meetings finished in 15 s, before the tap. On the two 60-second Bash runs, the streamed tool output pushed the card header with Stop off screen almost at once, so the tap never landed. A Stop pinned in view while a run streams is the fix this calls for (not done).
+- **Voice post and playback in the app.**
+- **Mark read.** Opening #phone-qa read it, but there was no check of the server's cursor.
+
+Differences from the mock:
+- **"unknown agent".** An agent created after start, like the auto-provisioned lead, shows as "unknown agent" and is missing from the @ picker: `/agents` is fetched once at start and never refetched. Client fix, not done.
+- **Tool durations show "0.0 s".** Tool steps carry no `duration_ms`, and `started_at` equals `finished_at` at second precision. Server backlog.
+- **Reply context.** The addressee of a reply (meetings) said the replied-to message hadn't reached it. Server backlog.
+- **Keyboard.** A tap on the feed doesn't close the keyboard; only a drag does.
 
 ## Deliverables
 
@@ -110,7 +126,7 @@ App-side changes, each kept behaviour-neutral for the Mac:
 
 ## 3. Rough edges a user would hit
 
-- **Live daemon unverified** (above). On a device iOS will ask for Local Network access first. The plist carries `NSLocalNetworkUsageDescription`.
+- **Live daemon partly verified** (above: Stop, voice and mark read are not). On a device iOS will ask for Local Network access first. The plist carries `NSLocalNetworkUsageDescription`.
 - **Notifications only while the app is alive.**
   - Authorization, the app badge, and a notification for an answer that arrives after you leave the app all work: it lands in Notification Center with the app icon. Live banners were not captured on the simulator.
   - iOS suspends the app seconds after it goes to the background, so anything later needs APNs. The daemon already pushes to devices registered through `POST /api/v3/devices` (contract v3.11). The phone needs its bundle id and push entitlement, and a token registration, which were out of scope tonight.
