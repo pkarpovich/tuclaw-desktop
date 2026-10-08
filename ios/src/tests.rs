@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use gpui::{Point, TestAppContext, TouchEvent, TouchId, TouchPhase, VisualTestContext};
-use tuclaw_desktop::state::AppState;
+use gpui::{Point, TestAppContext, TouchEvent, TouchId, TouchPhase, VisualTestContext, px};
+use tuclaw_desktop::state::{AppState, Recording};
 use tuclaw_desktop::testing::loaded;
 
 use crate::phone::Phone;
@@ -71,4 +71,70 @@ fn the_search_field_filters_channels_by_name(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("home-row-Smart Home").is_some());
     assert!(cx.debug_bounds("home-row-General").is_none());
+}
+
+fn talking(cx: &mut TestAppContext) -> (gpui::Entity<AppState>, &mut VisualTestContext) {
+    let (state, cx) = phone(cx);
+    state.update(cx, |state, _cx| {
+        state.set_recorder(Box::new(tuclaw_desktop::testing::FakeRecorder::default()))
+    });
+    press(cx, "home-row-General", Duration::from_millis(50));
+    (state, cx)
+}
+
+fn recording(state: &gpui::Entity<AppState>, cx: &mut VisualTestContext) -> Recording {
+    state.read_with(cx, |state, _cx| state.recording().clone())
+}
+
+fn live(recording: &Recording) -> bool {
+    match recording {
+        Recording::Live {
+            since: _,
+            channel: _,
+        } => true,
+        Recording::Idle => false,
+        Recording::Sending => false,
+        Recording::Failed(_) => false,
+    }
+}
+
+#[gpui::test]
+fn holding_the_mic_records_and_releasing_sends(cx: &mut TestAppContext) {
+    let (state, cx) = talking(cx);
+    let mic = cx.debug_bounds("composer-hold").expect("the mic").center();
+    touch(cx, TouchPhase::Started, mic);
+    assert!(live(&recording(&state, cx)));
+    cx.executor().advance_clock(Duration::from_secs(2));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("talk-card").is_some());
+    touch(cx, TouchPhase::Ended, mic);
+    assert!(!live(&recording(&state, cx)));
+    assert!(cx.debug_bounds("talk-card").is_none());
+}
+
+#[gpui::test]
+fn a_quick_tap_on_the_mic_keeps_recording_hands_free(cx: &mut TestAppContext) {
+    let (state, cx) = talking(cx);
+    let mic = cx.debug_bounds("composer-hold").expect("the mic").center();
+    touch(cx, TouchPhase::Started, mic);
+    cx.executor().advance_clock(Duration::from_millis(100));
+    touch(cx, TouchPhase::Ended, mic);
+    assert!(live(&recording(&state, cx)));
+    assert!(cx.debug_bounds("talk-card").is_none());
+}
+
+#[gpui::test]
+fn sliding_left_cancels_and_sliding_up_locks(cx: &mut TestAppContext) {
+    let (state, cx) = talking(cx);
+    let mic = cx.debug_bounds("composer-hold").expect("the mic").center();
+    touch(cx, TouchPhase::Started, mic);
+    touch(cx, TouchPhase::Moved, mic - gpui::point(px(150.), px(0.)));
+    assert_eq!(recording(&state, cx), Recording::Idle);
+    touch(cx, TouchPhase::Ended, mic - gpui::point(px(150.), px(0.)));
+    let mic = cx.debug_bounds("composer-hold").expect("the mic").center();
+    touch(cx, TouchPhase::Started, mic);
+    cx.executor().advance_clock(Duration::from_secs(1));
+    touch(cx, TouchPhase::Moved, mic - gpui::point(px(0.), px(100.)));
+    touch(cx, TouchPhase::Ended, mic - gpui::point(px(0.), px(100.)));
+    assert!(live(&recording(&state, cx)));
 }

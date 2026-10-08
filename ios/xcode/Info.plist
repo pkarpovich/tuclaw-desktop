@@ -22,6 +22,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tuclaw records the voice messages you send to your agents.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Tuclaw talks to your tuclaw daemon on the local network.</string>
 	<key>UILaunchScreen</key>

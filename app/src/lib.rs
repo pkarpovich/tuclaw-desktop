@@ -1,6 +1,8 @@
 pub mod agent_settings;
 pub mod agents;
 pub mod audio;
+#[cfg(target_os = "ios")]
+pub mod audio_session;
 pub mod automation;
 pub mod automations_panel;
 pub mod automations_view;

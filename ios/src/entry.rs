@@ -43,6 +43,7 @@ pub extern "C" fn tuclaw_ios_start() {
     if log::set_logger(&LOGGER).is_ok() {
         log::set_max_level(log::LevelFilter::Info);
     }
+    tuclaw_desktop::audio_session::use_for_playback();
     ffi::gpui_ios_initialize();
     let startup = failure::start(Config::from_env());
     let platform = Rc::new(IosPlatform::new());

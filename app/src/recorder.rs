@@ -13,6 +13,9 @@ pub trait Recorder {
     fn start(&mut self) -> Result<(), String>;
     fn finish(&mut self) -> Result<Take, String>;
     fn cancel(&mut self);
+    fn level(&self) -> Option<f32> {
+        None
+    }
 }
 
 #[derive(Default)]
@@ -30,11 +33,11 @@ impl Recorder for NoRecorder {
     fn cancel(&mut self) {}
 }
 
-#[cfg(target_os = "macos")]
-pub use mac::AvRecorder;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use apple::AvRecorder;
 
-#[cfg(target_os = "macos")]
-mod mac {
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod apple {
     use std::path::PathBuf;
 
     use objc2::AllocAnyThread;
@@ -50,6 +53,7 @@ mod mac {
     use super::{LIMIT, Recorder, Take};
 
     const MPEG4_AAC: u32 = u32::from_be_bytes(*b"aac ");
+    const QUIET_DB: f32 = -50.;
     const SAMPLE_RATE: f64 = 44_100.;
     const HIGH_QUALITY: i64 = 0x60;
 
@@ -67,6 +71,8 @@ mod mac {
     impl Recorder for AvRecorder {
         fn start(&mut self) -> Result<(), String> {
             self.cancel();
+            #[cfg(target_os = "ios")]
+            crate::audio_session::begin_recording()?;
             let path = AvRecorder::path();
             let Some(url) = NSURL::from_file_path(&path) else {
                 return Err("the recording has nowhere to go".to_string());
@@ -96,8 +102,11 @@ mod mac {
                 )
             }
             .map_err(|error| error.localizedDescription().to_string())?;
+            unsafe { recorder.setMeteringEnabled(true) };
             let started = unsafe { recorder.recordForDuration(LIMIT.as_secs_f64()) };
             if !started {
+                #[cfg(target_os = "ios")]
+                crate::audio_session::end_recording();
                 return Err("the microphone is not available".to_string());
             }
             self.live = Some(recorder);
@@ -109,6 +118,8 @@ mod mac {
                 return Err("nothing is being recorded".to_string());
             };
             unsafe { recorder.stop() };
+            #[cfg(target_os = "ios")]
+            crate::audio_session::end_recording();
             let path = AvRecorder::path();
             let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
             std::fs::remove_file(&path).ok();
@@ -116,6 +127,15 @@ mod mac {
                 kind: AudioKind::M4a,
                 bytes,
             })
+        }
+
+        fn level(&self) -> Option<f32> {
+            let recorder = self.live.as_ref()?;
+            let decibels = unsafe {
+                recorder.updateMeters();
+                recorder.averagePowerForChannel(0)
+            };
+            Some(((decibels - QUIET_DB) / -QUIET_DB).clamp(0., 1.))
         }
 
         fn cancel(&mut self) {
@@ -126,6 +146,8 @@ mod mac {
                 recorder.stop();
                 recorder.deleteRecording();
             }
+            #[cfg(target_os = "ios")]
+            crate::audio_session::end_recording();
         }
     }
 }

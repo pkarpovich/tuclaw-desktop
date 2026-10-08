@@ -1275,6 +1275,7 @@ mod tests {
             on_press: Rc::new(move |message, _window, _cx| seen.borrow_mut().push(message)),
             on_field: Rc::new(|_window, _cx| {}),
             on_drag: Rc::new(|_window, _cx| {}),
+            on_hold: Rc::new(|_hold, _window, _cx| {}),
         };
         let built = state.clone();
         let (_feed, cx) =

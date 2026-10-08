@@ -14,15 +14,18 @@ use crate::frame;
 use crate::home::{Home, TAB_BAR_HEIGHT};
 use crate::keyboard;
 use crate::navigator::{Menu, Navigator, Screen, Tab};
+use crate::talk::Talk;
 
 pub struct Phone {
     state: Entity<AppState>,
     navigator: Entity<Navigator>,
     home: Entity<Home>,
     conversation: Entity<Conversation>,
+    talk: Entity<Talk>,
     viewer_focus: FocusHandle,
     _observation: Subscription,
     _navigation: Subscription,
+    _talking: Subscription,
 }
 
 type Action = Box<dyn Fn(&mut Window, &mut App)>;
@@ -45,16 +48,21 @@ impl Phone {
         let navigator = cx.new(|cx| Navigator::new(state.clone(), cx));
         let navigation = cx.observe(&navigator, |_phone, _navigator, cx| cx.notify());
         let home = cx.new(|cx| Home::new(state.clone(), navigator.clone(), window, cx));
-        let conversation =
-            cx.new(|cx| Conversation::new(state.clone(), navigator.clone(), window, cx));
+        let talk = cx.new(|cx| Talk::new(state.clone(), cx));
+        let talking = cx.observe(&talk, |_phone, _talk, cx| cx.notify());
+        let conversation = cx.new(|cx| {
+            Conversation::new(state.clone(), navigator.clone(), talk.clone(), window, cx)
+        });
         Phone {
             state,
             navigator,
             home,
             conversation,
+            talk,
             viewer_focus: cx.focus_handle(),
             _observation: observation,
             _navigation: navigation,
+            _talking: talking,
         }
     }
 
@@ -326,6 +334,10 @@ impl Render for Phone {
             None => None,
         };
         let sheet = menu.map(|menu| self.sheet(menu, cx));
+        let held = match top {
+            Some(Screen::Conversation) => self.talk.read(cx).overlay(cx),
+            None => None,
+        };
         let picture = viewer::viewer(&self.state, &self.viewer_focus, window, cx);
         div()
             .relative()
@@ -335,6 +347,7 @@ impl Render for Phone {
             .child(screen)
             .children(bar)
             .children(inspector)
+            .children(held)
             .children(sheet)
             .children(picture)
     }

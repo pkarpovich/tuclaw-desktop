@@ -19,12 +19,14 @@ rodio = { version = "0.22.2", default-features = false, features = ["playback", 
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_platform.workspace = true
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSResponder", "NSSound"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 objc2 = "0.6.4"
 objc2-foundation = { version = "0.3.2", features = ["NSBundle", "NSDictionary", "NSString", "NSURL", "NSValue", "NSError"] }
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSResponder", "NSSound"] }
 objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
 block2 = "0.6.2"
-objc2-avf-audio = { version = "0.3.2", features = ["AVAudioRecorder", "AVAudioSettings"] }
+objc2-avf-audio = { version = "0.3.2", features = ["AVAudioRecorder", "AVAudioSettings", "AVAudioSession", "AVAudioSessionTypes", "AVAudioApplication", "block2"] }
 objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageDestination", "CGImageProperties"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFData", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-graphics = { version = "0.3.2", features = ["CGImage"] }

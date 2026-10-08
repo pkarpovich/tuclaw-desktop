@@ -24,6 +24,22 @@ pub fn hairline() -> Hsla {
     rgba(0x00000014).into()
 }
 
+pub fn scrim_clear() -> Hsla {
+    rgba(0x1c1b1900).into()
+}
+
+pub fn scrim_deep() -> Hsla {
+    rgba(0x1c1b19b8).into()
+}
+
+pub fn on_scrim() -> Hsla {
+    rgba(0xffffffcc).into()
+}
+
+pub fn accent_halo() -> Hsla {
+    rgba(0xb45c3c38).into()
+}
+
 pub fn scrim() -> Hsla {
     rgba(0x1c1b1959).into()
 }

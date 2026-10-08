@@ -1050,6 +1050,18 @@ impl AppState {
         &self.recording
     }
 
+    pub fn recording_level(&self) -> Option<f32> {
+        match self.recording {
+            Recording::Live {
+                since: _,
+                channel: _,
+            } => self.recorder.level(),
+            Recording::Idle => None,
+            Recording::Sending => None,
+            Recording::Failed(_) => None,
+        }
+    }
+
     pub fn start_recording(&mut self, cx: &mut Context<Self>) {
         match self.recording {
             Recording::Idle => {}

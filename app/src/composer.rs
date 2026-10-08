@@ -1,3 +1,6 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use anyhow::Result;
 use gpui::{
     App, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, IntoElement,
@@ -35,6 +38,7 @@ enum Talk {
     Send,
 }
 
+#[derive(Clone, Copy)]
 enum Sendable {
     Blank,
     Ready,
@@ -47,6 +51,7 @@ pub struct Composer {
     mentions: Option<MentionMenu>,
     picked: Vec<Mention>,
     chrome: Chrome,
+    holding: Rc<Cell<bool>>,
     _observation: Subscription,
     _state_observation: Option<Subscription>,
 }
@@ -80,6 +85,7 @@ impl Composer {
             mentions: None,
             picked: Vec::new(),
             chrome: Chrome::Desktop,
+            holding: Rc::new(Cell::new(false)),
             _observation: observation,
             _state_observation: None,
         }
@@ -652,17 +658,29 @@ impl Composer {
     fn phone_shape(
         &self,
         sendable: Sendable,
-        on_field: crate::chrome::OnTap,
+        touch: crate::chrome::Touch,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let crate::chrome::Touch {
+            on_press: _,
+            on_field,
+            on_drag: _,
+            on_hold,
+        } = touch;
         let reply = self.reply_bar(cx);
         let mentions = self.mention_menu(cx);
         let recording = match &self.state {
             Some(state) => state.read(cx).recording().clone(),
             None => Recording::Idle,
         };
-        let row = div().flex().items_end().gap(px(9.)).px(px(12.)).pt(px(8.));
-        let row = match recording {
+        let row = div()
+            .relative()
+            .flex()
+            .items_end()
+            .gap(px(9.))
+            .px(px(12.))
+            .pt(px(8.));
+        let row = match &recording {
             Recording::Idle => row
                 .child(
                     round_button("composer-mention", px(34.))
@@ -703,17 +721,50 @@ impl Composer {
                         )
                         .child(icon(Glyph::Send, px(18.), theme::chip_text())),
                     Sendable::Blank => round_button("composer-talk", px(38.))
-                        .accessibility_label("Record a voice message")
+                        .accessibility_label("Hold to record a voice message")
                         .bg(theme::accent())
                         .on_click(cx.listener(|composer, _event, _window, cx| composer.talk(cx)))
                         .child(icon(Glyph::Voice, px(18.), theme::chip_text())),
                 }),
-            Recording::Live { .. } | Recording::Sending | Recording::Failed(_) => row
-                .justify_end()
-                .min_h(px(38.))
-                .child(div().flex_1())
-                .child(self.voice_controls(cx)),
+            Recording::Live {
+                since: _,
+                channel: _,
+            }
+            | Recording::Sending
+            | Recording::Failed(_) => {
+                let row = row.justify_end().min_h(px(38.)).child(div().flex_1());
+                if self.holding.get() {
+                    row
+                } else {
+                    row.child(self.voice_controls(cx))
+                }
+            }
         };
+        let arming = match (&recording, sendable) {
+            (Recording::Idle, Sendable::Blank) => crate::chrome::Arming::Armed,
+            (Recording::Idle, Sendable::Ready) => crate::chrome::Arming::Disarmed,
+            (
+                Recording::Live {
+                    since: _,
+                    channel: _,
+                },
+                _,
+            ) => crate::chrome::Arming::Disarmed,
+            (Recording::Sending, _) => crate::chrome::Arming::Disarmed,
+            (Recording::Failed(_), _) => crate::chrome::Arming::Disarmed,
+        };
+        let row = row.child(crate::chrome::on_touch_drag(
+            div()
+                .id("composer-hold")
+                .debug_selector(|| "composer-hold".to_string())
+                .absolute()
+                .right(px(12.))
+                .bottom(px(0.))
+                .size(px(38.)),
+            arming,
+            self.holding.clone(),
+            on_hold,
+        ));
         div()
             .on_action(cx.listener(Self::toggle_talk))
             .capture_action(cx.listener(Self::up))
@@ -746,9 +797,7 @@ impl Render for Composer {
         };
         match self.chrome.clone() {
             Chrome::Desktop => self.feed_shape(sendable, cx).into_any_element(),
-            Chrome::Phone(touch) => self
-                .phone_shape(sendable, touch.on_field, cx)
-                .into_any_element(),
+            Chrome::Phone(touch) => self.phone_shape(sendable, touch, cx).into_any_element(),
         }
     }
 }

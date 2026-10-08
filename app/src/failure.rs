@@ -23,7 +23,7 @@ pub fn start(config: Config) -> Startup {
         Ok((client, source)) => {
             let peaks = link::peak_directory(&source);
             let state = AppState::new(client, source, Box::new(RodioSpeaker::default()));
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
             let state = state.with_recorder(Box::new(crate::recorder::AvRecorder::default()));
             let state = match peaks {
                 Some(directory) => state.with_peak_cache(PeakCache::new(directory)),

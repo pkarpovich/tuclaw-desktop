@@ -13,6 +13,7 @@ use tuclaw_desktop::theme;
 use crate::frame;
 use crate::keyboard;
 use crate::navigator::{Menu, Navigator};
+use crate::talk::Talk;
 
 pub struct Conversation {
     state: Entity<AppState>,
@@ -26,6 +27,7 @@ impl Conversation {
     pub fn new(
         state: Entity<AppState>,
         navigator: Entity<Navigator>,
+        talk: Entity<Talk>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Conversation {
@@ -39,6 +41,10 @@ impl Conversation {
             }),
             on_field: Rc::new(|_window, _cx| keyboard::show()),
             on_drag: Rc::new(|_window, _cx| keyboard::hide()),
+            on_hold: Rc::new(move |hold, _window, cx| {
+                keyboard::hide();
+                talk.update(cx, |talk, cx| talk.hold(hold, cx));
+            }),
         };
         let built = state.clone();
         let feed = cx.new(|cx| Feed::phone(built, touch, window, cx));
