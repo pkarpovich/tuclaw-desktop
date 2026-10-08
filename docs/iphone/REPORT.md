@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 220, ios 19, 8 visual scenes), build.
+Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 221, ios 19, 8 visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -47,7 +47,7 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 | | paging back (`before`) | done | the demo world's Night Log has 320 messages; flicking back loads page after page (`?before=`) and the message under your finger stays put |
 | | Markdown, code, tables, links | done | GPUI Kit `TextView` |
 | | avatars of agents and the user | done | user is round on the phone, agents square |
-| | pictures in messages, viewer | partial | viewer mounted; no picture post was tested; blocks are 480 pt wide at most and can overflow a phone column |
+| | pictures in messages, viewer | partial | viewer mounted, and pictures fit a 300×320 pt room on the phone (unit-tested); no picture post was seen on the simulator, because the demo world has no public picture to fetch |
 | Live runs | text streaming | done | one WebSocket, `/api/v3/events` (below) |
 | | steps in a collapsible run card | done | |
 | | run summary on answers, run log | done | `› 1 tool · 13 s`, opens in place, `Open in panel` → full-screen inspector |

@@ -23,7 +23,7 @@ use crate::icon::{Glyph, icon, spinner};
 use crate::link;
 use crate::local::clock;
 use crate::people::People;
-use crate::pictures::{MAX_WIDTH, Remote, Shelf, Viewed, fit};
+use crate::pictures::{DESKTOP_ROOM, PHONE_ROOM, Remote, Room, Shelf, Viewed, fit_into};
 use crate::rich::{self, Ink, Known, Parts, Picture, Segment};
 use crate::runlog::{self, OnDisclose, Pane};
 use crate::state::Player;
@@ -211,6 +211,7 @@ pub fn message_row(
                 &picture,
                 shelf,
                 actions.on_picture.clone(),
+                room_of(&actions.chrome),
             )),
             Segment::Quote(text) => column.child(quote_block(&key, text, &actions.chrome)),
         };
@@ -419,7 +420,20 @@ fn quote_copy(key: &str, group: SharedString, copied: String) -> impl IntoElemen
         )
 }
 
-fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPicture) -> AnyElement {
+fn room_of(chrome: &Chrome) -> Room {
+    match chrome {
+        Chrome::Desktop => DESKTOP_ROOM,
+        Chrome::Phone(_) => PHONE_ROOM,
+    }
+}
+
+fn picture_block(
+    key: &str,
+    picture: &Picture,
+    shelf: &Shelf,
+    on_picture: OnPicture,
+    room: Room,
+) -> AnyElement {
     let Picture { alt, url } = picture;
     let caption = if alt.is_empty() {
         url.clone()
@@ -431,7 +445,7 @@ fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPict
     };
     match shelf.get(&public) {
         Some(Remote::Ready(shown)) => {
-            let (width, height) = fit(shown.width, shown.height);
+            let (width, height) = fit_into(shown.width, shown.height, room);
             let viewed = Viewed {
                 url: public.clone(),
                 caption: alt.clone(),
@@ -474,7 +488,7 @@ fn picture_block(key: &str, picture: &Picture, shelf: &Shelf, on_picture: OnPict
             .items_center()
             .gap(px(8.))
             .my(px(4.))
-            .w(px(MAX_WIDTH))
+            .w(px(room.width))
             .h(px(96.))
             .px(px(14.))
             .rounded(px(10.))

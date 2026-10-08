@@ -12,6 +12,22 @@ use crate::rich::{Segment, split_pictures, split_thinking};
 pub const MAX_WIDTH: f32 = 480.;
 pub const MAX_HEIGHT: f32 = 400.;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Room {
+    pub width: f32,
+    pub height: f32,
+}
+
+pub const DESKTOP_ROOM: Room = Room {
+    width: MAX_WIDTH,
+    height: MAX_HEIGHT,
+};
+
+pub const PHONE_ROOM: Room = Room {
+    width: 300.,
+    height: 320.,
+};
+
 const KNOWN: [(image::ImageFormat, ImageFormat); 4] = [
     (image::ImageFormat::Png, ImageFormat::Png),
     (image::ImageFormat::Jpeg, ImageFormat::Jpeg),
@@ -85,16 +101,16 @@ pub fn decode(bytes: Vec<u8>) -> Option<Shown> {
     })
 }
 
-pub fn fit(width: u32, height: u32) -> (f32, f32) {
+pub fn fit_into(width: u32, height: u32, room: Room) -> (f32, f32) {
     let width = width as f32;
     let height = height as f32;
-    let scale = (MAX_WIDTH / width).min(MAX_HEIGHT / height).min(1.);
+    let scale = (room.width / width).min(room.height / height).min(1.);
     ((width * scale).round(), (height * scale).round())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_HEIGHT, MAX_WIDTH, decode, fit};
+    use super::{DESKTOP_ROOM, MAX_HEIGHT, MAX_WIDTH, PHONE_ROOM, decode, fit_into};
 
     const PNG: &[u8] = include_bytes!("../../core/testdata/v3/media/avatar_agent.png");
 
@@ -107,8 +123,15 @@ mod tests {
 
     #[test]
     fn a_picture_fits_the_column_without_growing() {
-        assert_eq!(fit(1600, 900), (MAX_WIDTH, 270.));
-        assert_eq!(fit(500, 1000), (200., MAX_HEIGHT));
-        assert_eq!(fit(120, 80), (120., 80.));
+        assert_eq!(fit_into(1600, 900, DESKTOP_ROOM), (MAX_WIDTH, 270.));
+        assert_eq!(fit_into(500, 1000, DESKTOP_ROOM), (200., MAX_HEIGHT));
+        assert_eq!(fit_into(120, 80, DESKTOP_ROOM), (120., 80.));
+    }
+
+    #[test]
+    fn on_a_phone_a_picture_fits_the_narrower_column() {
+        assert_eq!(fit_into(1600, 900, PHONE_ROOM), (300., 169.));
+        assert_eq!(fit_into(500, 1000, PHONE_ROOM), (160., 320.));
+        assert_eq!(fit_into(120, 80, PHONE_ROOM), (120., 80.));
     }
 }
