@@ -9,8 +9,15 @@ Branch `iphone-app`, 17 commits on top of the brief (`614517b..`), all pushed, n
 
 Approving or routing around a firewall prompt is your decision. I declined an ssh-tunnel workaround (`ssh -N -L 127.0.0.1:19090:localhost:9090 pi-bravo` plus `SIMCTL_CHILD_TUCLAW_DAEMON_URL=http://127.0.0.1:19090`) for that reason. Everything below ran on the in-process mock daemon, `MockTransport` in real time, driving the real `AppState` and reducer. No message was posted to any real topic, #phone-qa included.
 
+**Live attempt after the Little Snitch allow (09:56-10:00)**
+- I ran `mise run ios-run` twice with no tunnel. Home stayed on "Offline: transport: timed out opening the event socket" and showed no channels, through about a minute of reconnect backoff each time.
+- In the same minutes, `curl http://192.168.199.72:9090/api/v3/surfaces` returned 200 in 0.1 s, both on the Mac and inside the simulator (`simctl spawn ... /usr/bin/curl`).
+- The rule most likely does not match this build. The installed app now lives at `.../Containers/Bundle/Application/920CE424-.../Tuclaw.app`, and every reinstall changes that path.
+- Per instructions I stopped there and did not route around it. Nothing was posted to #phone-qa, and `acceptance-live.mp4` was not recorded.
+- The in-app voice post stays **needs Pavel** in any case: the simulator records from the Mac's microphone.
+
 **Morning actions**
-1. In Little Snitch, allow the simulator app `dev.pkarpovich.tuclaw.ios` (or "any process") to reach 192.168.199.72:9090. Or run the tunnel above yourself. Then `mise run ios-run`.
+1. In Little Snitch, allow "any process" to reach 192.168.199.72:9090, or allow the app by its current path. Then `mise run ios-run`.
 2. Run the acceptance scenario live in #phone-qa (23), and re-check on a device what the simulator can't prove (see Rough edges).
 
 ## Deliverables

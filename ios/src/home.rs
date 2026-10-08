@@ -126,6 +126,8 @@ impl Home {
                 div()
                     .flex()
                     .flex_col()
+                    .flex_1()
+                    .min_w(px(0.))
                     .child(
                         div()
                             .text_size(px(30.))
@@ -137,11 +139,11 @@ impl Home {
                             .id("home-link")
                             .debug_selector(|| "home-link".to_string())
                             .text_size(px(12.5))
+                            .truncate()
                             .text_color(theme::text_label())
                             .child(status)
                     })),
             )
-            .child(div().flex_1())
             .child({
                 let navigator = self.navigator.clone();
                 div()
