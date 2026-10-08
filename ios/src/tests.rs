@@ -282,3 +282,33 @@ fn viewing_a_run_opens_its_channel(cx: &mut TestAppContext) {
     });
     assert_eq!(name, "Magnet Feed");
 }
+
+#[gpui::test]
+fn a_swipe_from_the_left_edge_goes_back(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    let edge = cx
+        .debug_bounds("conversation-edge")
+        .expect("the edge")
+        .center();
+    touch(cx, TouchPhase::Started, edge);
+    touch(cx, TouchPhase::Moved, edge + gpui::point(px(60.), px(0.)));
+    touch(cx, TouchPhase::Moved, edge + gpui::point(px(140.), px(0.)));
+    touch(cx, TouchPhase::Ended, edge + gpui::point(px(140.), px(0.)));
+    assert!(cx.debug_bounds("conversation-back").is_none());
+    assert!(cx.debug_bounds("home-search").is_some());
+}
+
+#[gpui::test]
+fn a_short_edge_swipe_stays(cx: &mut TestAppContext) {
+    let (_state, cx) = phone(cx);
+    press(cx, "home-row-General", Duration::from_millis(50));
+    let edge = cx
+        .debug_bounds("conversation-edge")
+        .expect("the edge")
+        .center();
+    touch(cx, TouchPhase::Started, edge);
+    touch(cx, TouchPhase::Moved, edge + gpui::point(px(30.), px(0.)));
+    touch(cx, TouchPhase::Ended, edge + gpui::point(px(30.), px(0.)));
+    assert!(cx.debug_bounds("conversation-back").is_some());
+}

@@ -1,10 +1,11 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    Context, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window, div,
-    prelude::*, px,
+    Context, Entity, FontWeight, IntoElement, Pixels, Render, SharedString, Subscription, Window,
+    div, prelude::*, px,
 };
-use tuclaw_desktop::chrome::Touch;
+use tuclaw_desktop::chrome::{Arming, Hold, Touch, on_touch_drag};
 use tuclaw_desktop::feed::Feed;
 use tuclaw_desktop::icon::{Glyph, icon};
 use tuclaw_desktop::state::AppState;
@@ -15,10 +16,15 @@ use crate::keyboard;
 use crate::navigator::{Menu, Navigator};
 use crate::talk::Talk;
 
+const EDGE: f32 = 16.;
+const SWIPE_BACK: f32 = 80.;
+
 pub struct Conversation {
     state: Entity<AppState>,
     navigator: Entity<Navigator>,
     feed: Entity<Feed>,
+    edge_held: Rc<Cell<bool>>,
+    edge_travel: Rc<Cell<Pixels>>,
     _observation: Subscription,
     _keyboard: Subscription,
 }
@@ -54,6 +60,8 @@ impl Conversation {
             state,
             navigator,
             feed,
+            edge_held: Rc::new(Cell::new(false)),
+            edge_travel: Rc::new(Cell::new(px(0.))),
             _observation: observation,
             _keyboard: keyboard,
         }
@@ -184,7 +192,31 @@ impl Render for Conversation {
         } else {
             insets.bottom
         };
+        let travel = self.edge_travel.clone();
+        let navigator = self.navigator.clone();
+        let edge = on_touch_drag(
+            div()
+                .id("conversation-edge")
+                .debug_selector(|| "conversation-edge".to_string())
+                .absolute()
+                .left_0()
+                .top(insets.top + px(56.))
+                .bottom(px(120.))
+                .w(px(EDGE)),
+            Arming::Armed,
+            self.edge_held.clone(),
+            Rc::new(move |hold, _window, cx| match hold {
+                Hold::Pressed => travel.set(px(0.)),
+                Hold::Moved(offset) => travel.set(offset.x),
+                Hold::Released => {
+                    if travel.get() > px(SWIPE_BACK) {
+                        navigator.update(cx, |navigator, cx| navigator.back(cx));
+                    }
+                }
+            }),
+        );
         div()
+            .relative()
             .flex()
             .flex_col()
             .size_full()
@@ -199,6 +231,7 @@ impl Render for Conversation {
                     .child(self.feed.clone()),
             )
             .child(div().flex_none().h(bottom).bg(theme::card()))
+            .child(edge)
     }
 }
 

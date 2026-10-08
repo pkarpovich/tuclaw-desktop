@@ -1,6 +1,6 @@
 # tuclaw for iPhone - night report (2026-10-08)
 
-Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 220, ios 17, 8 visual scenes), build.
+Branch `iphone-app`, 10 commits on top of the brief (`614517b..`), all pushed, nothing merged. The iPhone app is a new crate `ios/` (tuclaw-ios) hosted by gpui-mobile. It reuses the Mac app's `AppState`, link task, reducer glue and conversation views. The Mac app is unchanged in behaviour, and its four gates are green after every commit: fmt-check, lint, test (core 135, desktop 220, ios 19, 8 visual scenes), build.
 
 **Read this first: nothing here was run against bravo.** Little Snitch on this Mac holds the simulator build's traffic to `192.168.199.72:9090`:
 - From inside the app, a TCP connect succeeds, but no bytes come back for a plain `GET /api/v3/surfaces` or for the WebSocket upgrade.
@@ -60,7 +60,7 @@ Approving or routing around a firewall prompt is your decision. I declined an ss
 | Suggested replies | chips, tap endpoint, chosen and closed states | done | |
 | Read state | mark read when shown | done | fixed during review: reopening a channel now runs the seen pass |
 | Agents | list, card, settings (model, description, wiring) | done | the Mac `SettingsPanel` as a sheet |
-| | avatar upload | partial | `prompt_for_paths` maps to gpui-mobile's document picker (Files, not Photos); untested |
+| | avatar upload | partial | `prompt_for_paths` maps to gpui-mobile's document picker (Files, not Photos); untested. gpui-mobile's `image_picker` presents `PHPickerViewController` and then blocks on a channel, which UIKit forbids on the main thread, so Photos needs that package reworked |
 | You | name, about | done | the Mac `ProfilePanel` |
 | | avatar | partial | same as agent avatars |
 | Automations | list, pause, resume, two-step cancel, detail with runs | done | Mac view with a narrow layout |
@@ -113,7 +113,7 @@ App-side changes, each kept behaviour-neutral for the Mac:
   - Dictation couldn't be tested on the simulator.
   - ё by long-press is untested; my touch tool can't hold and slide.
   - The keyboard snaps instead of animating with the composer.
-- **No swipe-back gesture.** Back is the chevron only. No pull-to-refresh, no haptics.
+- **Swipe-back exists but does not slide.** A drag from the left edge goes back past 80 pt, but the screen does not follow the finger. There is no pull-to-refresh and no haptics.
 - **"Allow the microphone, then tap again"** stays in the composer after you grant permission, until the next tap. The permission callback runs off the main thread.
 - **Playback right after a recording** needs a device check: the session drops back to Playback without re-activating it.
 - **No live transcript while holding the mic.** The daemon transcribes after the upload, and the contract has no streaming speech-to-text.
@@ -138,7 +138,7 @@ The result: the phone reuses the hardest parts unchanged:
 - the conversation feed with all its list bookkeeping;
 - the settings, profile, channel and automation panels.
 
-The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 17 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
+The phone-specific code is mostly navigation and chrome. The test discipline carried over too: the phone has 19 GPUI tests that drive real touches through GPUI's gesture recognizer, two of them added after review caught real bugs.
 
 **What makes it painful.**
 - The platform layer is young. gpui-mobile 0.1 is pinned to an unpublished commit, and I hit a run of gaps:
@@ -151,7 +151,7 @@ The phone-specific code is mostly navigation and chrome. The test discipline car
 
   Each was cheap to work around, but every one was discovered at runtime, not compile time.
 - Nothing occludes by default: a GPUI overlay lets taps through unless it says otherwise. That was the review's blocker, now fixed and tested.
-- iOS niceties are missing and would have to be hand-built: swipe-back, scroll-to-top on a status-bar tap, keyboard animation curves, haptics, a real share sheet and a photo picker.
+- iOS niceties are missing and would have to be hand-built: an interactive swipe-back (there is only a gesture, no slide), scroll-to-top on a status-bar tap, keyboard animation curves, haptics, a real share sheet and a photo picker.
 - A Rust static library inside an Xcode shell with `-force_load` is workable but heavy: the debug `.a` is 1.2 GB.
 - The simulator loop is slower than the Mac's headless snapshot loop. A phone snapshot example (headless, 402×874, over the demo world) would be the next tooling investment.
 
