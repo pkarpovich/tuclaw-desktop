@@ -3176,6 +3176,20 @@ impl AppState {
         }));
     }
 
+    fn end_queued_runs(&mut self, message: &v3::Message) -> bool {
+        let mut waiting = Vec::new();
+        let mut ended = false;
+        for run in std::mem::take(&mut self.queued) {
+            if run.fails_to_start(message) {
+                ended = true;
+                continue;
+            }
+            waiting.push(run);
+        }
+        self.queued = waiting;
+        ended
+    }
+
     fn message_created(&mut self, message: &v3::Message, cx: &mut Context<Self>) {
         if let Some(run_id) = &message.run_id
             && ends_its_run(message.kind)
@@ -3185,6 +3199,10 @@ impl AppState {
             self.runs.remove(run_id);
             self.refresh_agents();
             cx.emit(StateEvent::RunsChanged);
+        }
+        if self.end_queued_runs(message) {
+            cx.emit(StateEvent::RunsChanged);
+            cx.notify();
         }
         let shown = self.selected == Some(link::channel_id(message.surface_id));
         if shown && self.held == self.selected {
@@ -3669,6 +3687,74 @@ mod tests {
         state.read_with(cx, |state, _cx| assert!(busy(state)));
         play(&mock, cx);
         state.read_with(cx, |state, _cx| assert!(!busy(state)));
+    }
+
+    fn accepted(input: i64, agent: i64) -> v3::Frame {
+        v3::Frame::InputAccepted(v3::InputAccepted {
+            input_id: v3::InputId(input),
+            surface_id: v3::SurfaceId(1),
+            agent_id: WireAgent(agent),
+        })
+    }
+
+    fn start_failure(seq: i64, agent: i64) -> v3::Frame {
+        let line = serde_json::json!({
+            "v": 1, "seq": seq, "type": "message.created", "surface_id": 1,
+            "at": "2026-10-03T15:26:30Z",
+            "payload": {"message": {
+                "id": 9300, "surface_id": 1, "kind": "notice",
+                "author": {"kind": "system", "agent_id": agent},
+                "text": "Something went wrong while processing your request.",
+                "run_id": null, "origin": "user", "created_at": "2026-10-03T15:26:30Z"
+            }}
+        });
+        v3::decode(&line.to_string()).expect("a message.created frame")
+    }
+
+    fn queued_agents(state: &AppState) -> Vec<i64> {
+        let mut agents = Vec::new();
+        for run in &state.queued {
+            let WireAgent(agent) = run.agent_id;
+            agents.push(agent);
+        }
+        agents
+    }
+
+    #[gpui::test]
+    fn a_start_failure_notice_ends_every_queued_post_of_its_agent(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let seq = mock.head().0 + 1;
+        state.update(cx, |state, cx| {
+            state.apply(accepted(70, 1), cx);
+            state.apply(accepted(71, 1), cx);
+            state.apply(accepted(72, 3), cx);
+            assert_eq!(queued_agents(state), vec![1, 1, 3]);
+            state.apply(start_failure(seq, 0), cx);
+            assert_eq!(queued_agents(state), vec![1, 1, 3]);
+            state.apply(start_failure(seq + 1, 1), cx);
+            assert_eq!(queued_agents(state), vec![3]);
+            assert_eq!(state.live_runs().len(), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn a_failed_start_removes_the_queued_post_and_shows_the_notice(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        mock.fail_next_start();
+        state.update(cx, |state, cx| {
+            state.send("Привет".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        mock.step();
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| assert_eq!(queued_agents(state), vec![1]));
+        play(&mock, cx);
+        state.read_with(cx, |state, _cx| {
+            assert!(state.queued.is_empty());
+            let last = state.messages().last().expect("the notice arrived");
+            assert_eq!(last.author, tuclaw_core::model::Author::System);
+        });
     }
 
     #[gpui::test]

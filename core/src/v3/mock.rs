@@ -250,6 +250,7 @@ struct World {
     avatars: HashMap<AvatarOwner, Avatar>,
     next_message: i64,
     next_input: i64,
+    start_fails: bool,
 }
 
 /// The in-process daemon: a scripted world behind the [`Transport`] seam.
@@ -476,6 +477,12 @@ impl MockTransport {
         self.lock().scenario.unavailable_once = true;
     }
 
+    /// Makes the next post's agent fail to start: the daemon cancels its input and posts the error
+    /// notice for that agent instead of running it.
+    pub fn fail_next_start(&self) {
+        self.lock().start_fails = true;
+    }
+
     /// Closes every open event socket, as a dropped network would.
     pub fn disconnect_all(&self) {
         self.lock().subscribers.clear();
@@ -558,6 +565,7 @@ const VOICE_LIMIT: usize = 20 * 1024 * 1024;
 const NAME_LIMIT: usize = 64;
 const VOICE_ATTACHMENTS: i64 = 100;
 const VOICE_TRANSCRIPT: &str = "Что нового за сегодня?";
+const START_FAILURE: &str = "Something went wrong while processing your request.";
 
 fn fresh_run() -> RunId {
     RunId(Uuid::new_v4().to_string())
@@ -705,6 +713,7 @@ impl World {
             ]),
             next_message: 9000,
             next_input: 40,
+            start_fails: false,
         };
         world.seed_messages(base);
         world.seed_tasks(base);
@@ -823,6 +832,7 @@ impl World {
             avatars: HashMap::new(),
             next_message,
             next_input: 1,
+            start_fails: false,
         };
         world.read_everything();
         world
@@ -1424,6 +1434,12 @@ impl World {
             agent_id: agent,
         }));
         self.queue.push_back(Script::Created(message));
+        if self.start_fails {
+            self.start_fails = false;
+            let notice = self.start_failure(surface, agent);
+            self.queue.push_back(Script::Created(notice));
+            return Ok(posted);
+        }
         let run = run_script(Begin {
             id: fresh_run(),
             agent,
@@ -1433,6 +1449,29 @@ impl World {
         });
         self.queue.extend(run);
         Ok(posted)
+    }
+
+    fn start_failure(&mut self, surface: SurfaceId, agent: AgentId) -> Message {
+        Message {
+            id: self.next_message(),
+            surface_id: surface,
+            kind: MessageKind::Notice,
+            author: Author {
+                kind: AuthorKind::System,
+                agent_id: Some(agent),
+            },
+            addressed_agent_id: None,
+            reply_to_message_id: None,
+            text: START_FAILURE.into(),
+            run_id: None,
+            origin: "user".into(),
+            channel: None,
+            client_message_id: None,
+            created_at: self.now,
+            run_summary: None,
+            attachments: Vec::new(),
+            suggested_replies: None,
+        }
     }
 
     fn reply(&mut self, message: MessageId, tap: ReplyPost) -> Result<Posted, ApiError> {
