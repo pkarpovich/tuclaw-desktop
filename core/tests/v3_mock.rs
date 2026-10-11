@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use futures::channel::mpsc::TryRecvError;
 use futures::executor::block_on;
 use tuclaw_core::v3::{
-    Applied, Client, ClientMessageId, Connection, Frame, InputAccepted, Message, MessageId,
-    MessageKind, MockTransport, Pace, Post, Run, RunId, RunState, Scenario, Seq, StepKind,
-    SurfaceId, TextDelta,
+    AgentId, Applied, Client, ClientMessageId, Connection, Frame, InputAccepted, Message,
+    MessageId, MessageKind, MockTransport, Pace, Post, Run, RunId, RunState, Scenario, Seq,
+    StepKind, SurfaceId, TextDelta,
 };
 
 struct Session {
@@ -170,6 +170,13 @@ impl Session {
             Frame::GroupsChanged(_) => {}
             Frame::MessageCreated(created) => {
                 let message = created.message.clone();
+                let mut waiting = Vec::new();
+                for queued in std::mem::take(&mut self.queued) {
+                    if !queued.fails_to_start(&message) {
+                        waiting.push(queued);
+                    }
+                }
+                self.queued = waiting;
                 if let Some(run_id) = &message.run_id
                     && let Some(run) = self.runs.remove(run_id)
                 {
@@ -335,6 +342,43 @@ fn a_post_ends_as_one_finished_run_with_its_answer() {
         }
     }
     assert_eq!(echoed, 1);
+}
+
+#[test]
+fn a_failed_start_ends_the_queued_post_with_its_notice() {
+    let mock = stepped();
+    let mut session = Session::start(&mock, vec![SurfaceId(1)]);
+    let live = session.runs.len();
+    mock.fail_next_start();
+    session.post(SurfaceId(1), "Лисички появились, что приготовить?");
+    session.step(2);
+    assert_eq!(session.queued.len(), 1);
+    assert_eq!(session.queued[0].state, RunState::Queued);
+    session.play();
+    assert!(session.queued.is_empty());
+    assert_eq!(session.runs.len(), live);
+    assert!(session.answered.is_empty());
+    let Some(notice) = session.messages.values().last() else {
+        panic!("the notice arrived");
+    };
+    assert_eq!(notice.kind, MessageKind::Notice);
+    assert_eq!(notice.author.agent_id, Some(AgentId(1)));
+    assert_eq!(notice.run_id, None);
+}
+
+#[test]
+fn a_post_after_a_failed_start_runs_again() {
+    let mock = stepped();
+    let mut session = Session::start(&mock, vec![SurfaceId(1)]);
+    mock.fail_next_start();
+    session.post(SurfaceId(1), "Первая попытка");
+    session.play();
+    session.post(SurfaceId(1), "Вторая попытка");
+    session.play();
+    assert!(session.queued.is_empty());
+    let run_id = session.only_run();
+    assert_eq!(session.run(&run_id).state, RunState::Ok);
+    assert_eq!(session.answers_for(&run_id), 1);
 }
 
 #[test]

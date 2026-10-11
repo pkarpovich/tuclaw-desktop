@@ -1124,7 +1124,9 @@ pub struct Posted {
     /// The user message written.
     pub message_id: MessageId,
     /// The input queued for the agent; `None` when the message was stored but not queued (the
-    /// daemon posted an error notice, or restarted before queuing). Retrying with the same
+    /// daemon posted an error notice, or restarted before queuing). `Some` does not promise a
+    /// run: an agent that fails to start gets the same notice later
+    /// ([`Run::fails_to_start`](super::Run::fails_to_start)). Retrying with the same
     /// `client_message_id` queues nothing; a retry needs a new one.
     pub input_id: Option<InputId>,
     /// The agent actually woken; `None` exactly when `input_id` is.

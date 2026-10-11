@@ -13,13 +13,17 @@
 //!   the input already belongs to a run;
 //! - a `message.created` carrying a `run_id` arrives before that run's `run.finished` for user and
 //!   a2a runs, and may arrive after it for scheduled runs;
-//! - an interrupted run never gets an answer message; its streamed text stays as it was.
+//! - an interrupted run never gets an answer message; its streamed text stays as it was;
+//! - a queued run never starts when its agent's container fails to start: the daemon cancels the
+//!   input and posts a system notice for the agent instead ([`Run::fails_to_start`]), with no
+//!   `input_id` on it, so that notice ends every queued run of the agent on the surface.
 
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
 
 use super::dto::{
-    AgentId, InputId, RowKind, RunId, RunStatus, RunSummary, Seq, StepRow, SurfaceId, ToolUseId,
+    AgentId, AuthorKind, InputId, Message, MessageKind, RowKind, RunId, RunStatus, RunSummary, Seq,
+    StepRow, SurfaceId, ToolUseId,
 };
 use super::frames::{
     Frame, InputAccepted, RunEvent, RunSnapshot, RunStarted, TaskUpdate, ToolFinished,
@@ -28,7 +32,7 @@ use super::frames::{
 /// Where a run is in its life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunState {
-    /// The daemon accepted the input; no `run.started` yet.
+    /// The daemon accepted the input; no `run.started` and no start-failure notice yet.
     Queued,
     /// Live.
     Running,
@@ -339,7 +343,8 @@ pub struct Run {
 }
 
 impl Run {
-    /// Creates the placeholder of an accepted input, shown until its `run.started`.
+    /// Creates the placeholder of an accepted input, shown until its `run.started` or until the
+    /// notice of a failed start ([`Run::fails_to_start`]).
     pub fn queued(accepted: InputAccepted) -> Run {
         let InputAccepted {
             input_id,
@@ -420,6 +425,21 @@ impl Run {
         }
         self.begin(event);
         true
+    }
+
+    /// Returns whether `message` is the notice the daemon posts when this queued run's agent failed
+    /// to start: a system `notice` on its surface for its agent, with no run.
+    ///
+    /// The notice names no input, so it ends every queued run of that agent on that surface. A
+    /// command reply such as `/model` is a system notice for agent 0, which no queued run has.
+    pub fn fails_to_start(&self, message: &Message) -> bool {
+        if self.id.is_some() || self.surface_id != Some(message.surface_id) {
+            return false;
+        }
+        message.kind == MessageKind::Notice
+            && message.author.kind == AuthorKind::System
+            && message.author.agent_id == Some(self.agent_id)
+            && message.run_id.is_none()
     }
 
     /// Marks a live run as stopping after the daemon accepted an interrupt.
@@ -1101,6 +1121,56 @@ mod tests {
         assert_eq!(run.id, Some(RunId(RUN_ID.into())));
         assert!(!run.start(&claiming));
         assert_eq!(run.apply(&frame("step_text")), Applied::Changed);
+    }
+
+    fn notice(surface: i64, author: &str, agent: Option<i64>, run_id: Option<&str>) -> Message {
+        serde_json::from_value(json!({
+            "id": 9300, "surface_id": surface, "kind": "notice",
+            "author": {"kind": author, "agent_id": agent},
+            "text": "Something went wrong while processing your request.",
+            "run_id": run_id, "origin": "system", "created_at": "2026-10-03T15:26:30Z"
+        }))
+        .unwrap()
+    }
+
+    fn queued(input: i64, agent: i64) -> Run {
+        Run::queued(InputAccepted {
+            input_id: InputId(input),
+            surface_id: SurfaceId(1),
+            agent_id: AgentId(agent),
+        })
+    }
+
+    #[test]
+    fn a_start_failure_notice_ends_every_queued_run_of_its_agent() {
+        let failure = notice(1, "system", Some(1), None);
+        assert!(queued(42, 1).fails_to_start(&failure));
+        assert!(queued(43, 1).fails_to_start(&failure));
+        assert!(!queued(44, 3).fails_to_start(&failure));
+    }
+
+    #[test]
+    fn only_the_start_failure_notice_ends_a_queued_run() {
+        let run = queued(42, 1);
+        assert!(!run.fails_to_start(&notice(1, "system", Some(0), None)));
+        assert!(!run.fails_to_start(&notice(1, "system", None, None)));
+        assert!(!run.fails_to_start(&notice(1, "system", Some(3), None)));
+        assert!(!run.fails_to_start(&notice(2, "system", Some(1), None)));
+        assert!(!run.fails_to_start(&notice(1, "system", Some(1), Some(RUN_ID))));
+        assert!(!run.fails_to_start(&notice(1, "agent", Some(1), None)));
+        let mut answer = notice(1, "system", Some(1), None);
+        answer.kind = MessageKind::Answer;
+        assert!(!run.fails_to_start(&answer));
+    }
+
+    #[test]
+    fn a_started_run_is_not_ended_by_a_start_failure_notice() {
+        let mut run = queued(42, 1);
+        let Frame::RunStarted(claiming) = frame("run_started") else {
+            panic!("expected run.started");
+        };
+        assert!(run.start(&claiming));
+        assert!(!run.fails_to_start(&notice(1, "system", Some(1), None)));
     }
 
     #[test]
