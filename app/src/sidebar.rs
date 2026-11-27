@@ -154,6 +154,9 @@ impl Sidebar {
             .child(lead_element(lead))
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .truncate()
                     .font_weight(if attention {
                         FontWeight::SEMIBOLD
                     } else {
@@ -165,8 +168,7 @@ impl Sidebar {
                         theme::text_secondary()
                     })
                     .child(name),
-            )
-            .child(div().flex_1());
+            );
         let element = if working.is_empty() {
             element
         } else {
@@ -594,6 +596,40 @@ mod tests {
         let built = state.clone();
         let (_sidebar, cx) = cx.add_window_view(move |_window, cx| Sidebar::new(built, cx));
         (state, cx)
+    }
+
+    #[gpui::test]
+    fn a_long_name_is_cut_and_its_marker_stays_inside(cx: &mut TestAppContext) {
+        let (state, cx) = sidebar(cx);
+        cx.simulate_resize(gpui::size(gpui::px(250.), gpui::px(800.)));
+        let long = "the-social-reckoning-2026-extended-directors-cut";
+        let home = state.read_with(cx, |state, _cx| {
+            let mut found = None;
+            for channel in state.channels() {
+                if channel.name == "Smart Home" {
+                    found = Some(channel.id);
+                }
+            }
+            found.expect("the channel exists")
+        });
+        state.update(cx, |state, cx| {
+            state.rename_channel(home, long.to_string(), cx);
+        });
+        cx.run_until_parked();
+        state.update(cx, |state, cx| state.mark_unread(home, cx));
+        cx.run_until_parked();
+        let row: &'static str = Box::leak(format!("sidebar-row-{long}").into_boxed_str());
+        let marker: &'static str = Box::leak(format!("sidebar-marked-{long}").into_boxed_str());
+        let row = cx.debug_bounds(row).expect("the long row is drawn");
+        let marker = cx.debug_bounds(marker).expect("its marker is drawn");
+        assert!(
+            row.right() <= gpui::px(250.),
+            "the row stays inside the sidebar"
+        );
+        assert!(
+            marker.right() <= row.right(),
+            "the marker stays inside the row"
+        );
     }
 
     #[gpui::test]
