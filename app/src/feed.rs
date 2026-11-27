@@ -2215,6 +2215,45 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_post_joined_into_the_running_turn_leaves_one_run_card(cx: &mut TestAppContext) {
+        let (mock, state, feed, cx) = feed(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        mock.join_next_post();
+        state.update(cx, |state, cx| {
+            state.send("окей?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..4 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        assert_eq!(runs(&feed, cx).len(), 2);
+        let mut queued = 2;
+        while queued > 0 && mock.step() {
+            cx.run_until_parked();
+            queued = 0;
+            for run in runs(&feed, cx) {
+                if run.state == RunState::Queued {
+                    queued += 1;
+                }
+            }
+        }
+        let working = runs(&feed, cx);
+        assert_eq!(working.len(), 1);
+        assert_eq!(working[0].state, RunState::Running);
+        assert!(cx.debug_bounds("run-queued").is_none());
+        play(&mock, cx);
+        assert!(runs(&feed, cx).is_empty());
+        assert!(cx.debug_bounds("run-queued").is_none());
+        feed.read_with(cx, |feed, _cx| {
+            assert_eq!(feed.list.item_count(), feed.items.len())
+        });
+    }
+
+    #[gpui::test]
     fn the_live_run_of_a_surface_shows_its_steps(cx: &mut TestAppContext) {
         let (_mock, state, feed, cx) = feed(cx);
         let magnet = channel_named(&state, cx, "Magnet Feed");

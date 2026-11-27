@@ -123,6 +123,16 @@ impl Session {
                 self.fetch();
             }
             Frame::InputAccepted(accepted) => self.accept(*accepted),
+            Frame::InputClaimed(event) => {
+                let mut waiting = Vec::new();
+                for queued in std::mem::take(&mut self.queued) {
+                    if !queued.input_ids.contains(&event.body.input_id) {
+                        waiting.push(queued);
+                    }
+                }
+                self.queued = waiting;
+                self.apply_to_run(&frame);
+            }
             Frame::RunStarted(event) => {
                 let mut claimed = None;
                 for (index, queued) in self.queued.iter_mut().enumerate() {
@@ -407,6 +417,42 @@ fn a_reconnect_with_the_last_seq_applies_nothing_twice() {
     assert_eq!(session.answers_for(&run_id), 1);
     assert_eq!(session.last_seq, mock.head());
     assert_eq!(session.refetches, 0);
+}
+
+#[test]
+fn a_joined_post_ends_in_the_one_run_that_answers_both() {
+    let mock = stepped();
+    let mut session = Session::start(&mock, vec![SurfaceId(1)]);
+    session.post(SurfaceId(1), "Лисички появились, что приготовить?");
+    mock.join_next_post();
+    session.post(SurfaceId(1), "окей?");
+    session.step(4);
+    assert_eq!(session.queued.len(), 2);
+    session.play();
+    assert!(session.queued.is_empty());
+    let run_id = session.only_run();
+    let run = session.run(&run_id);
+    assert_eq!(run.state, RunState::Ok);
+    assert_eq!(run.input_ids.len(), 2);
+    assert_eq!(session.answers_for(&run_id), 1);
+}
+
+#[test]
+fn a_claim_replayed_after_a_reconnect_ends_the_queued_post() {
+    let mock = stepped();
+    let mut session = Session::start(&mock, vec![SurfaceId(1)]);
+    session.post(SurfaceId(1), "Лисички появились, что приготовить?");
+    mock.join_next_post();
+    session.post(SurfaceId(1), "окей?");
+    session.step(4);
+    assert_eq!(session.queued.len(), 2);
+    mock.disconnect_all();
+    session.play();
+    assert_eq!(session.refetches, 0);
+    assert!(session.queued.is_empty());
+    let run_id = session.only_run();
+    assert_eq!(session.run(&run_id).input_ids.len(), 2);
+    assert_eq!(session.answers_for(&run_id), 1);
 }
 
 #[test]

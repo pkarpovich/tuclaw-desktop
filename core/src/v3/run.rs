@@ -9,8 +9,10 @@
 //! Ordering facts a caller has to handle, because the daemon does not order them:
 //!
 //! - a `text.delta` can arrive before its run's `run.started`; keep it aside until the run exists;
-//! - an `input.accepted` can arrive after the `run.started` that claimed its input; ignore it when
-//!   the input already belongs to a run;
+//! - an `input.accepted` can arrive after the `run.started` or the `input.claimed` that gave its
+//!   input to a run; ignore it when the input already belongs to a run;
+//! - an input taken into a run that is already going gets no `run.started`: its `input.claimed`
+//!   ends its queued run, and the running run keeps the input in [`Run::input_ids`];
 //! - a `message.created` carrying a `run_id` arrives before that run's `run.finished` for user and
 //!   a2a runs, and may arrive after it for scheduled runs;
 //! - an interrupted run never gets an answer message; its streamed text stays as it was.
@@ -448,6 +450,10 @@ impl Run {
             Frame::Hello(_) => Applied::NotMine,
             Frame::Gap(_) => Applied::NotMine,
             Frame::InputAccepted(_) => Applied::NotMine,
+            Frame::InputClaimed(event) => {
+                self.input_ids.push(event.body.input_id);
+                Applied::Changed
+            }
             Frame::Unknown(_) => Applied::NotMine,
             Frame::MessageCreated(_) => Applied::Unchanged,
             Frame::TaskFired(_) => Applied::NotMine,
@@ -1074,6 +1080,27 @@ mod tests {
         run.apply(&frame("run_finished_interrupted"));
         assert_eq!(run.segment, "Сливки ");
         assert_eq!(run.state, RunState::Interrupted);
+    }
+
+    #[test]
+    fn a_claimed_input_joins_the_running_run() {
+        let mut run = started();
+        assert_eq!(run.apply(&frame("input_claimed")), Applied::Changed);
+        assert_eq!(run.input_ids, vec![InputId(42), InputId(43)]);
+        assert_eq!(run.state, RunState::Running);
+        assert_eq!(run.apply(&frame("input_claimed")), Applied::Unchanged);
+        assert_eq!(run.input_ids, vec![InputId(42), InputId(43)]);
+    }
+
+    #[test]
+    fn a_claim_is_not_a_start_for_a_queued_run() {
+        let Frame::InputAccepted(accepted) = frame("input_accepted") else {
+            panic!("expected input.accepted");
+        };
+        let mut run = Run::queued(accepted);
+        assert_eq!(run.apply(&frame("input_claimed")), Applied::NotMine);
+        assert_eq!(run.state, RunState::Queued);
+        assert_eq!(run.input_ids, vec![InputId(42)]);
     }
 
     #[test]
