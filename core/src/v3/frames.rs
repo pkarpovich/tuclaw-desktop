@@ -224,6 +224,15 @@ pub struct StatusUpdate {
     pub detail: String,
 }
 
+/// The payload of `input.claimed`: a posted message taken into a run that is already going.
+///
+/// No `run.started` follows for this input, and the run's `run.started.input_ids` does not list it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputClaimed {
+    /// The input the run took.
+    pub input_id: InputId,
+}
+
 /// The empty payload of `run.reset`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RunReset {}
@@ -408,6 +417,8 @@ pub enum Frame {
     TextDelta(TextDelta),
     /// `input.accepted`.
     InputAccepted(InputAccepted),
+    /// `input.claimed`.
+    InputClaimed(RunEvent<InputClaimed>),
     /// A type this build does not know.
     Unknown(UnknownFrame),
 }
@@ -443,6 +454,7 @@ impl Frame {
             Frame::GroupsChanged(changed) => Some(changed.seq),
             Frame::TextDelta(_) => None,
             Frame::InputAccepted(_) => None,
+            Frame::InputClaimed(event) => Some(event.seq),
             Frame::Unknown(unknown) => unknown.seq,
         }
     }
@@ -477,6 +489,7 @@ impl Frame {
             Frame::GroupsChanged(_) => None,
             Frame::TextDelta(delta) => Some(&delta.run_id),
             Frame::InputAccepted(_) => None,
+            Frame::InputClaimed(event) => Some(&event.run_id),
             Frame::Unknown(_) => None,
         }
     }
@@ -700,6 +713,7 @@ pub fn decode(line: &str) -> Result<Frame, DecodeError> {
             })
         }
         "input.accepted" => Frame::InputAccepted(envelope.payload()?),
+        "input.claimed" => Frame::InputClaimed(envelope.run_event()?),
         other => Frame::Unknown(UnknownFrame {
             type_name: other.to_string(),
             seq: envelope.seq,
@@ -921,6 +935,22 @@ mod tests {
                 input_ids: vec![InputId(42)],
                 origin: "user".into(),
                 turn_kind: "user".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn input_claimed_names_the_input_and_the_run() {
+        let Frame::InputClaimed(event) = frame("input_claimed") else {
+            panic!("expected input.claimed");
+        };
+        assert_eq!(event.seq, Seq(1211));
+        assert_eq!(event.run_id, run_id());
+        assert_eq!(event.surface_id, Some(SurfaceId(1)));
+        assert_eq!(
+            event.body,
+            InputClaimed {
+                input_id: InputId(43)
             }
         );
     }

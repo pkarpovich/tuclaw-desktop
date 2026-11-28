@@ -251,6 +251,7 @@ mod tests {
 
     const TONE_OGG: &[u8] = include_bytes!("../../core/testdata/v3/media/tone.ogg");
     const TONE_M4A: &[u8] = include_bytes!("../../core/testdata/v3/media/tone.m4a");
+    const TONE_WAV: &[u8] = include_bytes!("../../core/testdata/v3/media/tone.wav");
 
     fn loudness(pcm: &Pcm) -> f32 {
         let mut peak = 0.0f32;
@@ -277,6 +278,16 @@ mod tests {
         assert_eq!(pcm.rate, 44_100);
         let seconds = pcm.duration().as_secs_f64();
         assert!((seconds - 2.0).abs() < 0.1, "{seconds}");
+        assert!(loudness(&pcm) > 0.1, "the tone is audible");
+    }
+
+    #[test]
+    fn a_wav_recording_decodes_to_its_length() {
+        let pcm = decode("audio/wav", TONE_WAV.to_vec()).expect("the tone decodes");
+        assert_eq!(pcm.channels, 1);
+        assert_eq!(pcm.rate, 16_000);
+        let seconds = pcm.duration().as_secs_f64();
+        assert!((seconds - 2.0).abs() < 0.01, "{seconds}");
         assert!(loudness(&pcm) > 0.1, "the tone is audible");
     }
 

@@ -34,8 +34,8 @@ use super::dto::{
     Usage, Wiring, WiringChange,
 };
 use super::frames::{
-    AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, RunFinished,
-    RunSnapshot, RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
+    AuthMode, Capabilities, ClientFrame, Frame, Gap, Hello, InputAccepted, InputClaimed,
+    RunFinished, RunSnapshot, RunStarted, StepText, TaskUpdate, ToolFinished, ToolStarted, decode,
 };
 use super::runtime::handle;
 use super::transport::{ApiError, Body, Connection, Method, PublicUrl, Request, Transport};
@@ -182,6 +182,7 @@ enum Script {
     ToolFinish(RunId, ToolFinished),
     Task(RunId, TaskUpdate),
     Finished(RunId, RunFinished),
+    Claimed(RunId, InputId),
 }
 
 impl Script {
@@ -196,6 +197,7 @@ impl Script {
             Script::ToolFinish(run, _) => Some(run),
             Script::Task(run, _) => Some(run),
             Script::Finished(run, _) => Some(run),
+            Script::Claimed(run, _) => Some(run),
         }
     }
 
@@ -210,6 +212,7 @@ impl Script {
             Script::ToolFinish(_, _) => STEP_DELAY,
             Script::Task(_, _) => STEP_DELAY,
             Script::Finished(_, _) => STEP_DELAY,
+            Script::Claimed(_, _) => STEP_DELAY,
         }
     }
 }
@@ -227,6 +230,7 @@ enum Reach {
 
 struct World {
     scenario: Scenario,
+    joins: bool,
     now: OffsetDateTime,
     head: i64,
     ring: VecDeque<(i64, String)>,
@@ -481,6 +485,13 @@ impl MockTransport {
         self.lock().subscribers.clear();
     }
 
+    /// Makes the next post join the user run of the same agent going on its surface, as the daemon
+    /// does since v3.16: the post gets an `input.claimed` before that run's answer and no run of its
+    /// own. A post with no such run to join runs as usual.
+    pub fn join_next_post(&self) {
+        self.lock().joins = true;
+    }
+
     fn lock(&self) -> MutexGuard<'_, World> {
         lock(&self.world)
     }
@@ -676,6 +687,7 @@ impl World {
         let base = datetime!(2026-10-03 09:00 UTC);
         let mut world = World {
             scenario,
+            joins: false,
             now: base + TimeDuration::hours(7),
             head: 1200,
             ring: VecDeque::new(),
@@ -800,6 +812,7 @@ impl World {
         }
         let mut world = World {
             scenario,
+            joins: false,
             now,
             head: 1,
             ring: VecDeque::new(),
@@ -1160,6 +1173,56 @@ impl World {
         None
     }
 
+    fn join(&mut self, accepted: InputAccepted, message: Message) -> bool {
+        let mut target = None;
+        for script in &self.queue {
+            if let Script::Finished(run, _) = script
+                && self.user_turn(run) == Some((accepted.surface_id, accepted.agent_id))
+            {
+                target = Some(run.clone());
+            }
+        }
+        let Some(run) = target else {
+            return false;
+        };
+        let mut start = 0;
+        let mut finish = 0;
+        for (index, script) in self.queue.iter().enumerate() {
+            if let Script::Started(begin) = script
+                && begin.id == run
+            {
+                start = index;
+            }
+            if let Script::Finished(id, _) = script
+                && *id == run
+            {
+                finish = index;
+            }
+        }
+        self.queue
+            .insert(finish, Script::Claimed(run, accepted.input_id));
+        self.queue.insert(start, Script::Created(message));
+        self.queue.insert(start, Script::Accepted(accepted));
+        true
+    }
+
+    fn user_turn(&self, run: &RunId) -> Option<(SurfaceId, AgentId)> {
+        for script in &self.queue {
+            if let Script::Started(begin) = script
+                && &begin.id == run
+                && begin.origin == "user"
+            {
+                return Some((begin.surface, begin.agent));
+            }
+        }
+        let index = self.live(run)?;
+        let live = &self.runs[index];
+        if live.origin != "user" {
+            return None;
+        }
+        Some((live.surface, live.agent))
+    }
+
     fn floor(&self) -> i64 {
         match self.ring.front() {
             Some((seq, _)) => *seq,
@@ -1418,6 +1481,14 @@ impl World {
         };
         self.posted
             .insert(post.client_message_id, (surface, posted));
+        let joining = InputAccepted {
+            input_id: input,
+            surface_id: surface,
+            agent_id: agent,
+        };
+        if std::mem::take(&mut self.joins) && self.join(joining, message.clone()) {
+            return Ok(posted);
+        }
         self.queue.push_back(Script::Accepted(InputAccepted {
             input_id: input,
             surface_id: surface,
@@ -2552,6 +2623,7 @@ impl World {
                     "message.created".into(),
                     "text.delta".into(),
                     "input.accepted".into(),
+                    "input.claimed".into(),
                 ],
                 ops: vec!["focus".into()],
                 auth: AuthMode::None,
@@ -2817,6 +2889,18 @@ impl World {
                 self.persist("step.task", Some(surface), Some(&run), &task);
             }
             Script::Finished(run, finished) => self.finish(run, finished),
+            Script::Claimed(run, input_id) => {
+                let Some(index) = self.live(&run) else {
+                    return;
+                };
+                let surface = self.runs[index].surface;
+                self.persist(
+                    "input.claimed",
+                    Some(surface),
+                    Some(&run),
+                    &InputClaimed { input_id },
+                );
+            }
         }
     }
 
@@ -3155,6 +3239,7 @@ mod tests {
             Frame::GroupsChanged(_) => "groups.changed",
             Frame::TextDelta(_) => "text.delta",
             Frame::InputAccepted(_) => "input.accepted",
+            Frame::InputClaimed(_) => "input.claimed",
             Frame::Unknown(_) => "unknown",
         }
     }
@@ -3449,6 +3534,72 @@ mod tests {
         let page = block_on(client.messages(SurfaceId(1), 2)).expect("page");
         assert_eq!(page.messages[0].id, posted.message_id);
         assert_eq!(page.messages[1].kind, MessageKind::Answer);
+    }
+
+    #[test]
+    fn a_joining_post_is_claimed_into_the_running_turn() {
+        let (mock, client) = stepped();
+        let mut connection = connected(&mock, &client, vec![SurfaceId(1)]);
+        let first = block_on(client.post(SurfaceId(1), &post("Лисички?", None))).expect("posted");
+        mock.join_next_post();
+        let second = block_on(client.post(SurfaceId(1), &post("окей?", None))).expect("posted");
+        assert!(mock.play_all() > 10);
+        let frames = drain(&mut connection);
+        assert_eq!(
+            collapse(kinds(&frames)),
+            vec![
+                "input.accepted",
+                "message.created",
+                "input.accepted",
+                "message.created",
+                "run.started",
+                "text.delta",
+                "step.text",
+                "step.tool_started",
+                "step.tool_finished",
+                "step.task",
+                "text.delta",
+                "step.text",
+                "input.claimed",
+                "message.created",
+                "run.finished",
+            ]
+        );
+        let mut started = Vec::new();
+        let mut claimed = Vec::new();
+        for frame in &frames {
+            if let Frame::RunStarted(event) = frame {
+                started.push((event.run_id.clone(), event.body.input_ids.clone()));
+            }
+            if let Frame::InputClaimed(event) = frame {
+                claimed.push((event.run_id.clone(), vec![event.body.input_id]));
+            }
+        }
+        let first = first.input_id.expect("an input");
+        let second = second.input_id.expect("an input");
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].1, vec![first]);
+        assert_eq!(claimed, vec![(started[0].0.clone(), vec![second])]);
+    }
+
+    #[test]
+    fn a_join_needs_a_user_turn_of_the_agent_on_the_surface() {
+        let (mock, client) = stepped();
+        let mut connection = connected(&mock, &client, vec![SurfaceId(1)]);
+        mock.join_next_post();
+        block_on(client.post(SurfaceId(1), &post("Лисички?", None))).expect("posted");
+        mock.play_all();
+        let mut claims = 0;
+        let mut starts = 0;
+        for frame in drain(&mut connection) {
+            if let Frame::InputClaimed(_) = frame {
+                claims += 1;
+            }
+            if let Frame::RunStarted(_) = frame {
+                starts += 1;
+            }
+        }
+        assert_eq!((claims, starts), (0, 1));
     }
 
     #[test]

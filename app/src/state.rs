@@ -3012,6 +3012,10 @@ impl AppState {
                 true
             }
             Frame::InputAccepted(accepted) => self.accept(*accepted),
+            Frame::InputClaimed(event) => {
+                let ended = self.end_claimed(event.body.input_id);
+                self.apply_to_run(&frame) || ended
+            }
             Frame::RunStarted(event) => {
                 let mut claimed = None;
                 for (index, queued) in self.queued.iter_mut().enumerate() {
@@ -3109,6 +3113,20 @@ impl AppState {
         }
         self.queued.push(Run::queued(accepted));
         true
+    }
+
+    fn end_claimed(&mut self, input: v3::InputId) -> bool {
+        let mut waiting = Vec::new();
+        let mut ended = false;
+        for run in std::mem::take(&mut self.queued) {
+            if run.input_ids.contains(&input) {
+                ended = true;
+                continue;
+            }
+            waiting.push(run);
+        }
+        self.queued = waiting;
+        ended
     }
 
     fn apply_to_run(&mut self, frame: &Frame) -> bool {
@@ -3398,6 +3416,7 @@ fn is_gap(frame: &Frame) -> bool {
         Frame::GroupsChanged(_) => false,
         Frame::TextDelta(_) => false,
         Frame::InputAccepted(_) => false,
+        Frame::InputClaimed(_) => false,
         Frame::Unknown(_) => false,
     }
 }
@@ -3838,6 +3857,201 @@ mod tests {
         state.read_with(cx, |state, _cx| {
             assert_eq!(state.link(), &Link::Live);
             assert_eq!(state.messages().len(), 32);
+        });
+    }
+
+    const JOINED_RUN: &str = "17881a8d-b15d-49ab-b5c9-1d72611f4be7";
+
+    fn wire(line: serde_json::Value) -> v3::Frame {
+        v3::decode(&line.to_string()).expect("a frame")
+    }
+
+    fn wire_accepted(input: i64) -> v3::Frame {
+        wire(serde_json::json!({
+            "v": 1, "type": "input.accepted", "surface_id": 1,
+            "payload": {"input_id": input, "surface_id": 1, "agent_id": 1}
+        }))
+    }
+
+    fn wire_message(seq: i64, message: serde_json::Value) -> v3::Frame {
+        wire(serde_json::json!({
+            "v": 1, "seq": seq, "type": "message.created", "surface_id": 1,
+            "payload": {"message": message}
+        }))
+    }
+
+    fn wire_run(seq: i64, type_name: &str, payload: serde_json::Value) -> v3::Frame {
+        wire(serde_json::json!({
+            "v": 1, "seq": seq, "type": type_name, "surface_id": 1, "run_id": JOINED_RUN,
+            "payload": payload
+        }))
+    }
+
+    struct JoinedTurn {
+        accepted_first: v3::Frame,
+        asked_first: v3::Frame,
+        accepted_second: v3::Frame,
+        asked_second: v3::Frame,
+        started: v3::Frame,
+        claimed: v3::Frame,
+        answered: v3::Frame,
+        finished: v3::Frame,
+    }
+
+    fn joined_turn(mock: &MockTransport) -> JoinedTurn {
+        let head = mock.head().0;
+        let user = |id: i64, text: &str| {
+            serde_json::json!({
+                "id": id, "surface_id": 1, "kind": "user",
+                "author": {"kind": "user", "agent_id": null},
+                "text": text, "run_id": null, "origin": "user",
+                "created_at": "2026-10-03T16:00:00Z"
+            })
+        };
+        JoinedTurn {
+            accepted_first: wire_accepted(5567),
+            asked_first: wire_message(head + 1, user(14899, "Лисички?")),
+            accepted_second: wire_accepted(5568),
+            asked_second: wire_message(head + 2, user(14900, "окей?")),
+            started: wire_run(
+                head + 3,
+                "run.started",
+                serde_json::json!({"agent_id": 1, "input_ids": [5567], "origin": "user", "turn_kind": "user"}),
+            ),
+            claimed: wire_run(
+                head + 4,
+                "input.claimed",
+                serde_json::json!({"input_id": 5568}),
+            ),
+            answered: wire_message(
+                head + 5,
+                serde_json::json!({
+                    "id": 14901, "surface_id": 1, "kind": "answer",
+                    "author": {"kind": "agent", "agent_id": 1},
+                    "reply_to_message_id": 14899,
+                    "text": "Со сливками.", "run_id": JOINED_RUN, "origin": "user",
+                    "created_at": "2026-10-03T16:00:31Z"
+                }),
+            ),
+            finished: wire_run(
+                head + 6,
+                "run.finished",
+                serde_json::json!({"is_error": false, "terminal_reason": "success"}),
+            ),
+        }
+    }
+
+    fn live(state: &AppState) -> Vec<(Option<v3::RunId>, v3::RunState)> {
+        let mut runs = Vec::new();
+        for run in state.live_runs() {
+            runs.push((run.id.clone(), run.state));
+        }
+        runs
+    }
+
+    fn joined() -> Option<v3::RunId> {
+        Some(v3::RunId(JOINED_RUN.into()))
+    }
+
+    #[gpui::test]
+    fn a_claimed_post_leaves_only_its_run_and_nothing_after_the_answer(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let turn = joined_turn(&mock);
+        state.update(cx, |state, cx| {
+            state.apply(turn.accepted_first, cx);
+            state.apply(turn.asked_first, cx);
+            state.apply(turn.accepted_second, cx);
+            state.apply(turn.asked_second, cx);
+            assert_eq!(
+                live(state),
+                vec![(None, v3::RunState::Queued), (None, v3::RunState::Queued)]
+            );
+            state.apply(turn.started, cx);
+            state.apply(turn.claimed, cx);
+            assert_eq!(live(state), vec![(joined(), v3::RunState::Running)]);
+            state.apply(turn.answered, cx);
+            state.apply(turn.finished, cx);
+            assert_eq!(live(state), Vec::new());
+        });
+    }
+
+    #[gpui::test]
+    fn an_accept_after_its_claim_queues_nothing(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        let turn = joined_turn(&mock);
+        state.update(cx, |state, cx| {
+            state.apply(turn.accepted_first, cx);
+            state.apply(turn.asked_first, cx);
+            state.apply(turn.asked_second, cx);
+            state.apply(turn.started, cx);
+            state.apply(turn.claimed, cx);
+            state.apply(turn.accepted_second, cx);
+            assert_eq!(live(state), vec![(joined(), v3::RunState::Running)]);
+            state.apply(turn.answered, cx);
+            state.apply(turn.finished, cx);
+            assert_eq!(live(state), Vec::new());
+        });
+    }
+
+    #[gpui::test]
+    fn a_claim_replayed_after_a_reconnect_ends_the_queued_post(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        mock.join_next_post();
+        state.update(cx, |state, cx| {
+            state.send("окей?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..4 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(
+                live(state),
+                vec![(None, v3::RunState::Queued), (None, v3::RunState::Queued)]
+            )
+        });
+        mock.disconnect_all();
+        cx.run_until_parked();
+        mock.play_all();
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(1));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.link(), &Link::Live);
+            assert_eq!(live(state), Vec::new());
+            assert_eq!(state.messages().len(), 33);
+        });
+    }
+
+    #[gpui::test]
+    fn a_post_whose_run_ended_offline_leaves_no_queued_card(cx: &mut TestAppContext) {
+        let (mock, state) = loaded(cx);
+        state.update(cx, |state, cx| {
+            state.send("Лисички?".to_string(), cx).expect("queued")
+        });
+        cx.run_until_parked();
+        mock.pump_control();
+        for _ in 0..2 {
+            mock.step();
+        }
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(live(state), vec![(None, v3::RunState::Queued)])
+        });
+        mock.disconnect_all();
+        cx.run_until_parked();
+        mock.play_all();
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(1));
+        cx.run_until_parked();
+        state.read_with(cx, |state, _cx| {
+            assert_eq!(state.link(), &Link::Live);
+            assert_eq!(live(state), Vec::new());
         });
     }
 

@@ -443,3 +443,21 @@ Agreed 2026-10-08 after the desktop shipped without a way to reply to a message.
 
 - **`POST /api/v3/surfaces/{id}/messages`** takes an optional `reply_to_message_id`. The message it names must be on the same surface; an unknown message, one on another surface, or an id that is not positive is `400`, with nothing stored. The stored message carries it as its `reply_to_message_id`, and the agent's prompt names it (`[reply to msg:N]`).
 - **`POST /api/v3/surfaces/{id}/voice`** takes the same reply-to as a query parameter, `?reply_to_message_id=N`, beside `addressed_agent_id`. A malformed one is `400` before the upload is read, and one naming a message of another surface is `400` after transcription, with nothing stored.
+
+## v3.16 additions: a message joins the running turn
+
+Agreed 2026-11-19. A user message sent in a channel while the agent is working on a turn a user message of the same channel opened may be read by the agent in that same turn, after its current tool call. One answer then covers both messages.
+
+- **New frame `input.claimed`** (persisted, `seq`, `surface_id` and `run_id` in the envelope): `payload {input_id}`. It means the message that posted `input_id` was taken into the run named by `run_id`. There will be no `run.started` for that input, and the run's `run.started.input_ids` does not list it. Fixture `testdata/v3/frames/input_claimed.json`. `hello.capabilities.events` lists `input.claimed`.
+- A client ends the "queued" state of the message that posted the input when it sees the frame, and shows the run's steps and answer for it.
+- The run still has one answer. It replies to the first question of the run (`reply_to_message_id` of the opening message), as before.
+- A message that arrives too late to be absorbed (the agent is already writing its final text) starts the next turn as before, with its own `run.started`. A message of another channel, or sent while a scheduled, a2a or other non-user run is live, waits for the end of the run as before.
+
+## v3.17 additions: WAV voice messages
+
+Added 2026-11-27 for a client that records uncompressed audio and has no encoder (a microphone device that sends 16 kHz, 16-bit, mono PCM).
+
+- `POST /surfaces/{id}/voice` also takes `Content-Type: audio/wav`: a RIFF/WAVE file with PCM samples. Everything else about the route is as in v3.5.
+- The recording is stored as it was sent. The message's `voice` attachment has `mime: "audio/wav"`, and `GET /attachments/{id}` streams it with that content type, so a client that plays voice originals must play WAV.
+- The 20 MiB cap is unchanged. At 16 kHz, 16-bit, mono it is about 10 minutes of audio.
+- Additive: a client that sends `audio/mp4` or `audio/ogg` sees no change. No new fixture.
