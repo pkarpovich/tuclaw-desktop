@@ -452,3 +452,12 @@ Agreed 2026-11-19. A user message sent in a channel while the agent is working o
 - A client ends the "queued" state of the message that posted the input when it sees the frame, and shows the run's steps and answer for it.
 - The run still has one answer. It replies to the first question of the run (`reply_to_message_id` of the opening message), as before.
 - A message that arrives too late to be absorbed (the agent is already writing its final text) starts the next turn as before, with its own `run.started`. A message of another channel, or sent while a scheduled, a2a or other non-user run is live, waits for the end of the run as before.
+
+## v3.17 additions: WAV voice messages
+
+Added 2026-11-27 for a client that records uncompressed audio and has no encoder (a microphone device that sends 16 kHz, 16-bit, mono PCM).
+
+- `POST /surfaces/{id}/voice` also takes `Content-Type: audio/wav`: a RIFF/WAVE file with PCM samples. Everything else about the route is as in v3.5.
+- The recording is stored as it was sent. The message's `voice` attachment has `mime: "audio/wav"`, and `GET /attachments/{id}` streams it with that content type, so a client that plays voice originals must play WAV.
+- The 20 MiB cap is unchanged. At 16 kHz, 16-bit, mono it is about 10 minutes of audio.
+- Additive: a client that sends `audio/mp4` or `audio/ogg` sees no change. No new fixture.
